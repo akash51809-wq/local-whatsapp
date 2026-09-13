@@ -5,7 +5,6 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const mongoose = require('mongoose');
 
-// Do not silently queue authentication queries when MongoDB is unavailable.
 mongoose.set('bufferCommands', false);
 mongoose.set('bufferTimeoutMS', 0);
 
@@ -13,50 +12,67 @@ mongoose.connection.on('connected', () => console.log('[MongoDB] Connected'));
 mongoose.connection.on('open', () => console.log('[MongoDB] Connection open'));
 mongoose.connection.on('disconnected', () => console.error('[MongoDB] Disconnected'));
 mongoose.connection.on('reconnected', () => console.log('[MongoDB] Reconnected'));
-mongoose.connection.on('error', (err) => {
-  console.error('[MongoDB] Connection error:', err?.name || 'Error', err?.message || err);
-});
+mongoose.connection.on('error', (err) => console.error('[MongoDB] Connection error:', err?.name || 'Error', err?.message || err));
 
-/*
- * Baileys bridge
- *
- * IMPORTANT: index.js destructures Baileys exports when it is required.
- * Mutating baileys.default directly is not reliable with module-namespace
- * exports. Put a wrapped exports object into require.cache BEFORE index.js
- * loads it, so index.js always receives the wrapped socket/auth functions.
- */
+/* =========================================================
+   BAILEYS ADMIN WHATSAPP BRIDGE
+   =========================================================
+   The dashboard and signup flow must use the SAME Baileys socket.
+   The important source of truth is socket.user: when Baileys has an
+   authenticated user, the session is ready for sending. Do not depend
+   only on a separate boolean because a connection.update event can be
+   missed/reordered during reconnects.
+*/
 try {
   const baileysModulePath = require.resolve('@whiskeysockets/baileys');
   const originalBaileys = require(baileysModulePath);
   const originalMakeWASocket = originalBaileys.default;
   const originalAuthState = originalBaileys.useMultiFileAuthState;
-
   const wrappedBaileys = Object.create(originalBaileys);
+
+  function normalizeIndianWhatsAppNumber(value) {
+    let digits = String(value ?? '').trim().replace(/\D/g, '');
+
+    // 10 digit Indian mobile -> 91XXXXXXXXXX
+    if (/^[6-9]\d{9}$/.test(digits)) return `91${digits}`;
+
+    // +91XXXXXXXXXX / 91XXXXXXXXXX -> keep exactly 12 digits
+    if (/^91[6-9]\d{9}$/.test(digits)) return digits;
+
+    // 0091XXXXXXXXXX -> 91XXXXXXXXXX
+    if (/^0091[6-9]\d{9}$/.test(digits)) return digits.slice(2);
+
+    throw new Error('Invalid Indian WhatsApp mobile number');
+  }
 
   if (typeof originalMakeWASocket === 'function') {
     wrappedBaileys.default = function wrappedMakeWASocket(...args) {
       const socket = originalMakeWASocket(...args);
-
       global.__waAdminSocket = socket;
-      global.__waAdminConnected = false;
 
+      // Keep this helper tied directly to the socket. We intentionally do
+      // NOT require a separate connected boolean here.
       global.__waSendAdminText = async (number, text) => {
         const current = global.__waAdminSocket;
-        if (!current || !global.__waAdminConnected || !current.user) {
+
+        if (!current || !current.user) {
           throw new Error('Admin WhatsApp अभी connected नहीं है। पहले Admin WhatsApp scan करें।');
         }
 
-        let digits = String(number || '').replace(/\D/g, '');
-        if (/^[6-9]\d{9}$/.test(digits)) digits = `91${digits}`;
-        if (!/^91[6-9]\d{9}$/.test(digits)) {
-          throw new Error('Invalid Indian WhatsApp mobile number');
-        }
-
+        const digits = normalizeIndianWhatsAppNumber(number);
         const jid = `${digits}@s.whatsapp.net`;
+
+        console.log(`[Auth WhatsApp] Admin socket ready: ${current.user.id}`);
         console.log(`[Auth WhatsApp] Sending message to ${jid}`);
-        const result = await current.sendMessage(jid, { text: String(text) });
-        console.log(`[Auth WhatsApp] Message sent to ${digits}`);
-        return result;
+
+        try {
+          const result = await current.sendMessage(jid, { text: String(text) });
+          console.log(`[Auth WhatsApp] Message sent successfully to ${digits}`);
+          return result;
+        } catch (error) {
+          console.error(`[Auth WhatsApp] Send failed to ${jid}:`, error?.message || error);
+          throw error;
+        }
       };
 
       if (socket?.ev?.on) {
@@ -68,23 +84,25 @@ try {
             let phone = null;
             try {
               phone = socket?.user?.id
-                ? String(socket.user.id).split(':')[0].replace(/\D/g, '')
+                ? String(socket.user.id).split(':')[0].split('@')[0].replace(/\D/g, '')
                 : null;
+              if (phone && /^91[6-9]\d{9}$/.test(phone)) {
+                phone = `+${phone}`;
+              }
             } catch {}
 
             if (connection === 'open') {
-              global.__waAdminConnected = true;
+              console.log(`[Auth WhatsApp] Connection OPEN. Admin account: ${phone || 'unknown'}`);
               await recordAdminWhatsAppSession({ status: 'connected', phone });
               console.log('[Auth WhatsApp] Admin WhatsApp is READY for OTP delivery');
             } else if (connection === 'close') {
-              global.__waAdminConnected = false;
               await recordAdminWhatsAppSession({ status: 'disconnected', phone });
+              console.log('[Auth WhatsApp] Admin WhatsApp connection closed; Baileys may reconnect.');
             } else if (connection === 'connecting') {
-              global.__waAdminConnected = false;
               await recordAdminWhatsAppSession({ status: 'connecting', phone });
             }
           } catch (err) {
-            console.error('Admin WhatsApp session tracking error:', err.message);
+            console.error('Admin WhatsApp session tracking error:', err?.message || err);
           }
         });
       }
@@ -103,13 +121,10 @@ try {
     };
   }
 
-  // Force every subsequent require('@whiskeysockets/baileys') to receive
-  // the wrapped exports, including index.js.
   require.cache[baileysModulePath].exports = wrappedBaileys;
-
   console.log('[Baileys bridge] Admin socket/auth wrappers installed');
 } catch (error) {
-  console.error('Baileys bridge setup failed:', error.message);
+  console.error('Baileys bridge setup failed:', error?.message || error);
 }
 
 const { router: authRouter, ensureAdminUser } = require('./auth');
@@ -171,9 +186,7 @@ async function startServer() {
       maxPoolSize: 10,
     });
 
-    if (mongoose.connection.readyState !== 1) {
-      throw new Error(`MongoDB connected call completed but readyState=${mongoose.connection.readyState}`);
-    }
+    if (mongoose.connection.readyState !== 1) throw new Error(`MongoDB connected call completed but readyState=${mongoose.connection.readyState}`);
 
     console.log('MongoDB Atlas Connected Successfully');
     console.log(`[MongoDB] Host: ${mongoose.connection.host || 'unknown'}`);
