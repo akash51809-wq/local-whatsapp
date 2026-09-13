@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Create Account</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f4f7f8;font-family:Inter,Arial,sans-serif;color:#172027}.card{width:min(430px,92vw);background:#fff;border:1px solid #e5e9ed;border-radius:18px;padding:30px;box-shadow:0 16px 50px rgba(0,0,0,.08)}h1{margin:0 0 8px;font-size:26px}p{color:#66717a;margin:0 0 24px;line-height:1.5}.step{display:none}.step.active{display:block}label{display:block;font-size:13px;font-weight:700;margin:15px 0 7px}input{width:100%;padding:13px 14px;border:1px solid #d7dde1;border-radius:10px;font-size:16px;outline:none}input:focus{border-color:#16a085;box-shadow:0 0 0 3px rgba(22,160,133,.12)}button{width:100%;border:0;border-radius:10px;padding:13px 14px;margin-top:18px;background:#128c7e;color:#fff;font-size:15px;font-weight:700;cursor:pointer}button:disabled{opacity:.55;cursor:not-allowed}.back{background:#eef3f4;color:#35545a}.msg{margin-top:14px;padding:11px;border-radius:9px;font-size:13px;display:none}.msg.show{display:block}.ok{background:#e9f8f2;color:#087a5d}.err{background:#fff0f0;color:#b42318}.success{font-size:15px;line-height:1.7}.success strong{color:#128c7e}.small{text-align:center;font-size:13px;margin-top:18px}.small a{color:#128c7e;text-decoration:none;font-weight:700}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>नया Account बनाएं</h1>
+    <p>अपने 10 अंकों के WhatsApp नंबर से registration करें। OTP आपके नंबर पर भेजा जाएगा।</p>
+
+    <section id="mobileStep" class="step active">
+      <label>WhatsApp Mobile Number</label>
+      <input id="mobile" inputmode="numeric" maxlength="10" placeholder="10 digit mobile number" />
+      <button id="sendOtp">OTP भेजें</button>
+    </section>
+
+    <section id="otpStep" class="step">
+      <label>6 Digit OTP</label>
+      <input id="otp" inputmode="numeric" maxlength="6" placeholder="6 digit OTP" />
+      <button id="verifyOtp">Verify और Account बनाएं</button>
+      <button class="back" id="backBtn">Mobile Number बदलें</button>
+    </section>
+
+    <section id="successStep" class="step">
+      <div class="success" id="successText"></div>
+      <button onclick="location.href='/'">Dashboard खोलें</button>
+    </section>
+
+    <div id="msg" class="msg"></div>
+    <div class="small"><a href="/">← Login पर वापस जाएं</a></div>
+  </main>
+
+<script>
+const $=id=>document.getElementById(id);
+const msg=(text,type='err')=>{const el=$('msg');el.textContent=text;el.className='msg show '+type};
+const mobileEl=$('mobile');
+$('sendOtp').onclick=async()=>{
+  const mobile=mobileEl.value.replace(/\D/g,'');
+  if(!/^\d{10}$/.test(mobile)) return msg('कृपया 10 अंकों का मोबाइल नंबर डालें।');
+  $('sendOtp').disabled=true;
+  try{
+    const r=await fetch('/api/auth/signup/request-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mobile})});
+    const d=await r.json();
+    if(!r.ok||!d.success) throw new Error(d.message||'OTP नहीं भेजा गया।');
+    $('mobileStep').classList.remove('active');$('otpStep').classList.add('active');msg(d.message,'ok');$('otp').focus();
+  }catch(e){msg(e.message)}finally{$('sendOtp').disabled=false}
+};
+$('verifyOtp').onclick=async()=>{
+  const mobile=mobileEl.value.replace(/\D/g,'');const otp=$('otp').value.replace(/\D/g,'');
+  if(!/^\d{6}$/.test(otp)) return msg('6 अंकों का OTP डालें।');
+  $('verifyOtp').disabled=true;
+  try{
+    const r=await fetch('/api/auth/signup/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mobile,otp})});
+    const d=await r.json();
+    if(!r.ok||!d.success) throw new Error(d.message||'Account नहीं बना।');
+    if(d.user?.token) localStorage.setItem('wa_login',d.user.token);
+    $('otpStep').classList.remove('active');$('successStep').classList.add('active');
+    $('successText').innerHTML='<strong>Account successfully created!</strong><br><br>User ID: <strong>'+d.user.userId+'</strong><br>Login ID: <strong>'+d.user.username+'</strong><br><br>आपके WhatsApp नंबर पर login credentials भेज दिए गए हैं।';
+    msg('Registration complete','ok');
+  }catch(e){msg(e.message)}finally{$('verifyOtp').disabled=false}
+};
+$('backBtn').onclick=()=>{$('otpStep').classList.remove('active');$('mobileStep').classList.add('active');$('msg').className='msg'};
+</script>
+</body>
+</html>
