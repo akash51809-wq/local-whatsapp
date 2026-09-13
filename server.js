@@ -17,17 +17,34 @@ mongoose.connection.on('error', (err) => {
   console.error('[MongoDB] Connection error:', err?.name || 'Error', err?.message || err);
 });
 
+/*
+ * Baileys bridge
+ *
+ * IMPORTANT: index.js destructures Baileys exports when it is required.
+ * Mutating baileys.default directly is not reliable with module-namespace
+ * exports. Put a wrapped exports object into require.cache BEFORE index.js
+ * loads it, so index.js always receives the wrapped socket/auth functions.
+ */
 try {
-  const baileys = require('@whiskeysockets/baileys');
-  const originalMakeWASocket = baileys.default;
+  const baileysModulePath = require.resolve('@whiskeysockets/baileys');
+  const originalBaileys = require(baileysModulePath);
+  const originalMakeWASocket = originalBaileys.default;
+  const originalAuthState = originalBaileys.useMultiFileAuthState;
+
+  const wrappedBaileys = Object.create(originalBaileys);
+
   if (typeof originalMakeWASocket === 'function') {
-    baileys.default = function wrappedMakeWASocket(...args) {
+    wrappedBaileys.default = function wrappedMakeWASocket(...args) {
       const socket = originalMakeWASocket(...args);
+
       global.__waAdminSocket = socket;
+      global.__waAdminConnected = false;
 
       global.__waSendAdminText = async (number, text) => {
         const current = global.__waAdminSocket;
-        if (!current) throw new Error('Admin WhatsApp अभी connected नहीं है');
+        if (!current || !global.__waAdminConnected || !current.user) {
+          throw new Error('Admin WhatsApp अभी connected नहीं है। पहले Admin WhatsApp scan करें।');
+        }
 
         let digits = String(number || '').replace(/\D/g, '');
         if (/^[6-9]\d{9}$/.test(digits)) digits = `91${digits}`;
@@ -47,6 +64,7 @@ try {
           try {
             const { connection } = update || {};
             const { recordAdminWhatsAppSession } = require('./auth');
+
             let phone = null;
             try {
               phone = socket?.user?.id
@@ -70,13 +88,13 @@ try {
           }
         });
       }
+
       return socket;
     };
   }
 
-  const originalAuthState = baileys.useMultiFileAuthState;
   if (typeof originalAuthState === 'function') {
-    baileys.useMultiFileAuthState = function wrappedAuthState(folder, ...args) {
+    wrappedBaileys.useMultiFileAuthState = function wrappedAuthState(folder, ...args) {
       const requested = String(folder || '');
       if (requested === 'auth_info' || requested.endsWith('/auth_info') || requested.endsWith('\\auth_info')) {
         folder = process.env.ADMIN_WHATSAPP_SESSION_DIR || requested;
@@ -84,6 +102,12 @@ try {
       return originalAuthState(folder, ...args);
     };
   }
+
+  // Force every subsequent require('@whiskeysockets/baileys') to receive
+  // the wrapped exports, including index.js.
+  require.cache[baileysModulePath].exports = wrappedBaileys;
+
+  console.log('[Baileys bridge] Admin socket/auth wrappers installed');
 } catch (error) {
   console.error('Baileys bridge setup failed:', error.message);
 }
