@@ -5,8 +5,6 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const mongoose = require('mongoose');
 
-// Capture the existing Baileys socket without changing the current Admin bot code.
-// This lets the MongoDB signup system send OTP/credentials through the already-scanned Admin WhatsApp.
 try {
   const baileys = require('@whiskeysockets/baileys');
   const originalMakeWASocket = baileys.default;
@@ -28,16 +26,10 @@ try {
             const { connection } = update || {};
             const { recordAdminWhatsAppSession } = require('./auth');
             let phone = null;
-            try {
-              phone = socket?.user?.id ? String(socket.user.id).split(':')[0].replace(/\D/g, '') : null;
-            } catch {}
-            if (connection === 'open') {
-              await recordAdminWhatsAppSession({ status: 'connected', phone });
-            } else if (connection === 'close') {
-              await recordAdminWhatsAppSession({ status: 'disconnected', phone });
-            } else if (connection === 'connecting') {
-              await recordAdminWhatsAppSession({ status: 'connecting', phone });
-            }
+            try { phone = socket?.user?.id ? String(socket.user.id).split(':')[0].replace(/\D/g, '') : null; } catch {}
+            if (connection === 'open') await recordAdminWhatsAppSession({ status: 'connected', phone });
+            else if (connection === 'close') await recordAdminWhatsAppSession({ status: 'disconnected', phone });
+            else if (connection === 'connecting') await recordAdminWhatsAppSession({ status: 'connecting', phone });
           } catch (err) {
             console.error('Admin WhatsApp session tracking error:', err.message);
           }
@@ -47,7 +39,6 @@ try {
     };
   }
 
-  // Keep the existing scanned Admin session location, but make it configurable by ENV.
   const originalAuthState = baileys.useMultiFileAuthState;
   if (typeof originalAuthState === 'function') {
     baileys.useMultiFileAuthState = function wrappedAuthState(folder, ...args) {
@@ -67,98 +58,53 @@ const { router: authRouter, ensureAdminUser } = require('./auth');
 let botApp = null;
 let botStartup = null;
 const originalListen = express.application.listen;
-
 express.application.listen = function (...args) {
   botApp = this;
   const lastArg = args[args.length - 1];
-  if (typeof lastArg === 'function') {
-    botStartup = lastArg;
-  }
-  return {
-    close(callback) {
-      if (typeof callback === 'function') callback();
-    }
-  };
+  if (typeof lastArg === 'function') botStartup = lastArg;
+  return { close(callback) { if (typeof callback === 'function') callback(); } };
 };
 
-try {
-  require('./index');
-} finally {
-  express.application.listen = originalListen;
-}
-
-if (!botApp) {
-  throw new Error('WhatsApp backend app could not be loaded from index.js');
-}
+try { require('./index'); } finally { express.application.listen = originalListen; }
+if (!botApp) throw new Error('WhatsApp backend app could not be loaded from index.js');
 
 const app = express();
 app.use(express.json({ limit: '100mb' }));
-
 const distPath = path.join(__dirname, 'whatsapp-dashboard', 'dist');
 
-app.get('/ping', (req, res) => {
-  res.status(200).send('OK - Alive');
-});
-
-// MongoDB authentication routes are mounted before the old bot routes.
+app.get('/ping', (req, res) => res.status(200).send('OK - Alive'));
 app.use(authRouter);
-
-// Existing WhatsApp API remains available to the current dashboard.
-// Authentication is currently handled by the dashboard login layer; protected API middleware
-// can be enabled after the user-session UI is switched to the new cookie/token flow.
 app.use(botApp);
-
-// Serve Vite output. index:false lets the SPA fallback below inject the Signup shortcut.
 app.use(express.static(distPath, { index: false }));
 
-app.get('*', (req, res, next) => {
-  if (
-    req.method === 'GET' &&
-    !req.path.startsWith('/api') &&
-    !req.path.startsWith('/media') &&
-    !req.path.startsWith('/send-text') &&
-    req.path !== '/ping'
-  ) {
+// SPA fallback. This also injects the Signup shortcut into the existing React login card,
+// so App.jsx does not need to be rewritten just for the new registration flow.
+app.use((req, res, next) => {
+  if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/media') && !req.path.startsWith('/send-text') && req.path !== '/ping') {
     const indexPath = path.join(distPath, 'index.html');
     if (fs.existsSync(indexPath)) {
       let html = fs.readFileSync(indexPath, 'utf8');
-      const signupScript = `\n<script>\n(function(){\n  function addSignup(){\n    var card=document.querySelector('.login-card');\n    if(!card || card.querySelector('[data-signup-link]')) return;\n    var btn=document.createElement('button');\n    btn.type='button';\n    btn.setAttribute('data-signup-link','1');\n    btn.textContent='Create new account';\n    btn.style.cssText='width:100%;margin-top:10px;padding:11px 14px;border:1px solid #d9dee8;border-radius:10px;background:#fff;color:#128c7e;font-weight:700;cursor:pointer;';\n    btn.onclick=function(){ location.href='/signup.html'; };\n    card.appendChild(btn);\n  }\n  new MutationObserver(addSignup).observe(document.documentElement,{childList:true,subtree:true});\n  setTimeout(addSignup,300);\n})();\n</script>\n`;
-      if (html.includes('</body>')) html = html.replace('</body>', signupScript + '</body>');
-      else html += signupScript;
+      const signupScript = `\n<script>\n(function(){\nfunction addSignup(){var card=document.querySelector('.login-card');if(!card||card.querySelector('[data-signup-link]'))return;var btn=document.createElement('button');btn.type='button';btn.setAttribute('data-signup-link','1');btn.textContent='Create new account';btn.style.cssText='width:100%;margin-top:10px;padding:11px 14px;border:1px solid #d9dee8;border-radius:10px;background:#fff;color:#128c7e;font-weight:700;cursor:pointer;';btn.onclick=function(){location.href='/signup.html'};card.appendChild(btn)}new MutationObserver(addSignup).observe(document.documentElement,{childList:true,subtree:true});setTimeout(addSignup,300)})();\n</script>\n`;
+      if (html.includes('</body>')) html = html.replace('</body>', signupScript + '</body>'); else html += signupScript;
       return res.type('html').send(html);
     }
   }
   next();
 });
 
-if (!fs.existsSync(path.join(distPath, 'index.html'))) {
-  console.warn('WARNING: whatsapp-dashboard/dist/index.html not found. Run: npm run build');
-}
+if (!fs.existsSync(path.join(distPath, 'index.html'))) console.warn('WARNING: whatsapp-dashboard/dist/index.html not found. Run: npm run build');
 
 const PORT = process.env.PORT || 10000;
 const MONGO_URI = process.env.MONGO_URI;
-
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Unified Server running and listening on 0.0.0.0:${PORT}`);
-
   if (botStartup) {
-    try {
-      botStartup();
-    } catch (err) {
-      console.error('WhatsApp bot startup failed:', err);
-    }
+    try { botStartup(); } catch (err) { console.error('WhatsApp bot startup failed:', err); }
   }
-
   if (MONGO_URI) {
     mongoose.connect(MONGO_URI)
-      .then(async () => {
-        console.log('MongoDB Atlas Connected Successfully');
-        await ensureAdminUser();
-        console.log('MongoDB authentication system ready');
-      })
-      .catch((err) => {
-        console.error('MongoDB connection failed:', err);
-      });
+      .then(async () => { console.log('MongoDB Atlas Connected Successfully'); await ensureAdminUser(); console.log('MongoDB authentication system ready'); })
+      .catch((err) => console.error('MongoDB connection failed:', err));
   } else {
     console.warn('MONGO_URI is not configured. Signup/login database features require MongoDB.');
   }
