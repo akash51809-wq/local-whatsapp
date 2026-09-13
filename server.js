@@ -1,4 +1,5 @@
 const path = require('path');
+const fs = require('fs');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const express = require('express');
@@ -8,37 +9,27 @@ const { startWhatsAppBot } = require('./index');
 const app = express();
 app.use(express.json());
 
-// 📁 Vite dist static folder serve karne ke liye
-app.use(express.static(path.join(__dirname, 'whatsapp-dashboard', 'dist')));
+const distPath = path.join(__dirname, 'whatsapp-dashboard', 'dist');
+
+// Check karo ki dist folder ban gaya hai ya nahi
+if (fs.existsSync(distPath)) {
+  console.log(`[Frontend] Serving static files from ${distPath}`);
+  app.use(express.static(distPath));
+} else {
+  console.warn(`[WARNING] Dist folder not found at ${distPath}. Run build first!`);
+}
 
 // Render free-tier keep-alive ping route
 app.get('/ping', (req, res) => {
   res.status(200).send('OK - Alive');
 });
 
-// Root '/' kholne par dist/index.html load karne ke liye
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'whatsapp-dashboard', 'dist', 'index.html'));
-});
-
-const PORT = process.env.PORT || 3000;
-const MONGO_URI = process.env.MONGO_URI;
-
-// Safe check for URI
-if (!MONGO_URI) {
-  console.error('ERROR: MONGO_URI is undefined. Check your .env file path or variables.');
-}
-
-// Connect MongoDB and start WhatsApp bot
-mongoose.connect(MONGO_URI)
-  .then(() => {
-    console.log('MongoDB Atlas Connected Successfully');
-    startWhatsAppBot('client_session_1');
-  })
-  .catch((err) => {
-    console.error('MongoDB connection failed:', err);
-  });
-
-app.listen(PORT, () => {
-  console.log(`Server running and listening on port ${PORT}`);
+// SPA catch-all fallback route
+app.get('*', (req, res) => {
+  const indexPath = path.join(distPath, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(404).send('Frontend dist/index.html not found! Ensure build command ran `npm run build` inside whatsapp-dashboard.');
+  }
 });
