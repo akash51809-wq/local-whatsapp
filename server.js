@@ -10,51 +10,39 @@ const app = express();
 app.use(express.json());
 
 const distPath = path.join(__dirname, 'whatsapp-dashboard', 'dist');
-console.log(`[Diagnostic] Checking distPath: ${distPath}`);
-console.log(`[Diagnostic] Exists? ${fs.existsSync(distPath)}`);
-if (fs.existsSync(distPath)) {
-  console.log(`[Diagnostic] Files inside dist:`, fs.readdirSync(distPath));
-}
 
-// Render keep-alive ping
+// Static files first
+app.use(express.static(distPath));
+
+// Health check / ping
 app.get('/ping', (req, res) => {
   res.status(200).send('OK - Alive');
 });
 
-// Static assets if present
-if (fs.existsSync(distPath)) {
-  app.use(express.static(distPath));
-}
-
-// Root route
+// Explicit root '/'
 app.get('/', (req, res) => {
   const indexPath = path.join(distPath, 'index.html');
   if (fs.existsSync(indexPath)) {
     return res.sendFile(indexPath);
   }
-  res.status(404).send(`Critical: dist/index.html missing at ${distPath}`);
+  res.status(404).send('index.html missing');
 });
 
 // SPA fallback
-app.use((req, res, next) => {
-  if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/ping')) {
-    const filePath = path.join(distPath, req.path);
-    if (fs.existsSync(filePath) && fs.statStatusSafe ? true : fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-      return res.sendFile(filePath);
-    }
-    const indexPath = path.join(distPath, 'index.html');
-    if (fs.existsSync(indexPath)) {
-      return res.sendFile(indexPath);
-    }
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api') || req.path === '/ping') return;
+  const indexPath = path.join(distPath, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath);
   }
-  next();
+  res.status(404).send('index.html missing');
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 const MONGO_URI = process.env.MONGO_URI;
 
-app.listen(PORT, () => {
-  console.log(`Server running and listening on port ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running and listening on 0.0.0.0:${PORT}`);
   if (MONGO_URI) {
     mongoose.connect(MONGO_URI)
       .then(() => {
