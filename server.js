@@ -4,25 +4,28 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const express = require('express');
 const mongoose = require('mongoose');
-const { startWhatsAppBot } = require('./index');
+const { app: botApp, startBot } = require('./index');
 
 const app = express();
 app.use(express.json());
 
-const distPath = path.join(__dirname, 'whatsapp-dashboard', 'dist');
+const publicPath = path.join(__dirname, 'public');
 
-// 1. Health check
+// Health check
 app.get('/ping', (req, res) => {
   res.status(200).send('OK - Alive');
 });
 
-// 2. Static files
-app.use(express.static(distPath));
+// Mount index.js API routes & media static
+app.use(botApp);
 
-// 3. Safe SPA Fallback via pure middleware (zero path-to-regexp crash)
+// Single static public folder for frontend
+app.use(express.static(publicPath));
+
+// SPA fallback for React frontend
 app.use((req, res, next) => {
-  if (req.method === 'GET' && !req.path.startsWith('/api') && req.path !== '/ping') {
-    const indexPath = path.join(distPath, 'index.html');
+  if (req.method === 'GET' && !req.path.startsWith('/api') && req.path !== '/ping' && !req.path.startsWith('/media') && !req.path.startsWith('/send-text')) {
+    const indexPath = path.join(publicPath, 'index.html');
     if (fs.existsSync(indexPath)) {
       return res.sendFile(indexPath);
     }
@@ -34,12 +37,12 @@ const PORT = process.env.PORT || 10000;
 const MONGO_URI = process.env.MONGO_URI;
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running and listening on 0.0.0.0:${PORT}`);
+  console.log(`Unified Server running and listening on 0.0.0.0:${PORT}`);
+  startBot();
   if (MONGO_URI) {
     mongoose.connect(MONGO_URI)
       .then(() => {
         console.log('MongoDB Atlas Connected Successfully');
-        startWhatsAppBot('client_session_1');
       })
       .catch((err) => {
         console.error('MongoDB connection failed:', err);
