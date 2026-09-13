@@ -8,9 +8,17 @@ const { startWhatsAppBot } = require('./index');
 const app = express();
 app.use(express.json());
 
+// 📁 Static folder serve karne ke liye (dashboard UI)
+app.use(express.static(path.join(__dirname, 'whatsapp-dashboard')));
+
 // Render free-tier keep-alive ping route
 app.get('/ping', (req, res) => {
   res.status(200).send('OK - Alive');
+});
+
+// Root '/' kholne par dashboard.html load karne ke liye
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'whatsapp-dashboard', 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
