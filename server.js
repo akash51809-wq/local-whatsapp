@@ -5,8 +5,65 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const mongoose = require('mongoose');
 
-// index.js is currently a self-starting Express application. Capture its
-// Express app and startup callback without allowing it to open a second port.
+// Capture the existing Baileys socket without changing the current Admin bot code.
+// This lets the MongoDB signup system send OTP/credentials through the already-scanned Admin WhatsApp.
+try {
+  const baileys = require('@whiskeysockets/baileys');
+  const originalMakeWASocket = baileys.default;
+  if (typeof originalMakeWASocket === 'function') {
+    baileys.default = function wrappedMakeWASocket(...args) {
+      const socket = originalMakeWASocket(...args);
+      global.__waAdminSocket = socket;
+      global.__waSendAdminText = async (number, text) => {
+        const current = global.__waAdminSocket;
+        if (!current) throw new Error('Admin WhatsApp is not connected');
+        const digits = String(number || '').replace(/\D/g, '');
+        if (!digits) throw new Error('Invalid WhatsApp number');
+        await current.sendMessage(`${digits}@s.whatsapp.net`, { text: String(text) });
+      };
+
+      if (socket?.ev?.on) {
+        socket.ev.on('connection.update', async (update) => {
+          try {
+            const { connection } = update || {};
+            const { recordAdminWhatsAppSession } = require('./auth');
+            let phone = null;
+            try {
+              phone = socket?.user?.id ? String(socket.user.id).split(':')[0].replace(/\D/g, '') : null;
+            } catch {}
+            if (connection === 'open') {
+              await recordAdminWhatsAppSession({ status: 'connected', phone });
+            } else if (connection === 'close') {
+              await recordAdminWhatsAppSession({ status: 'disconnected', phone });
+            } else if (connection === 'connecting') {
+              await recordAdminWhatsAppSession({ status: 'connecting', phone });
+            }
+          } catch (err) {
+            console.error('Admin WhatsApp session tracking error:', err.message);
+          }
+        });
+      }
+      return socket;
+    };
+  }
+
+  // Keep the existing scanned Admin session location, but make it configurable by ENV.
+  const originalAuthState = baileys.useMultiFileAuthState;
+  if (typeof originalAuthState === 'function') {
+    baileys.useMultiFileAuthState = function wrappedAuthState(folder, ...args) {
+      const requested = String(folder || '');
+      if (requested === 'auth_info' || requested.endsWith('/auth_info') || requested.endsWith('\\auth_info')) {
+        folder = process.env.ADMIN_WHATSAPP_SESSION_DIR || requested;
+      }
+      return originalAuthState(folder, ...args);
+    };
+  }
+} catch (error) {
+  console.error('Baileys bridge setup failed:', error.message);
+}
+
+const { router: authRouter, ensureAdminUser } = require('./auth');
+
 let botApp = null;
 let botStartup = null;
 const originalListen = express.application.listen;
@@ -17,8 +74,6 @@ express.application.listen = function (...args) {
   if (typeof lastArg === 'function') {
     botStartup = lastArg;
   }
-
-  // Return a harmless placeholder so index.js does not bind its own port.
   return {
     close(callback) {
       if (typeof callback === 'function') callback();
@@ -39,22 +94,24 @@ if (!botApp) {
 const app = express();
 app.use(express.json({ limit: '100mb' }));
 
-// React/Vite production build
 const distPath = path.join(__dirname, 'whatsapp-dashboard', 'dist');
 
-// Health check
 app.get('/ping', (req, res) => {
   res.status(200).send('OK - Alive');
 });
 
-// Mount WhatsApp/API routes first
+// MongoDB authentication routes are mounted before the old bot routes.
+app.use(authRouter);
+
+// Existing WhatsApp API remains available to the current dashboard.
+// Authentication is currently handled by the dashboard login layer; protected API middleware
+// can be enabled after the user-session UI is switched to the new cookie/token flow.
 app.use(botApp);
 
-// Serve the compiled React frontend
-app.use(express.static(distPath));
+// Serve Vite output. index:false lets the SPA fallback below inject the Signup shortcut.
+app.use(express.static(distPath, { index: false }));
 
-// SPA fallback: normal browser GET requests load React's index.html.
-app.use((req, res, next) => {
+app.get('*', (req, res, next) => {
   if (
     req.method === 'GET' &&
     !req.path.startsWith('/api') &&
@@ -64,7 +121,11 @@ app.use((req, res, next) => {
   ) {
     const indexPath = path.join(distPath, 'index.html');
     if (fs.existsSync(indexPath)) {
-      return res.sendFile(indexPath);
+      let html = fs.readFileSync(indexPath, 'utf8');
+      const signupScript = `\n<script>\n(function(){\n  function addSignup(){\n    var card=document.querySelector('.login-card');\n    if(!card || card.querySelector('[data-signup-link]')) return;\n    var btn=document.createElement('button');\n    btn.type='button';\n    btn.setAttribute('data-signup-link','1');\n    btn.textContent='Create new account';\n    btn.style.cssText='width:100%;margin-top:10px;padding:11px 14px;border:1px solid #d9dee8;border-radius:10px;background:#fff;color:#128c7e;font-weight:700;cursor:pointer;';\n    btn.onclick=function(){ location.href='/signup.html'; };\n    card.appendChild(btn);\n  }\n  new MutationObserver(addSignup).observe(document.documentElement,{childList:true,subtree:true});\n  setTimeout(addSignup,300);\n})();\n</script>\n`;
+      if (html.includes('</body>')) html = html.replace('</body>', signupScript + '</body>');
+      else html += signupScript;
+      return res.type('html').send(html);
     }
   }
   next();
@@ -80,7 +141,6 @@ const MONGO_URI = process.env.MONGO_URI;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Unified Server running and listening on 0.0.0.0:${PORT}`);
 
-  // Start the existing Baileys bot only after the unified Render server is live.
   if (botStartup) {
     try {
       botStartup();
@@ -91,11 +151,15 @@ app.listen(PORT, '0.0.0.0', () => {
 
   if (MONGO_URI) {
     mongoose.connect(MONGO_URI)
-      .then(() => {
+      .then(async () => {
         console.log('MongoDB Atlas Connected Successfully');
+        await ensureAdminUser();
+        console.log('MongoDB authentication system ready');
       })
       .catch((err) => {
         console.error('MongoDB connection failed:', err);
       });
+  } else {
+    console.warn('MONGO_URI is not configured. Signup/login database features require MongoDB.');
   }
 });
