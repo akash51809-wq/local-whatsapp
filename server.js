@@ -12,12 +12,23 @@ try {
     baileys.default = function wrappedMakeWASocket(...args) {
       const socket = originalMakeWASocket(...args);
       global.__waAdminSocket = socket;
+
       global.__waSendAdminText = async (number, text) => {
         const current = global.__waAdminSocket;
-        if (!current) throw new Error('Admin WhatsApp is not connected');
-        const digits = String(number || '').replace(/\D/g, '');
-        if (!digits) throw new Error('Invalid WhatsApp number');
-        await current.sendMessage(`${digits}@s.whatsapp.net`, { text: String(text) });
+        if (!current) throw new Error('Admin WhatsApp अभी connected नहीं है');
+
+        let digits = String(number || '').replace(/\D/g, '');
+        // Signup receives a 10-digit Indian mobile number. WhatsApp JID needs country code.
+        if (/^[6-9]\d{9}$/.test(digits)) digits = `91${digits}`;
+        if (!/^91[6-9]\d{9}$/.test(digits)) {
+          throw new Error('Invalid Indian WhatsApp mobile number');
+        }
+
+        const jid = `${digits}@s.whatsapp.net`;
+        console.log(`[Auth WhatsApp] Sending message to ${jid}`);
+        const result = await current.sendMessage(jid, { text: String(text) });
+        console.log(`[Auth WhatsApp] Message sent to ${digits}`);
+        return result;
       };
 
       if (socket?.ev?.on) {
@@ -26,10 +37,23 @@ try {
             const { connection } = update || {};
             const { recordAdminWhatsAppSession } = require('./auth');
             let phone = null;
-            try { phone = socket?.user?.id ? String(socket.user.id).split(':')[0].replace(/\D/g, '') : null; } catch {}
-            if (connection === 'open') await recordAdminWhatsAppSession({ status: 'connected', phone });
-            else if (connection === 'close') await recordAdminWhatsAppSession({ status: 'disconnected', phone });
-            else if (connection === 'connecting') await recordAdminWhatsAppSession({ status: 'connecting', phone });
+            try {
+              phone = socket?.user?.id
+                ? String(socket.user.id).split(':')[0].replace(/\D/g, '')
+                : null;
+            } catch {}
+
+            if (connection === 'open') {
+              global.__waAdminConnected = true;
+              await recordAdminWhatsAppSession({ status: 'connected', phone });
+              console.log('[Auth WhatsApp] Admin WhatsApp is READY for OTP delivery');
+            } else if (connection === 'close') {
+              global.__waAdminConnected = false;
+              await recordAdminWhatsAppSession({ status: 'disconnected', phone });
+            } else if (connection === 'connecting') {
+              global.__waAdminConnected = false;
+              await recordAdminWhatsAppSession({ status: 'connecting', phone });
+            }
           } catch (err) {
             console.error('Admin WhatsApp session tracking error:', err.message);
           }
@@ -77,14 +101,12 @@ app.use(authRouter);
 app.use(botApp);
 app.use(express.static(distPath, { index: false }));
 
-// SPA fallback. This also injects the Signup shortcut into the existing React login card,
-// so App.jsx does not need to be rewritten just for the new registration flow.
 app.use((req, res, next) => {
   if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/media') && !req.path.startsWith('/send-text') && req.path !== '/ping') {
     const indexPath = path.join(distPath, 'index.html');
     if (fs.existsSync(indexPath)) {
       let html = fs.readFileSync(indexPath, 'utf8');
-      const signupScript = `\n<script>\n(function(){\nfunction addSignup(){var card=document.querySelector('.login-card');if(!card||card.querySelector('[data-signup-link]'))return;var btn=document.createElement('button');btn.type='button';btn.setAttribute('data-signup-link','1');btn.textContent='Create new account';btn.style.cssText='width:100%;margin-top:10px;padding:11px 14px;border:1px solid #d9dee8;border-radius:10px;background:#fff;color:#128c7e;font-weight:700;cursor:pointer;';btn.onclick=function(){location.href='/signup.html'};card.appendChild(btn)}new MutationObserver(addSignup).observe(document.documentElement,{childList:true,subtree:true});setTimeout(addSignup,300)})();\n</script>\n`;
+      const signupScript = `\n<script>\n(function(){function addSignup(){var card=document.querySelector('.login-card');if(!card||card.querySelector('[data-signup-link]'))return;var btn=document.createElement('button');btn.type='button';btn.setAttribute('data-signup-link','1');btn.textContent='Create new account';btn.style.cssText='width:100%;margin-top:10px;padding:11px 14px;border:1px solid #d9dee8;border-radius:10px;background:#fff;color:#128c7e;font-weight:700;cursor:pointer;';btn.onclick=function(){location.href='/signup.html'};card.appendChild(btn)}new MutationObserver(addSignup).observe(document.documentElement,{childList:true,subtree:true});setTimeout(addSignup,300)})();\n</script>\n`;
       if (html.includes('</body>')) html = html.replace('</body>', signupScript + '</body>'); else html += signupScript;
       return res.type('html').send(html);
     }
@@ -103,7 +125,11 @@ app.listen(PORT, '0.0.0.0', () => {
   }
   if (MONGO_URI) {
     mongoose.connect(MONGO_URI)
-      .then(async () => { console.log('MongoDB Atlas Connected Successfully'); await ensureAdminUser(); console.log('MongoDB authentication system ready'); })
+      .then(async () => {
+        console.log('MongoDB Atlas Connected Successfully');
+        await ensureAdminUser();
+        console.log('MongoDB authentication system ready');
+      })
       .catch((err) => console.error('MongoDB connection failed:', err));
   } else {
     console.warn('MONGO_URI is not configured. Signup/login database features require MongoDB.');
