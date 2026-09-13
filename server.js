@@ -10,27 +10,38 @@ const app = express();
 app.use(express.json());
 
 const distPath = path.join(__dirname, 'whatsapp-dashboard', 'dist');
+console.log(`[Diagnostic] Checking distPath: ${distPath}`);
+console.log(`[Diagnostic] Exists? ${fs.existsSync(distPath)}`);
+if (fs.existsSync(distPath)) {
+  console.log(`[Diagnostic] Files inside dist:`, fs.readdirSync(distPath));
+}
 
-// Static assets serve karo
-app.use(express.static(distPath));
-
-// Ping route
+// Render keep-alive ping
 app.get('/ping', (req, res) => {
   res.status(200).send('OK - Alive');
 });
 
-// ROOT '/' par sabse pehle React ka index.html bhejo
+// Static assets if present
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+}
+
+// Root route
 app.get('/', (req, res) => {
   const indexPath = path.join(distPath, 'index.html');
   if (fs.existsSync(indexPath)) {
     return res.sendFile(indexPath);
   }
-  res.status(404).send('Frontend dist/index.html not found on server disk!');
+  res.status(404).send(`Critical: dist/index.html missing at ${distPath}`);
 });
 
-// SPA fallback (React router / page refresh handle karne ke liye)
+// SPA fallback
 app.use((req, res, next) => {
   if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/ping')) {
+    const filePath = path.join(distPath, req.path);
+    if (fs.existsSync(filePath) && fs.statStatusSafe ? true : fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+      return res.sendFile(filePath);
+    }
     const indexPath = path.join(distPath, 'index.html');
     if (fs.existsSync(indexPath)) {
       return res.sendFile(indexPath);
