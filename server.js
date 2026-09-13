@@ -11,31 +11,29 @@ app.use(express.json());
 
 const distPath = path.join(__dirname, 'whatsapp-dashboard', 'dist');
 
-// Check and serve static files from dist folder
-if (fs.existsSync(distPath)) {
-  console.log(`[Frontend] Serving static files from ${distPath}`);
-  app.use(express.static(distPath));
-} else {
-  console.warn(`[WARNING] Dist folder not found at ${distPath}.`);
-}
+// Static assets serve karo
+app.use(express.static(distPath));
 
-// Render free-tier keep-alive ping route
+// Ping route
 app.get('/ping', (req, res) => {
   res.status(200).send('OK - Alive');
 });
 
-// Safe SPA fallback middleware (bypasses path-to-regexp wildcard crash)
+// ROOT '/' par sabse pehle React ka index.html bhejo
+app.get('/', (req, res) => {
+  const indexPath = path.join(distPath, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath);
+  }
+  res.status(404).send('Frontend dist/index.html not found on server disk!');
+});
+
+// SPA fallback (React router / page refresh handle karne ke liye)
 app.use((req, res, next) => {
-  if (req.method === 'GET' && !req.path.startsWith('/ping') && !req.path.startsWith('/api')) {
-    const filePath = path.join(distPath, req.path);
-    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-      return res.sendFile(filePath);
-    }
+  if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/ping')) {
     const indexPath = path.join(distPath, 'index.html');
     if (fs.existsSync(indexPath)) {
       return res.sendFile(indexPath);
-    } else {
-      return res.status(404).send('Frontend build index.html not found. Ensure build command runs `npm run build`.');
     }
   }
   next();
@@ -44,19 +42,16 @@ app.use((req, res, next) => {
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI;
 
-if (!MONGO_URI) {
-  console.error('ERROR: MONGO_URI is undefined. Check your environment variables.');
-}
-
-mongoose.connect(MONGO_URI)
-  .then(() => {
-    console.log('MongoDB Atlas Connected Successfully');
-    startWhatsAppBot('client_session_1');
-  })
-  .catch((err) => {
-    console.error('MongoDB connection failed:', err);
-  });
-
 app.listen(PORT, () => {
   console.log(`Server running and listening on port ${PORT}`);
+  if (MONGO_URI) {
+    mongoose.connect(MONGO_URI)
+      .then(() => {
+        console.log('MongoDB Atlas Connected Successfully');
+        startWhatsAppBot('client_session_1');
+      })
+      .catch((err) => {
+        console.error('MongoDB connection failed:', err);
+      });
+  }
 });
