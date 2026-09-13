@@ -4,10 +4,40 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const express = require('express');
 const mongoose = require('mongoose');
-const { app: botApp, startBot } = require('./index');
+
+// index.js is currently a self-starting Express application. Capture its
+// Express app and startup callback without allowing it to open a second port.
+let botApp = null;
+let botStartup = null;
+const originalListen = express.application.listen;
+
+express.application.listen = function (...args) {
+  botApp = this;
+  const lastArg = args[args.length - 1];
+  if (typeof lastArg === 'function') {
+    botStartup = lastArg;
+  }
+
+  // Return a harmless placeholder so index.js does not bind its own port.
+  return {
+    close(callback) {
+      if (typeof callback === 'function') callback();
+    }
+  };
+};
+
+try {
+  require('./index');
+} finally {
+  express.application.listen = originalListen;
+}
+
+if (!botApp) {
+  throw new Error('WhatsApp backend app could not be loaded from index.js');
+}
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '100mb' }));
 
 // React/Vite production build
 const distPath = path.join(__dirname, 'whatsapp-dashboard', 'dist');
@@ -23,8 +53,7 @@ app.use(botApp);
 // Serve the compiled React frontend
 app.use(express.static(distPath));
 
-// SPA fallback: every normal browser GET should load React's index.html.
-// API/media routes are left to the backend instead of being swallowed by React.
+// SPA fallback: normal browser GET requests load React's index.html.
 app.use((req, res, next) => {
   if (
     req.method === 'GET' &&
@@ -41,7 +70,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Helpful deployment diagnostic if the frontend build is missing
 if (!fs.existsSync(path.join(distPath, 'index.html'))) {
   console.warn('WARNING: whatsapp-dashboard/dist/index.html not found. Run: npm run build');
 }
@@ -51,7 +79,15 @@ const MONGO_URI = process.env.MONGO_URI;
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Unified Server running and listening on 0.0.0.0:${PORT}`);
-  startBot();
+
+  // Start the existing Baileys bot only after the unified Render server is live.
+  if (botStartup) {
+    try {
+      botStartup();
+    } catch (err) {
+      console.error('WhatsApp bot startup failed:', err);
+    }
+  }
 
   if (MONGO_URI) {
     mongoose.connect(MONGO_URI)
