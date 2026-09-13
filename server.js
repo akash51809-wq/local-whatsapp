@@ -11,31 +11,23 @@ app.use(express.json());
 
 const distPath = path.join(__dirname, 'whatsapp-dashboard', 'dist');
 
-// Static files first
-app.use(express.static(distPath));
-
-// Health check / ping
+// 1. Health check
 app.get('/ping', (req, res) => {
   res.status(200).send('OK - Alive');
 });
 
-// Explicit root '/'
-app.get('/', (req, res) => {
-  const indexPath = path.join(distPath, 'index.html');
-  if (fs.existsSync(indexPath)) {
-    return res.sendFile(indexPath);
-  }
-  res.status(404).send('index.html missing');
-});
+// 2. Static files
+app.use(express.static(distPath));
 
-// SPA fallback
-app.get('*', (req, res) => {
-  if (req.path.startsWith('/api') || req.path === '/ping') return;
-  const indexPath = path.join(distPath, 'index.html');
-  if (fs.existsSync(indexPath)) {
-    return res.sendFile(indexPath);
+// 3. Safe SPA Fallback via pure middleware (zero path-to-regexp crash)
+app.use((req, res, next) => {
+  if (req.method === 'GET' && !req.path.startsWith('/api') && req.path !== '/ping') {
+    const indexPath = path.join(distPath, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      return res.sendFile(indexPath);
+    }
   }
-  res.status(404).send('index.html missing');
+  next();
 });
 
 const PORT = process.env.PORT || 10000;
