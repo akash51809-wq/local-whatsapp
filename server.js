@@ -5,6 +5,9 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const mongoose = require('mongoose');
 
+// Never let Mongoose silently buffer authentication queries when MongoDB is offline.
+mongoose.set('bufferCommands', false);
+
 try {
   const baileys = require('@whiskeysockets/baileys');
   const originalMakeWASocket = baileys.default;
@@ -18,7 +21,6 @@ try {
         if (!current) throw new Error('Admin WhatsApp अभी connected नहीं है');
 
         let digits = String(number || '').replace(/\D/g, '');
-        // Signup receives a 10-digit Indian mobile number. WhatsApp JID needs country code.
         if (/^[6-9]\d{9}$/.test(digits)) digits = `91${digits}`;
         if (!/^91[6-9]\d{9}$/.test(digits)) {
           throw new Error('Invalid Indian WhatsApp mobile number');
@@ -118,20 +120,35 @@ if (!fs.existsSync(path.join(distPath, 'index.html'))) console.warn('WARNING: wh
 
 const PORT = process.env.PORT || 10000;
 const MONGO_URI = process.env.MONGO_URI;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Unified Server running and listening on 0.0.0.0:${PORT}`);
-  if (botStartup) {
-    try { botStartup(); } catch (err) { console.error('WhatsApp bot startup failed:', err); }
+
+async function startServer() {
+  if (!MONGO_URI) {
+    console.error('FATAL: MONGO_URI is not configured. Authentication cannot start.');
+    process.exit(1);
   }
-  if (MONGO_URI) {
-    mongoose.connect(MONGO_URI)
-      .then(async () => {
-        console.log('MongoDB Atlas Connected Successfully');
-        await ensureAdminUser();
-        console.log('MongoDB authentication system ready');
-      })
-      .catch((err) => console.error('MongoDB connection failed:', err));
-  } else {
-    console.warn('MONGO_URI is not configured. Signup/login database features require MongoDB.');
+
+  try {
+    await mongoose.connect(MONGO_URI, {
+      serverSelectionTimeoutMS: 10000,
+      connectTimeoutMS: 10000,
+      maxPoolSize: 10,
+    });
+    console.log('MongoDB Atlas Connected Successfully');
+
+    await ensureAdminUser();
+    console.log('MongoDB authentication system ready');
+
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Unified Server running and listening on 0.0.0.0:${PORT}`);
+      if (botStartup) {
+        try { botStartup(); } catch (err) { console.error('WhatsApp bot startup failed:', err); }
+      }
+    });
+  } catch (err) {
+    console.error('FATAL: MongoDB connection failed. Signup/Login cannot work.');
+    console.error(err?.message || err);
+    process.exit(1);
   }
-});
+}
+
+startServer();
