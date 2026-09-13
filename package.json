@@ -61,7 +61,8 @@
   },
   "scripts": {
     "start": "node server.js",
-    "build": "cd whatsapp-dashboard && npm install && npm run build",
+    "build": "npm --prefix whatsapp-dashboard install && npm --prefix whatsapp-dashboard run build",
+    "postinstall": "npm --prefix whatsapp-dashboard install && npm --prefix whatsapp-dashboard run build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
