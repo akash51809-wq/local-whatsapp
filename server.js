@@ -5,8 +5,17 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const mongoose = require('mongoose');
 
-// Never let Mongoose silently buffer authentication queries when MongoDB is offline.
+// Do not silently queue authentication queries when MongoDB is unavailable.
 mongoose.set('bufferCommands', false);
+mongoose.set('bufferTimeoutMS', 0);
+
+mongoose.connection.on('connected', () => console.log('[MongoDB] Connected'));
+mongoose.connection.on('open', () => console.log('[MongoDB] Connection open'));
+mongoose.connection.on('disconnected', () => console.error('[MongoDB] Disconnected'));
+mongoose.connection.on('reconnected', () => console.log('[MongoDB] Reconnected'));
+mongoose.connection.on('error', (err) => {
+  console.error('[MongoDB] Connection error:', err?.name || 'Error', err?.message || err);
+});
 
 try {
   const baileys = require('@whiskeysockets/baileys');
@@ -119,7 +128,7 @@ app.use((req, res, next) => {
 if (!fs.existsSync(path.join(distPath, 'index.html'))) console.warn('WARNING: whatsapp-dashboard/dist/index.html not found. Run: npm run build');
 
 const PORT = process.env.PORT || 10000;
-const MONGO_URI = process.env.MONGO_URI;
+const MONGO_URI = String(process.env.MONGO_URI || '').trim();
 
 async function startServer() {
   if (!MONGO_URI) {
@@ -127,13 +136,24 @@ async function startServer() {
     process.exit(1);
   }
 
+  console.log('[MongoDB] Starting connection...');
+  console.log(`[MongoDB] URI configured: ${MONGO_URI.startsWith('mongodb+srv://') ? 'yes (mongodb+srv)' : 'yes'}`);
+
   try {
     await mongoose.connect(MONGO_URI, {
-      serverSelectionTimeoutMS: 10000,
-      connectTimeoutMS: 10000,
+      serverSelectionTimeoutMS: 15000,
+      connectTimeoutMS: 15000,
+      socketTimeoutMS: 20000,
       maxPoolSize: 10,
     });
+
+    if (mongoose.connection.readyState !== 1) {
+      throw new Error(`MongoDB connected call completed but readyState=${mongoose.connection.readyState}`);
+    }
+
     console.log('MongoDB Atlas Connected Successfully');
+    console.log(`[MongoDB] Host: ${mongoose.connection.host || 'unknown'}`);
+    console.log(`[MongoDB] Database: ${mongoose.connection.name || 'unknown'}`);
 
     await ensureAdminUser();
     console.log('MongoDB authentication system ready');
@@ -146,7 +166,11 @@ async function startServer() {
     });
   } catch (err) {
     console.error('FATAL: MongoDB connection failed. Signup/Login cannot work.');
-    console.error(err?.message || err);
+    console.error(`[MongoDB] Error name: ${err?.name || 'unknown'}`);
+    console.error(`[MongoDB] Error code: ${err?.code ?? 'none'}`);
+    console.error(`[MongoDB] Error message: ${err?.message || err}`);
+    if (err?.reason) console.error('[MongoDB] Server selection reason:', err.reason?.message || err.reason);
+    console.error('[MongoDB] Check Render MONGO_URI, MongoDB user/password, Atlas Network Access, and database-user permissions.');
     process.exit(1);
   }
 }
