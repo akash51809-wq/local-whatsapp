@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: local-whatsapp
+    runtime: node
+    buildCommand: npm run build
+    startCommand: npm start
+    healthCheckPath: /ping
+    envVars:
+      - key: NODE_ENV
+        value: production
