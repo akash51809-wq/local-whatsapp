@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import './App.css'
 
@@ -222,7 +222,11 @@ function App() {
     notify('लॉगआउट सफल') 
   }
 
-  if (!login) return <Login onLogin={(token, user) => { setLogin(token); setCurrentUser(user) }} />
+  if (!login) return <Login onLogin={(token, user) => { 
+    setLogin(token)
+    setCurrentUser(user || {})
+    setPage('dashboard')
+  }} />
 
   const navList = useMemo(() => [
     ['dashboard', '⌂', 'Dashboard'],
@@ -1361,6 +1365,7 @@ function ApiPage({ notify }) {
 }
 
 function SystemPage({ status, currentUser, notify }) { 
+  const isAdmin = currentUser?.role === 'admin'
   const [info, setInfo] = useState(null)
   const [pingData, setPingData] = useState(null)
   const [pinging, setPinging] = useState(false)
@@ -1371,17 +1376,21 @@ function SystemPage({ status, currentUser, notify }) {
   const [savingPass, setSavingPass] = useState(false)
 
   const loadPingStatus = useCallback(() => {
+    if (!isAdmin) return
     api('/api/system/autoping').then(setPingData).catch(() => {})
-  }, [])
+  }, [isAdmin])
 
   useEffect(() => { 
-    api('/api/admin/system-info').then(d => setInfo(d.info)).catch(() => {}) 
-    loadPingStatus()
-    const t = setInterval(loadPingStatus, 15000)
-    return () => clearInterval(t)
-  }, [loadPingStatus])
+    if (isAdmin) {
+      api('/api/admin/system-info').then(d => setInfo(d.info)).catch(() => {}) 
+      loadPingStatus()
+      const t = setInterval(loadPingStatus, 15000)
+      return () => clearInterval(t)
+    }
+  }, [isAdmin, loadPingStatus])
 
   const triggerManualPing = async () => {
+    if (!isAdmin) return
     setPinging(true)
     try {
       const res = await api('/api/system/autoping/trigger', { method: 'POST' })
@@ -1417,50 +1426,64 @@ function SystemPage({ status, currentUser, notify }) {
     }
   }
 
+  const infoItems = [
+    ['Account User ID', currentUser?.userId || 'USR'],
+    ['Login Username', currentUser?.username || currentUser?.mobile || (isAdmin ? 'Admin' : 'User')],
+    ['WhatsApp Status', status.status],
+    ['Connected Number', status.number ? '+' + status.number : 'Not connected'],
+    ...(isAdmin ? [
+      ['Render Keep-Alive', 'Active (24/7 Awake)'],
+      ...(info?.nodeVersion ? [['Node.js Version', info.nodeVersion]] : []),
+      ...(info?.uptime ? [['Uptime', info.uptime]] : [])
+    ] : [])
+  ]
+
   return <section className="page-content">
     <div className="section-head">
       <div>
-        <span className="eyebrow">SETTINGS & SECURITY</span>
-        <h2>System & Account Settings</h2>
-        <p>अकाउंट सुरक्षा, सर्वर की स्थिति और Render 24/7 Keep-Alive जानकारी</p>
+        <span className="eyebrow">{isAdmin ? 'SYSTEM & SECURITY' : 'ACCOUNT SECURITY'}</span>
+        <h2>{isAdmin ? 'System & Account Settings' : 'Account & Security Settings'}</h2>
+        <p>{isAdmin ? 'अकाउंट सुरक्षा, सर्वर की स्थिति और Render 24/7 Keep-Alive जानकारी' : 'अकाउंट सुरक्षा और पासवर्ड सेटिंग्स'}</p>
       </div>
     </div>
 
-    {/* Auto-Ping / Render Sleep Prevention Card */}
-    <div className="api-card" style={{marginBottom:24}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
-        <div>
-          <h3 style={{margin:0}}>⏰ Server Auto-Ping (Render 24/7 Keep-Alive)</h3>
-          <p style={{color:'#666',fontSize:13,margin:'4px 0 0'}}>
-            Render सर्वर 10-15 मिनट में स्लीप (Sleep) होने से रोकने के लिए ऑटो-पिंग लगातार सक्रिय है:
-          </p>
+    {/* Auto-Ping / Render Sleep Prevention Card - Admin only */}
+    {isAdmin && (
+      <div className="api-card" style={{marginBottom:24}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+          <div>
+            <h3 style={{margin:0}}>⏰ Server Auto-Ping (Render 24/7 Keep-Alive)</h3>
+            <p style={{color:'#666',fontSize:13,margin:'4px 0 0'}}>
+              Render सर्वर 10-15 मिनट में स्लीप (Sleep) होने से रोकने के लिए ऑटो-पिंग लगातार सक्रिय है:
+            </p>
+          </div>
+          <button className="secondary" onClick={triggerManualPing} disabled={pinging} style={{padding:'7px 14px',fontSize:12}}>
+            {pinging ? 'Pinging...' : '⚡ Ping Now'}
+          </button>
         </div>
-        <button className="secondary" onClick={triggerManualPing} disabled={pinging} style={{padding:'7px 14px',fontSize:12}}>
-          {pinging ? 'Pinging...' : '⚡ Ping Now'}
-        </button>
-      </div>
 
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))',gap:12,marginTop:14}}>
-        <div style={{background:'#f8fafc',padding:12,borderRadius:8,border:'1px solid #e2e8f0'}}>
-          <small style={{color:'#64748b',fontWeight:700,display:'block',marginBottom:4}}>स्थिति (Status)</small>
-          <strong style={{color:'#16a34a'}}>● Active (24/7 Awake)</strong>
-        </div>
-        <div style={{background:'#f8fafc',padding:12,borderRadius:8,border:'1px solid #e2e8f0'}}>
-          <small style={{color:'#64748b',fontWeight:700,display:'block',marginBottom:4}}>Ping Frequency</small>
-          <strong>हर {pingData?.stats?.intervalMinutes || 5} मिनट में</strong>
-        </div>
-        <div style={{background:'#f8fafc',padding:12,borderRadius:8,border:'1px solid #e2e8f0'}}>
-          <small style={{color:'#64748b',fontWeight:700,display:'block',marginBottom:4}}>Last Ping Result</small>
-          <strong style={{fontSize:12,color:'#0f172a',wordBreak:'break-all'}}>{pingData?.stats?.lastPingStatus || 'Starting...'}</strong>
-        </div>
-        <div style={{background:'#f8fafc',padding:12,borderRadius:8,border:'1px solid #e2e8f0'}}>
-          <small style={{color:'#64748b',fontWeight:700,display:'block',marginBottom:4}}>Total Pings Sent</small>
-          <strong>{pingData?.stats?.totalPings || 0} Pings</strong>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))',gap:12,marginTop:14}}>
+          <div style={{background:'#f8fafc',padding:12,borderRadius:8,border:'1px solid #e2e8f0'}}>
+            <small style={{color:'#64748b',fontWeight:700,display:'block',marginBottom:4}}>स्थिति (Status)</small>
+            <strong style={{color:'#16a34a'}}>● Active (24/7 Awake)</strong>
+          </div>
+          <div style={{background:'#f8fafc',padding:12,borderRadius:8,border:'1px solid #e2e8f0'}}>
+            <small style={{color:'#64748b',fontWeight:700,display:'block',marginBottom:4}}>Ping Frequency</small>
+            <strong>हर {pingData?.stats?.intervalMinutes || 5} मिनट में</strong>
+          </div>
+          <div style={{background:'#f8fafc',padding:12,borderRadius:8,border:'1px solid #e2e8f0'}}>
+            <small style={{color:'#64748b',fontWeight:700,display:'block',marginBottom:4}}>Last Ping Result</small>
+            <strong style={{fontSize:12,color:'#0f172a',wordBreak:'break-all'}}>{pingData?.stats?.lastPingStatus || 'Starting...'}</strong>
+          </div>
+          <div style={{background:'#f8fafc',padding:12,borderRadius:8,border:'1px solid #e2e8f0'}}>
+            <small style={{color:'#64748b',fontWeight:700,display:'block',marginBottom:4}}>Total Pings Sent</small>
+            <strong>{pingData?.stats?.totalPings || 0} Pings</strong>
+          </div>
         </div>
       </div>
-    </div>
+    )}
 
-    {/* Change Password Card for User */}
+    {/* Change Password Card */}
     <div className="api-card" style={{marginBottom:24}}>
       <h3>🔒 पासवर्ड बदलें (Change Password)</h3>
       <p style={{color:'#666',fontSize:13,margin:'4px 0 16px'}}>WhatsApp पर प्राप्त हुए रैंडम पासवर्ड को यहाँ अपने मनपसंद पासवर्ड से बदलें:</p>
@@ -1492,15 +1515,7 @@ function SystemPage({ status, currentUser, notify }) {
     </div>
 
     <div className="info-grid">
-      {[
-        ['Account User ID', currentUser?.userId || 'USR'],
-        ['Login Username', currentUser?.username || currentUser?.mobile || 'Admin'],
-        ['WhatsApp Status', status.status],
-        ['Connected Number', status.number ? '+' + status.number : 'Not connected'],
-        ['Render Keep-Alive', 'Active (24/7 Awake)'],
-        ['Node.js Version', info?.nodeVersion || 'Loading'],
-        ['Uptime', info?.uptime || 'Loading']
-      ].map(([a,b]) => (
+      {infoItems.map(([a,b]) => (
         <div className="info-card" key={a}>
           <small>{a}</small>
           <strong>{b}</strong>
@@ -1854,5 +1869,46 @@ function UsersPage({ notify }) {
   </section>
 }
 
-export default App
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error }
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error('App Error Caught:', error, errorInfo)
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,background:'#f8fafc',fontFamily:'system-ui, sans-serif'}}>
+          <div style={{background:'#fff',padding:32,borderRadius:12,boxShadow:'0 4px 12px rgba(0,0,0,0.08)',maxWidth:480,textAlign:'center',width:'100%'}}>
+            <h2 style={{color:'#dc2626',marginBottom:12}}>कुछ गलत हो गया (Something went wrong)</h2>
+            <p style={{color:'#64748b',fontSize:14,marginBottom:20}}>
+              {this.state.error?.message || 'एप्लिकेशन लोड करने में समस्या आई।'}
+            </p>
+            <button 
+              onClick={() => { this.setState({ hasError: false }); window.location.reload() }}
+              style={{background:'#128c7e',color:'#fff',border:'none',padding:'10px 20px',borderRadius:8,fontWeight:700,cursor:'pointer'}}
+            >
+              रीलोड करें (Reload)
+            </button>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
+export default function RootApp() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  )
+}
+
 
