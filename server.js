@@ -31,13 +31,12 @@ try {
     throw new Error('Invalid Indian WhatsApp mobile number');
   }
 
-  // Helper with automatic retry if socket is temporarily reconnecting
+  // Robust helper to send message through active Baileys socket
   async function sendAdminText(number, text, retries = 3) {
     for (let attempt = 1; attempt <= retries; attempt++) {
       const current = global.__waAdminSocket;
-      const ready = !!(current && (current.__waReady === true || current.user));
 
-      if (current && ready && typeof current.sendMessage === 'function') {
+      if (current && typeof current.sendMessage === 'function') {
         try {
           const digits = normalizeIndianWhatsAppNumber(number);
           const jid = `${digits}@s.whatsapp.net`;
@@ -50,7 +49,7 @@ try {
       }
 
       if (attempt < retries) {
-        console.log(`[Auth WhatsApp] Socket reconnecting, waiting 2s before retry (${attempt}/${retries})...`);
+        console.log(`[Auth WhatsApp] Waiting 2s before retry (${attempt}/${retries})...`);
         await new Promise(res => setTimeout(res, 2000));
       }
     }
@@ -63,7 +62,6 @@ try {
 
       global.__waAdminSocket = socket;
       global.__waSendAdminText = sendAdminText;
-      socket.__waReady = false;
 
       console.log('[Baileys bridge] Admin socket instance captured');
 
@@ -82,17 +80,13 @@ try {
             } catch {}
 
             if (connection === 'open') {
-              socket.__waReady = true;
               global.__waAdminSocket = socket;
               global.__waSendAdminText = sendAdminText;
               console.log(`[Auth WhatsApp] Connection OPEN. Admin account: ${phone || 'unknown'}`);
               await recordAdminWhatsAppSession({ status: 'connected', phone });
             } else if (connection === 'close') {
-              socket.__waReady = false;
-              if (global.__waAdminSocket === socket) global.__waSendAdminText = sendAdminText;
               await recordAdminWhatsAppSession({ status: 'disconnected', phone });
             } else if (connection === 'connecting') {
-              socket.__waReady = false;
               await recordAdminWhatsAppSession({ status: 'connecting', phone });
             }
           } catch (err) {
@@ -105,7 +99,6 @@ try {
     };
   }
 
-  // Hook into useMongoAuthState instead of multi file auth state if needed by the bot index
   const { useMongoAuthState } = require('./mongoAuthState');
   wrappedBaileys.useMongoAuthState = useMongoAuthState;
 
