@@ -2194,3 +2194,12 @@ app.listen(PORT, () => {
     console.log(`API server running on http://localhost:${PORT}`);
     startBot();
 });
+
+module.exports = {
+    app,
+    appendMessageReport,
+    appendIncomingMessage,
+    broadcastIncomingEvent,
+    getMessageReports,
+    normalizeIndianNumber
+};

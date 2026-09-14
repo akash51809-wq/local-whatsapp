@@ -255,6 +255,7 @@ async function restoreAllSessions() {
 }
 
 module.exports = {
+    sessions,
     startUserSession,
     stopUserSession,
     getUserSession,

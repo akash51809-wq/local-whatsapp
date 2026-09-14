@@ -430,22 +430,228 @@ router.post('/api/user/whatsapp/disconnect', authRequired, async (req, res) => {
   }
 });
 
-// Send message from user's own WhatsApp
+// Get list of active / scanned WhatsApp sessions available to the user
+router.get('/api/user/whatsapp/sessions', authRequired, async (req, res) => {
+  try {
+    const { getUserSession, sessions } = require('./userSessions');
+    const list = [];
+
+    if (req.user.role === 'admin') {
+      const adminPhone = global.__waAdminSocket?.user?.id
+        ? String(global.__waAdminSocket.user.id).split(':')[0].split('@')[0].replace(/\D/g, '')
+        : null;
+      const isAdminConnected = Boolean(global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function');
+      list.push({
+        id: 'admin',
+        sessionId: 'admin',
+        name: 'Admin WhatsApp' + (adminPhone ? ` (+${adminPhone})` : ''),
+        number: adminPhone ? adminPhone.slice(-10) : null,
+        display: `Admin WhatsApp ${adminPhone ? `(+${adminPhone})` : ''} - ${isAdminConnected ? 'Connected ✓' : 'Offline'}`,
+        status: isAdminConnected ? 'connected' : 'disconnected',
+        isDefault: true,
+        role: 'admin'
+      });
+
+      const dbSessions = await WhatsAppSession.find({});
+      for (const s of dbSessions) {
+        if (s.sessionId === 'admin') continue;
+        const active = sessions?.get(s.ownerUserId);
+        const num = active?.connectedNumber || s.phone || null;
+        const clean10 = num ? String(num).replace(/\D/g, '').slice(-10) : null;
+        const isConn = (active?.status === 'connected') || (s.status === 'connected');
+        list.push({
+          id: s.sessionId || `user-${s.ownerUserId}`,
+          sessionId: s.sessionId || `user-${s.ownerUserId}`,
+          userId: s.ownerUserId,
+          name: `User: ${s.ownerUserId}${clean10 ? ` (+91${clean10})` : ''}`,
+          number: clean10,
+          display: `User (${s.ownerUserId}) ${clean10 ? `+91 ${clean10}` : ''} - ${isConn ? 'Connected ✓' : 'Offline'}`,
+          status: isConn ? 'connected' : 'disconnected',
+          role: s.role || 'user'
+        });
+      }
+    } else {
+      const active = getUserSession(req.user.userId);
+      const dbSession = await WhatsAppSession.findOne({ ownerUserId: req.user.userId });
+      const rawNum = active?.connectedNumber || dbSession?.phone || req.user.mobile || null;
+      const clean10 = rawNum ? String(rawNum).replace(/\D/g, '').slice(-10) : null;
+      const isConn = active?.status === 'connected';
+
+      list.push({
+        id: `user-${req.user.userId}`,
+        sessionId: `user-${req.user.userId}`,
+        userId: req.user.userId,
+        name: clean10 ? `My WhatsApp (+91${clean10})` : `My WhatsApp (${req.user.username || req.user.userId})`,
+        number: clean10,
+        display: clean10 ? `+91 ${clean10} (${isConn ? 'Connected ✓' : 'Not Connected'})` : `My WhatsApp (${isConn ? 'Connected ✓' : 'Not Connected'})`,
+        status: isConn ? 'connected' : (active?.status || dbSession?.status || 'waiting'),
+        isDefault: true,
+        role: 'user'
+      });
+    }
+
+    res.json({ success: true, sessions: list });
+  } catch (error) {
+    console.error('Fetch whatsapp sessions error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Sessions fetch failed' });
+  }
+});
+
+// Send message from selected WhatsApp (single or sequential)
 router.post('/api/user/send', authRequired, async (req, res) => {
   try {
-    const { sendUserMessage } = require('./userSessions');
-    const { to, text } = req.body || {};
-    if (!to || !text) return res.status(400).json({ success: false, message: 'to और text दोनों ज़रूरी हैं।' });
+    const { to, text, attachment, session } = req.body || {};
+    if (!to) return res.status(400).json({ success: false, message: 'Recipient number (to) is required.' });
+    if (!text && !attachment) return res.status(400).json({ success: false, message: 'Message text or attachment is required.' });
 
-    const digits = String(to).replace(/\D/g, '');
-    const normalized = /^91[6-9]\d{9}$/.test(digits) ? digits : (/^[6-9]\d{9}$/.test(digits) ? `91${digits}` : digits);
+    // Resolve socket
+    let activeSocket = null;
+    let fromNumber = null;
+    let sessionName = '';
+
+    const { findOrLoadSession, getUserSession } = require('./userSessions');
+
+    if (req.user.role === 'admin') {
+      if (session && session !== 'admin') {
+        const match = await findOrLoadSession(session);
+        if (match && match.session?.status === 'connected' && match.session?.socket) {
+          activeSocket = match.session.socket;
+          fromNumber = match.session.connectedNumber || match.userId;
+          sessionName = String(fromNumber).replace(/\D/g, '').slice(-10);
+        }
+      }
+      if (!activeSocket) {
+        if (global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function') {
+          activeSocket = global.__waAdminSocket;
+          fromNumber = activeSocket?.user?.id ? String(activeSocket.user.id).split(':')[0].replace(/\D/g, '') : 'Admin';
+          sessionName = 'admin';
+        }
+      }
+    } else {
+      const match = await findOrLoadSession(session, req.user.userId);
+      if (match && match.session?.status === 'connected' && match.session?.socket) {
+        activeSocket = match.session.socket;
+        fromNumber = match.session.connectedNumber || req.user.mobile || req.user.userId;
+        sessionName = String(fromNumber).replace(/\D/g, '').slice(-10);
+      } else {
+        const uSession = getUserSession(req.user.userId);
+        if (uSession && uSession.status === 'connected' && uSession.socket) {
+          activeSocket = uSession.socket;
+          fromNumber = uSession.connectedNumber || req.user.mobile || req.user.userId;
+          sessionName = String(fromNumber).replace(/\D/g, '').slice(-10);
+        }
+      }
+    }
+
+    if (!activeSocket) {
+      return res.status(400).json({
+        success: false,
+        message: 'चयनित WhatsApp कनेक्टेड नहीं है। कृपया पहले Dashboard पर जाकर QR कोड स्कैन करें।'
+      });
+    }
+
+    // Format destination number
+    const cleanDigits = String(to).replace(/\D/g, '');
+    let normalized = cleanDigits;
+    if (cleanDigits.length === 10) normalized = '91' + cleanDigits;
+    else if (cleanDigits.length === 12 && cleanDigits.startsWith('91')) normalized = cleanDigits;
+    else if (cleanDigits.length === 11 && cleanDigits.startsWith('0')) normalized = '91' + cleanDigits.slice(1);
+
+    if (normalized.length < 10) {
+      return res.status(400).json({ success: false, message: `अमान्य मोबाइल नंबर: ${to}` });
+    }
+
     const jid = normalized.includes('@') ? normalized : `${normalized}@s.whatsapp.net`;
 
-    const result = await sendUserMessage(req.user.userId, jid, { text: String(text) });
-    res.json({ success: true, message: 'Message sent.', messageId: result?.key?.id || null });
+    // Construct message payload
+    let messageContent = {};
+    let mediaUrl = null;
+    let mediaType = null;
+    let fileName = null;
+
+    if (attachment && attachment.data) {
+      const base64Clean = attachment.data.replace(/^data:.*?;base64,/, '');
+      const buffer = Buffer.from(base64Clean, 'base64');
+      const mimeType = attachment.type || 'application/octet-stream';
+      fileName = attachment.name || 'file';
+
+      const path = require('path');
+      const fs = require('fs');
+      const MEDIA_DIR = path.join(__dirname, 'media_storage');
+      if (!fs.existsSync(MEDIA_DIR)) fs.mkdirSync(MEDIA_DIR, { recursive: true });
+      const ext = path.extname(fileName) || '.bin';
+      const savedName = `out_${Date.now()}_${Math.random().toString(36).substring(2, 6)}${ext}`;
+      fs.writeFileSync(path.join(MEDIA_DIR, savedName), buffer);
+      mediaUrl = `/media/${savedName}`;
+
+      if (mimeType.startsWith('image/')) {
+        messageContent = { image: buffer, caption: text ? String(text) : undefined, mimetype: mimeType };
+        mediaType = 'image';
+      } else if (mimeType.startsWith('video/')) {
+        messageContent = { video: buffer, caption: text ? String(text) : undefined, mimetype: mimeType };
+        mediaType = 'video';
+      } else if (mimeType.startsWith('audio/')) {
+        messageContent = { audio: buffer, mimetype: mimeType, ptt: false };
+        mediaType = 'audio';
+      } else {
+        messageContent = { document: buffer, fileName: fileName, caption: text ? String(text) : undefined, mimetype: mimeType };
+        mediaType = 'document';
+      }
+    } else {
+      messageContent = { text: String(text || '') };
+    }
+
+    const result = await activeSocket.sendMessage(jid, messageContent);
+    const messageId = result?.key?.id || ('msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6));
+
+    // Log to message_reports & incoming_messages
+    try {
+      const { appendMessageReport, appendIncomingMessage, broadcastIncomingEvent } = require('./index');
+      const reportText = attachment ? `[${mediaType?.toUpperCase() || 'ATTACHMENT'}] ${text || ''}`.trim() : String(text || '');
+      appendMessageReport({
+        id: messageId,
+        date: new Date().toISOString(),
+        from: fromNumber || sessionName || 'User',
+        to: normalized,
+        message: reportText,
+        status: 'sent',
+        session: sessionName || 'default'
+      });
+
+      appendIncomingMessage({
+        id: messageId,
+        chatJid: jid,
+        from: fromNumber || sessionName || 'User',
+        fromMe: true,
+        message: reportText,
+        mediaType: mediaType,
+        mediaUrl: mediaUrl,
+        fileName: fileName,
+        date: new Date().toISOString(),
+        timestamp: Date.now(),
+        isRead: true
+      });
+
+      broadcastIncomingEvent('new_message', {
+        id: messageId,
+        chatJid: jid,
+        from: fromNumber || sessionName || 'User',
+        fromMe: true,
+        message: reportText
+      });
+    } catch (logErr) {
+      console.warn('[User Send] Report log warning:', logErr.message);
+    }
+
+    res.json({
+      success: true,
+      message: 'मैसेज सफलतापूर्वक भेज दिया गया।',
+      messageId,
+      to: normalized
+    });
   } catch (error) {
     console.error('User send error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Message send failed' });
+    res.status(500).json({ success: false, message: error.message || 'Message sending failed' });
   }
 });
 
