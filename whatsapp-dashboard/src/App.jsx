@@ -222,12 +222,6 @@ function App() {
     notify('लॉगआउट सफल') 
   }
 
-  if (!login) return <Login onLogin={(token, user) => { 
-    setLogin(token)
-    setCurrentUser(user || {})
-    setPage('dashboard')
-  }} />
-
   const navList = useMemo(() => [
     ['dashboard', '⌂', 'Dashboard'],
     ...(isAdmin ? [['users', '👥', 'User Management']] : []),
@@ -237,6 +231,12 @@ function App() {
     ['api', '{}', 'API & Webhook'],
     ['system', '⚙', 'System & Settings'],
   ], [isAdmin])
+
+  if (!login) return <Login onLogin={(token, user) => { 
+    setLogin(token)
+    setCurrentUser(user || {})
+    setPage('dashboard')
+  }} />
 
   return <div className="app-shell">
     <aside className="sidebar">
