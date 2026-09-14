@@ -10,17 +10,60 @@ const qrcodeTerminal = require('qrcode-terminal');
 const QRCode = require('qrcode');
 const express = require('express');
 const cors = require('cors');
+const { authRequired, adminRequired } = require('./auth');
 
 const app = express();
+app.disable('x-powered-by');
 
-app.use(cors());
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ limit: '100mb', extended: true }));
+// Strict CORS Configuration
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map(o => o.trim())
+    .filter(Boolean);
+
+const corsOptions = {
+    origin: function (origin, callback) {
+        if (!origin) return callback(null, true);
+        if (process.env.NODE_ENV !== 'production') {
+            if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+                return callback(null, true);
+            }
+        }
+        if (allowedOrigins.length > 0 && allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+        if (process.env.RENDER_EXTERNAL_URL && origin === process.env.RENDER_EXTERNAL_URL.replace(/\/$/, '')) {
+            return callback(null, true);
+        }
+        return callback(new Error('Blocked by CORS policy: Origin not allowed'));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+};
+app.use(cors(corsOptions));
+
+// Security Headers
+app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.removeHeader('X-Powered-By');
+    next();
+});
+
+// Standard secure limits: 1MB default JSON / Form limit (replaces 100MB open limit)
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ limit: '1mb', extended: true }));
+
+// Dedicated body parser for attachments (up to 15MB)
+const attachmentBodyParser = express.json({ limit: '15mb' });
 
 const fs = require('fs');
 const path = require('path');
 
-// Static Media Storage
+// Protected Media Storage
 const MEDIA_DIR = path.join(__dirname, 'media_storage');
 if (!fs.existsSync(MEDIA_DIR)) {
     try {
@@ -29,21 +72,50 @@ if (!fs.existsSync(MEDIA_DIR)) {
         console.error('Error creating media_storage dir:', e);
     }
 }
-app.use('/media', express.static(MEDIA_DIR));
+
+// Protected Media Route: requires authentication, protects against path traversal
+app.get('/media/:filename', authRequired, (req, res) => {
+    try {
+        const rawFilename = req.params.filename || '';
+        const safeFilename = path.basename(rawFilename);
+        const filePath = path.resolve(MEDIA_DIR, safeFilename);
+
+        if (!filePath.startsWith(path.resolve(MEDIA_DIR))) {
+            return res.status(403).json({ success: false, message: 'Access forbidden: invalid path.' });
+        }
+
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ success: false, message: 'Media file not found.' });
+        }
+
+        return res.sendFile(filePath);
+    } catch (err) {
+        console.error('Media fetch error:', err.message);
+        return res.status(500).json({ success: false, message: 'Error retrieving media file.' });
+    }
+});
 
 // Global Group Metadata Cache
 const groupMetaCache = new Map();
 
-// Server-Sent Events (SSE) clients for real-time incoming messages
-const sseIncomingClients = new Set();
+// Server-Sent Events (SSE) clients map: res -> user object
+const sseClients = new Map();
 
-function broadcastIncomingEvent(type, data) {
+function broadcastIncomingEvent(type, data, ownerUserId = null, sessionPhone = null) {
     const payload = `data: ${JSON.stringify({ type, data, timestamp: new Date().toISOString() })}\n\n`;
-    for (const client of sseIncomingClients) {
+    for (const [clientRes, user] of sseClients.entries()) {
         try {
-            client.write(payload);
+            if (!user || user.role === 'admin') {
+                clientRes.write(payload);
+            } else if (ownerUserId && user.userId === ownerUserId) {
+                clientRes.write(payload);
+            } else if (sessionPhone && user.mobile && String(sessionPhone).includes(String(user.mobile).slice(-10))) {
+                clientRes.write(payload);
+            } else if (!ownerUserId && !sessionPhone) {
+                clientRes.write(payload);
+            }
         } catch {
-            sseIncomingClients.delete(client);
+            sseClients.delete(clientRes);
         }
     }
 }
@@ -64,7 +136,7 @@ let sendingQueue = [];
 
 const REPORTS_FILE = path.join(__dirname, 'message_reports.json');
 
-function getMessageReports() {
+function getMessageReports(user = null) {
     try {
         if (!fs.existsSync(REPORTS_FILE)) {
             fs.writeFileSync(REPORTS_FILE, JSON.stringify([], null, 2), 'utf-8');
@@ -73,7 +145,21 @@ function getMessageReports() {
         const data = fs.readFileSync(REPORTS_FILE, 'utf-8');
         const list = JSON.parse(data || '[]');
         list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        return list;
+
+        if (!user || user.role === 'admin') {
+            return list;
+        }
+
+        const userMobile10 = user.mobile ? String(user.mobile).replace(/\D/g, '').slice(-10) : '';
+        return list.filter(r => {
+            if (r.ownerUserId && r.ownerUserId === user.userId) return true;
+            if (userMobile10) {
+                const sClean = r.session ? String(r.session).replace(/\D/g, '').slice(-10) : '';
+                const fClean = r.from ? String(r.from).replace(/\D/g, '').slice(-10) : '';
+                if (sClean === userMobile10 || fClean === userMobile10) return true;
+            }
+            return false;
+        });
     } catch (e) {
         console.error('Error reading message reports:', e);
         return [];
@@ -263,26 +349,45 @@ function extractMessageText(m) {
 const INCOMING_FILE = path.join(__dirname, 'incoming_messages.json');
 let incomingMessagesCache = null;
 
-function getIncomingMessages() {
+function getIncomingMessages(user = null) {
+    let all = [];
     if (incomingMessagesCache) {
-        return incomingMessagesCache;
-    }
-    try {
-        if (!fs.existsSync(INCOMING_FILE)) {
-            fs.writeFileSync(INCOMING_FILE, JSON.stringify([], null, 2), 'utf-8');
-            incomingMessagesCache = [];
-            return [];
+        all = incomingMessagesCache;
+    } else {
+        try {
+            if (!fs.existsSync(INCOMING_FILE)) {
+                fs.writeFileSync(INCOMING_FILE, JSON.stringify([], null, 2), 'utf-8');
+                incomingMessagesCache = [];
+                all = [];
+            } else {
+                const data = fs.readFileSync(INCOMING_FILE, 'utf-8');
+                const list = JSON.parse(data || '[]');
+                const realOnly = list.filter(m => m.from !== '919876543210' && m.from !== '919123456789' && !(m.message === 'Message' && !m.mediaUrl && !m.mediaType));
+                realOnly.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                incomingMessagesCache = realOnly;
+                all = realOnly;
+            }
+        } catch (e) {
+            console.error('Error reading incoming messages:', e);
+            all = [];
         }
-        const data = fs.readFileSync(INCOMING_FILE, 'utf-8');
-        const list = JSON.parse(data || '[]');
-        const realOnly = list.filter(m => m.from !== '919876543210' && m.from !== '919123456789' && !(m.message === 'Message' && !m.mediaUrl && !m.mediaType));
-        realOnly.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        incomingMessagesCache = realOnly;
-        return incomingMessagesCache;
-    } catch (e) {
-        console.error('Error reading incoming messages:', e);
-        return [];
     }
+
+    if (!user || user.role === 'admin') {
+        return all;
+    }
+
+    const userMobile10 = user.mobile ? String(user.mobile).replace(/\D/g, '').slice(-10) : '';
+    return all.filter(m => {
+        if (m.ownerUserId && m.ownerUserId === user.userId) return true;
+        if (userMobile10) {
+            const sClean = m.sessionPhone ? String(m.sessionPhone).replace(/\D/g, '').slice(-10) : '';
+            const fClean = m.from ? String(m.from).replace(/\D/g, '').slice(-10) : '';
+            const cClean = m.chatJid ? String(m.chatJid).replace(/\D/g, '').slice(-10) : '';
+            if (sClean === userMobile10 || fClean === userMobile10 || cClean === userMobile10) return true;
+        }
+        return false;
+    });
 }
 
 let incomingSaveTimer = null;
@@ -494,7 +599,7 @@ let isSending = false;
    BASIC API
 ========================================================= */
 
-app.get('/api/status', async (req, res) => {
+app.get('/api/status', authRequired, adminRequired, async (req, res) => {
     let profilePicUrl = null;
     let profileName = null;
     if (sock && connectionStatus === 'connected' && sock.user) {
@@ -520,7 +625,7 @@ app.get('/api/status', async (req, res) => {
     });
 });
 
-app.get('/api/qr', async (req, res) => {
+app.get('/api/qr', authRequired, adminRequired, async (req, res) => {
     if (connectionStatus === 'connected') {
         return res.json({ status: 'connected', number: connectedNumber });
     }
@@ -535,7 +640,7 @@ app.get('/api/qr', async (req, res) => {
     }
 });
 
-app.get('/api/whatsapp/qr', async (req, res) => {
+app.get('/api/whatsapp/qr', authRequired, adminRequired, async (req, res) => {
     if (connectionStatus === 'connected') {
         return res.json({ success: true, status: 'connected', number: connectedNumber });
     }
@@ -550,77 +655,7 @@ app.get('/api/whatsapp/qr', async (req, res) => {
     }
 });
 
-/* =========================================================
-   USER & ADMIN AUTH API
-========================================================= */
-
-app.post('/api/auth/login', (req, res) => {
-    try {
-        const { username, password } = req.body || {};
-        const u = (username || '').trim();
-        const p = (password || '').trim();
-
-        if (u === 'admin' && p === 'admin123') {
-            return res.json({
-                success: true,
-                message: 'Admin authentication successful',
-                user: {
-                    username: 'admin',
-                    role: 'admin',
-                    displayName: 'System Administrator',
-                    token: 'admin_tok_' + Date.now(),
-                    loginTime: new Date().toISOString()
-                }
-            });
-        }
-
-        if (u === 'user' && p === 'user123') {
-            return res.json({
-                success: true,
-                message: 'User authentication successful',
-                user: {
-                    username: 'user',
-                    role: 'user',
-                    displayName: 'Standard User',
-                    token: 'user_tok_' + Date.now(),
-                    loginTime: new Date().toISOString()
-                }
-            });
-        }
-
-        return res.status(401).json({
-            success: false,
-            message: 'Invalid credentials. Default: admin / admin123 or user / user123'
-        });
-    } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
-    }
-});
-
-app.post('/api/admin/login', (req, res) => {
-    try {
-        const { username, password } = req.body || {};
-        if (username === 'admin' && password === 'admin123') {
-            return res.json({
-                success: true,
-                message: 'Admin authentication successful',
-                admin: {
-                    username: 'admin',
-                    role: 'Super Administrator',
-                    token: 'admin_token_' + Date.now()
-                }
-            });
-        }
-        return res.status(401).json({
-            success: false,
-            message: 'Invalid administrator credentials. Default is admin / admin123'
-        });
-    } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
-    }
-});
-
-app.get('/api/admin/system-info', (req, res) => {
+app.get('/api/admin/system-info', authRequired, adminRequired, (req, res) => {
     try {
         const memoryUsage = process.memoryUsage();
         const reports = getMessageReports();
@@ -652,7 +687,7 @@ app.get('/api/admin/system-info', (req, res) => {
    INCOMING MESSAGES API & REALTIME SSE
 ========================================================= */
 
-app.get('/api/incoming/events', (req, res) => {
+app.get('/api/incoming/events', authRequired, (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
@@ -660,27 +695,27 @@ app.get('/api/incoming/events', (req, res) => {
     res.flushHeaders();
 
     res.write(`data: ${JSON.stringify({ type: 'connected', connectedNumber, connectionStatus })}\n\n`);
-    sseIncomingClients.add(res);
+    sseClients.set(res, req.user);
 
     const pingInterval = setInterval(() => {
         try {
             res.write(': ping\n\n');
         } catch {
             clearInterval(pingInterval);
-            sseIncomingClients.delete(res);
+            sseClients.delete(res);
         }
     }, 25000);
 
     req.on('close', () => {
         clearInterval(pingInterval);
-        sseIncomingClients.delete(res);
+        sseClients.delete(res);
     });
 });
 
-app.get('/api/incoming/messages', (req, res) => {
+app.get('/api/incoming/messages', authRequired, (req, res) => {
     try {
         const { filter, search, chatJid } = req.query;
-        let messages = getIncomingMessages();
+        let messages = getIncomingMessages(req.user);
 
         if (chatJid) {
             messages = messages.filter(m => m.chatJid === chatJid || m.from === chatJid);
@@ -707,7 +742,7 @@ app.get('/api/incoming/messages', (req, res) => {
             );
         }
 
-        const all = getIncomingMessages();
+        const all = getIncomingMessages(req.user);
         const total = all.length;
         const unreadCount = all.filter(m => !m.isRead && !m.fromMe).length;
         const groupCount = all.filter(m => m.isGroup).length;
@@ -733,7 +768,7 @@ app.get('/api/incoming/messages', (req, res) => {
     }
 });
 
-app.post('/api/incoming/mark-read', async (req, res) => {
+app.post('/api/incoming/mark-read', authRequired, async (req, res) => {
     try {
         const { id, chatJid, isRead, all } = req.body || {};
         if (all) {
@@ -766,10 +801,10 @@ app.post('/api/incoming/mark-read', async (req, res) => {
     }
 });
 
-app.get('/api/incoming/chats', (req, res) => {
+app.get('/api/incoming/chats', authRequired, (req, res) => {
     try {
         const { filter, search } = req.query;
-        const allMessages = getIncomingMessages();
+        const allMessages = getIncomingMessages(req.user);
         const chatsMap = new Map();
 
         for (const msg of allMessages) {
@@ -879,11 +914,11 @@ app.get('/api/incoming/chats', (req, res) => {
     }
 });
 
-app.post('/api/incoming/sync-chats', async (req, res) => {
+app.post('/api/incoming/sync-chats', authRequired, async (req, res) => {
     try {
         normalizeExistingMessages();
-        const all = getIncomingMessages();
-        if (sock && connectionStatus === 'connected') {
+        const all = getIncomingMessages(req.user);
+        if (req.user.role === 'admin' && sock && connectionStatus === 'connected') {
             try {
                 const groupJids = Array.from(new Set(all.filter(m => m.isGroup && m.chatJid?.endsWith('@g.us')).map(m => m.chatJid)));
                 for (const gJid of groupJids) {
@@ -903,14 +938,14 @@ app.post('/api/incoming/sync-chats', async (req, res) => {
             }
         }
         const uniqueChats = new Set(all.map(m => m.chatJid || m.from));
-        broadcastIncomingEvent('refresh', { timestamp: new Date().toISOString(), chatCount: uniqueChats.size });
+        broadcastIncomingEvent('refresh', { timestamp: new Date().toISOString(), chatCount: uniqueChats.size }, req.user.userId);
         res.json({ success: true, message: 'WhatsApp chats synchronized successfully', chatCount: uniqueChats.size });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
 });
 
-app.post('/api/incoming/reply', async (req, res) => {
+app.post('/api/incoming/reply', authRequired, attachmentBodyParser, async (req, res) => {
     try {
         const { chatJid, text, attachment, quotedMsgId } = req.body || {};
         if (!chatJid) {
@@ -919,8 +954,28 @@ app.post('/api/incoming/reply', async (req, res) => {
         if (!text && !attachment) {
             return res.status(400).json({ success: false, message: 'Message text or attachment is required' });
         }
-        if (connectionStatus !== 'connected' || !sock) {
-            return res.status(400).json({ success: false, message: 'WhatsApp is not connected' });
+
+        const { findOrLoadSession } = require('./userSessions');
+        const sessionMatch = await findOrLoadSession(null, req.user);
+        let activeSocket = null;
+        let fromNumber = null;
+
+        if (sessionMatch && sessionMatch.session?.status === 'connected' && sessionMatch.session?.socket) {
+            activeSocket = sessionMatch.session.socket;
+            fromNumber = sessionMatch.session.connectedNumber || sessionMatch.userId;
+        } else if (req.user.role === 'admin' && global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function') {
+            activeSocket = global.__waAdminSocket;
+            fromNumber = activeSocket?.user?.id ? String(activeSocket.user.id).split(':')[0].replace(/\D/g, '') : 'Admin';
+        } else if (req.user.role === 'admin' && connectionStatus === 'connected' && sock) {
+            activeSocket = sock;
+            fromNumber = connectedNumber || 'Admin';
+        }
+
+        if (!activeSocket) {
+            return res.status(400).json({
+                success: false,
+                message: 'WhatsApp कनेक्टेड नहीं है। कृपया पहले Dashboard से QR कोड स्कैन करें।'
+            });
         }
 
         let sendPayload = {};
@@ -963,7 +1018,7 @@ app.post('/api/incoming/reply', async (req, res) => {
 
         let sendOptions = {};
         if (quotedMsgId) {
-            const existingMsgs = getIncomingMessages();
+            const existingMsgs = getIncomingMessages(req.user);
             const targetMsg = existingMsgs.find(m => m.id === quotedMsgId);
             if (targetMsg) {
                 sendOptions.quoted = {
@@ -978,16 +1033,17 @@ app.post('/api/incoming/reply', async (req, res) => {
             }
         }
 
-        const result = await sock.sendMessage(chatJid, sendPayload, sendOptions);
+        const result = await activeSocket.sendMessage(chatJid, sendPayload, sendOptions);
         const sentId = result?.key?.id || ('out_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6));
 
-        const myNumber = connectedNumber || (sock.user?.id ? sock.user.id.split(':')[0] : 'me');
+        const myNumber = fromNumber || (req.user?.mobile ? String(req.user.mobile) : 'User');
         const outRecord = {
             id: sentId,
             date: new Date().toISOString(),
+            ownerUserId: req.user.userId,
             from: myNumber,
             fromMe: true,
-            pushName: 'You',
+            pushName: req.user.username || 'You',
             chatJid: chatJid,
             isGroup: chatJid.endsWith('@g.us'),
             groupName: null,
@@ -1003,7 +1059,18 @@ app.post('/api/incoming/reply', async (req, res) => {
         };
 
         appendIncomingMessage(outRecord);
-        broadcastIncomingEvent('new_message', outRecord);
+        appendMessageReport({
+            id: sentId,
+            date: new Date().toISOString(),
+            ownerUserId: req.user.userId,
+            from: myNumber,
+            to: chatJid.split('@')[0],
+            message: text || (mediaType ? `[${mediaType.toUpperCase()}]` : ''),
+            status: 'sent',
+            session: myNumber
+        });
+
+        broadcastIncomingEvent('new_message', outRecord, req.user.userId, myNumber);
 
         res.json({ success: true, message: 'Reply sent successfully', data: outRecord });
     } catch (e) {
@@ -1012,7 +1079,7 @@ app.post('/api/incoming/reply', async (req, res) => {
     }
 });
 
-app.get('/api/incoming/chat-info', async (req, res) => {
+app.get('/api/incoming/chat-info', authRequired, async (req, res) => {
     try {
         const { chatJid } = req.query;
         if (!chatJid) {
@@ -1030,7 +1097,7 @@ app.get('/api/incoming/chat-info', async (req, res) => {
             }
         }
 
-        const all = getIncomingMessages().filter(m => m.chatJid === chatJid || m.from === chatJid);
+        const all = getIncomingMessages(req.user).filter(m => m.chatJid === chatJid || m.from === chatJid);
         const mediaItems = all.filter(m => m.mediaUrl).map(m => ({
             id: m.id,
             date: m.date,
@@ -1067,14 +1134,14 @@ app.get('/api/incoming/chat-info', async (req, res) => {
     }
 });
 
-app.delete('/api/incoming/chat', (req, res) => {
+app.delete('/api/incoming/chat', authRequired, (req, res) => {
     try {
         const chatJid = req.body?.chatJid || req.query?.chatJid;
         if (!chatJid) {
             return res.status(400).json({ success: false, message: 'chatJid is required' });
         }
         deleteChatMessages(chatJid);
-        broadcastIncomingEvent('chat_deleted', { chatJid });
+        broadcastIncomingEvent('chat_deleted', { chatJid }, req.user.userId);
         res.json({ success: true, message: 'Chat messages cleared successfully' });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
@@ -1085,10 +1152,10 @@ app.delete('/api/incoming/chat', (req, res) => {
    MESSAGE REPORTS API
 ========================================================= */
 
-app.get('/api/reports/messages', (req, res) => {
+app.get('/api/reports/messages', authRequired, (req, res) => {
     try {
         const { startDate, endDate, status, search } = req.query;
-        let reports = getMessageReports();
+        let reports = getMessageReports(req.user);
 
         if (startDate) {
             const start = new Date(startDate).getTime();
@@ -1129,7 +1196,7 @@ app.get('/api/reports/messages', (req, res) => {
    WHATSAPP LIST
 ========================================================= */
 
-app.get('/api/whatsapp/list', (req, res) => {
+app.get('/api/whatsapp/list', authRequired, adminRequired, (req, res) => {
     if (connectionStatus !== 'connected' || !connectedNumber) {
         return res.json({
             success: true,
@@ -1154,22 +1221,32 @@ app.get('/api/whatsapp/list', (req, res) => {
    WHATSAPP GROUPS APIs
 ========================================================= */
 
-app.get('/api/whatsapp/groups', async (req, res) => {
+app.get('/api/whatsapp/groups', authRequired, async (req, res) => {
     try {
-        if (connectionStatus !== 'connected' || !sock) {
+        const { findOrLoadSession } = require('./userSessions');
+        const match = await findOrLoadSession(null, req.user);
+        let activeSocket = null;
+
+        if (match && match.session?.status === 'connected' && match.session?.socket) {
+            activeSocket = match.session.socket;
+        } else if (req.user.role === 'admin') {
+            activeSocket = global.__waAdminSocket || sock;
+        }
+
+        if (!activeSocket) {
             return res.status(400).json({ 
                 success: false, 
-                message: 'WhatsApp connected nahi hai' 
+                message: 'WhatsApp कनेक्टेड नहीं है। कृपया पहले Dashboard से QR कोड स्कैन करें।' 
             });
         }
 
         let groups = {};
         try {
-            groups = await sock.groupFetchAllParticipating();
+            groups = await activeSocket.groupFetchAllParticipating();
         } catch (err) {
             console.log('groupFetchAllParticipating failed, trying store/chats fallback:', err.message);
-            if (sock.chats) {
-                const allChats = Object.values(sock.chats);
+            if (activeSocket.chats) {
+                const allChats = Object.values(activeSocket.chats);
                 allChats.forEach(chat => {
                     if (chat.id && chat.id.endsWith('@g.us')) {
                         groups[chat.id] = chat;
@@ -1198,21 +1275,41 @@ app.get('/api/whatsapp/groups', async (req, res) => {
     }
 });
 
-app.post('/api/send-group-message', async (req, res) => {
+app.post('/api/send-group-message', authRequired, async (req, res) => {
     try {
         const { groupIds, message } = req.body;
 
-        if (connectionStatus !== 'connected' || !sock) {
+        const { findOrLoadSession } = require('./userSessions');
+        const match = await findOrLoadSession(null, req.user);
+        let activeSocket = null;
+        let fromNumber = null;
+
+        if (match && match.session?.status === 'connected' && match.session?.socket) {
+            activeSocket = match.session.socket;
+            fromNumber = match.session.connectedNumber || match.userId;
+        } else if (req.user.role === 'admin') {
+            activeSocket = global.__waAdminSocket || sock;
+            fromNumber = connectedNumber || 'Admin';
+        }
+
+        if (!activeSocket) {
             return res.status(400).json({ 
                 success: false, 
-                message: 'WhatsApp connected nahi hai' 
+                message: 'WhatsApp कनेक्टेड नहीं है। कृपया पहले Dashboard से QR कोड स्कैन करें।' 
             });
         }
 
         if (!Array.isArray(groupIds) || groupIds.length === 0) {
             return res.status(400).json({ 
                 success: false, 
-                message: 'Kam se kam ek group select karein' 
+                message: 'कम से कम एक group चुनें' 
+            });
+        }
+
+        if (req.user.role !== 'admin' && groupIds.length > 10) {
+            return res.status(400).json({
+                success: false,
+                message: 'एक बार में अधिकतम 10 ग्रुप्स पर ही मैसेज भेजा जा सकता है।'
             });
         }
 
@@ -1227,35 +1324,39 @@ app.post('/api/send-group-message', async (req, res) => {
 
         for (const groupId of groupIds) {
             try {
-                await sock.sendMessage(groupId, { text: String(message) });
+                await activeSocket.sendMessage(groupId, { text: String(message) });
                 results.push({ 
                     groupId, 
                     status: 'sent', 
-                    message: 'Sent successfully',
+                    message: 'Sent successfully', 
                     time: new Date().toISOString() 
                 });
                 appendMessageReport({
                     id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 6),
                     date: new Date().toISOString(),
-                    from: connectedNumber || '918840457632',
+                    ownerUserId: req.user.userId,
+                    from: fromNumber || String(req.user.mobile || 'User'),
                     to: groupId,
                     message: String(message),
-                    status: 'sent'
+                    status: 'sent',
+                    session: fromNumber || 'default'
                 });
             } catch (err) {
                 results.push({ 
                     groupId, 
                     status: 'failed', 
-                    error: err.message,
+                    error: err.message, 
                     time: new Date().toISOString() 
                 });
                 appendMessageReport({
                     id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 6),
                     date: new Date().toISOString(),
-                    from: connectedNumber || '918840457632',
+                    ownerUserId: req.user.userId,
+                    from: fromNumber || String(req.user.mobile || 'User'),
                     to: groupId,
                     message: String(message),
-                    status: 'failed'
+                    status: 'failed',
+                    session: fromNumber || 'default'
                 });
             }
             await new Promise(resolve => setTimeout(resolve, 1500));
@@ -1274,21 +1375,31 @@ app.post('/api/send-group-message', async (req, res) => {
     }
 });
 
-app.post('/api/whatsapp/extract-members', async (req, res) => {
+app.post('/api/whatsapp/extract-members', authRequired, async (req, res) => {
     try {
         const { groupIds } = req.body;
 
-        if (connectionStatus !== 'connected' || !sock) {
+        const { findOrLoadSession } = require('./userSessions');
+        const match = await findOrLoadSession(null, req.user);
+        let activeSocket = null;
+
+        if (match && match.session?.status === 'connected' && match.session?.socket) {
+            activeSocket = match.session.socket;
+        } else if (req.user.role === 'admin') {
+            activeSocket = global.__waAdminSocket || sock;
+        }
+
+        if (!activeSocket) {
             return res.status(400).json({ 
                 success: false, 
-                message: 'WhatsApp connected nahi hai' 
+                message: 'WhatsApp कनेक्टेड नहीं है। कृपया पहले Dashboard से QR कोड स्कैन करें।' 
             });
         }
 
         if (!Array.isArray(groupIds) || groupIds.length === 0) {
             return res.status(400).json({ 
                 success: false, 
-                message: 'Kam se kam ek group select karein' 
+                message: 'कम से कम एक group चुनें' 
             });
         }
 
@@ -1296,7 +1407,7 @@ app.post('/api/whatsapp/extract-members', async (req, res) => {
 
         for (const groupId of groupIds) {
             try {
-                const metadata = await sock.groupMetadata(groupId);
+                const metadata = await activeSocket.groupMetadata(groupId);
                 const groupName = metadata.subject;
 
                 metadata.participants.forEach(p => {
@@ -1363,13 +1474,10 @@ function normalizeIndianNumber(number) {
    SEND SINGLE WHATSAPP MESSAGE (WITH ATTACHMENT & BUTTONS)
 ========================================================= */
 
-async function sendWhatsAppMessage(number, message, attachment = null, buttons = []) {
-    if (!sock) {
+async function sendWhatsAppMessage(targetSocket, number, message, attachment = null, buttons = []) {
+    const s = targetSocket || (global.__waAdminSocket || sock);
+    if (!s || typeof s.sendMessage !== 'function') {
         throw new Error('WhatsApp socket is not available');
-    }
-
-    if (connectionStatus !== 'connected') {
-        throw new Error('WhatsApp is not connected');
     }
 
     const jid = `${number}@s.whatsapp.net`;
@@ -1405,16 +1513,16 @@ async function sendWhatsAppMessage(number, message, attachment = null, buttons =
         const fileName = attachment.name || 'document';
 
         if (mimeType.startsWith('image/')) {
-            await sock.sendMessage(jid, { image: buffer, caption: textToSend || undefined, mimetype: mimeType });
+            await s.sendMessage(jid, { image: buffer, caption: textToSend || undefined, mimetype: mimeType });
         } else if (mimeType.startsWith('video/')) {
-            await sock.sendMessage(jid, { video: buffer, caption: textToSend || undefined, mimetype: mimeType });
+            await s.sendMessage(jid, { video: buffer, caption: textToSend || undefined, mimetype: mimeType });
         } else if (mimeType.startsWith('audio/')) {
-            await sock.sendMessage(jid, { audio: buffer, mimetype: mimeType, ptt: false });
+            await s.sendMessage(jid, { audio: buffer, mimetype: mimeType, ptt: false });
             if (textToSend) {
-                await sock.sendMessage(jid, { text: textToSend });
+                await s.sendMessage(jid, { text: textToSend });
             }
         } else {
-            await sock.sendMessage(jid, { document: buffer, fileName: fileName, caption: textToSend || undefined, mimetype: mimeType });
+            await s.sendMessage(jid, { document: buffer, fileName: fileName, caption: textToSend || undefined, mimetype: mimeType });
         }
         return;
     }
@@ -1423,21 +1531,39 @@ async function sendWhatsAppMessage(number, message, attachment = null, buttons =
         throw new Error('Message or attachment is required');
     }
 
-    await sock.sendMessage(jid, { text: textToSend });
+    await s.sendMessage(jid, { text: textToSend });
 }
 
 /* =========================================================
    SEND MESSAGE API
 ========================================================= */
 
-app.post('/api/send-message', async (req, res) => {
+app.post('/api/send-message', authRequired, attachmentBodyParser, async (req, res) => {
     try {
         const { whatsappId, numbers, message, attachment, buttons } = req.body;
 
-        if (connectionStatus !== 'connected') {
+        const { findOrLoadSession } = require('./userSessions');
+        const sessionMatch = await findOrLoadSession(whatsappId, req.user);
+        let activeSocket = null;
+        let fromNumber = null;
+
+        if (sessionMatch && sessionMatch.session?.status === 'connected' && sessionMatch.session?.socket) {
+            activeSocket = sessionMatch.session.socket;
+            fromNumber = sessionMatch.session.connectedNumber || sessionMatch.userId;
+        } else if (req.user.role === 'admin' && (!whatsappId || whatsappId === 'default' || whatsappId === 'admin')) {
+            if (global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function') {
+                activeSocket = global.__waAdminSocket;
+                fromNumber = activeSocket?.user?.id ? String(activeSocket.user.id).split(':')[0].replace(/\D/g, '') : 'Admin';
+            } else if (connectionStatus === 'connected' && sock) {
+                activeSocket = sock;
+                fromNumber = connectedNumber || 'Admin';
+            }
+        }
+
+        if (!activeSocket) {
             return res.status(400).json({
                 success: false,
-                message: 'WhatsApp connected नहीं है'
+                message: 'चयनित WhatsApp कनेक्टेड नहीं है। कृपया पहले Dashboard से QR कोड स्कैन करें।'
             });
         }
 
@@ -1455,13 +1581,6 @@ app.post('/api/send-message', async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: 'कम से कम एक mobile number दीजिए'
-            });
-        }
-
-        if (whatsappId && whatsappId !== 'default') {
-            return res.status(400).json({
-                success: false,
-                message: 'Selected WhatsApp उपलब्ध नहीं है'
             });
         }
 
@@ -1485,8 +1604,20 @@ app.post('/api/send-message', async (req, res) => {
             });
         }
 
+        // Anti-spam campaign limit check for standard users
+        const maxAllowed = req.user.role === 'admin' ? 1000 : 50;
+        if (validNumbers.length > maxAllowed) {
+            return res.status(400).json({
+                success: false,
+                message: `सुरक्षा सीमा: एक बार में अधिकतम ${maxAllowed} नंबरों पर ही मैसेज भेजा जा सकता है।`
+            });
+        }
+
         const job = {
             id: Date.now().toString(),
+            ownerUserId: req.user.userId,
+            fromNumber: fromNumber || String(req.user.mobile || 'User'),
+            socket: activeSocket,
             numbers: validNumbers,
             message: String(message || ''),
             attachment: attachment || null,
@@ -1521,12 +1652,12 @@ app.post('/api/send-message', async (req, res) => {
 ========================================================= */
 
 async function processQueue() {
-    if (isSending || sendingQueue.length === 0 || connectionStatus !== 'connected') {
+    if (isSending || sendingQueue.length === 0) {
         return;
     }
 
-    isSending = true;
     const job = sendingQueue.shift();
+    isSending = true;
 
     console.log(`\nStarting job: ${job.id} (Attachment: ${Boolean(job.attachment)}, Buttons: ${job.buttons?.length || 0})`);
 
@@ -1537,7 +1668,7 @@ async function processQueue() {
 
         try {
             console.log(`Sending message to ${number}`);
-            await sendWhatsAppMessage(number, job.message, job.attachment, job.buttons);
+            await sendWhatsAppMessage(job.socket, number, job.message, job.attachment, job.buttons);
 
             job.results.push({
                 number,
@@ -1549,10 +1680,12 @@ async function processQueue() {
             appendMessageReport({
                 id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 6),
                 date: new Date().toISOString(),
-                from: connectedNumber || '918840457632',
+                ownerUserId: job.ownerUserId,
+                from: job.fromNumber || connectedNumber || 'Admin',
                 to: number,
                 message: reportContent,
-                status: 'sent'
+                status: 'sent',
+                session: job.fromNumber || 'default'
             });
 
             console.log(`✅ Sent: ${number}`);
@@ -1567,10 +1700,12 @@ async function processQueue() {
             appendMessageReport({
                 id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 6),
                 date: new Date().toISOString(),
-                from: connectedNumber || '918840457632',
+                ownerUserId: job.ownerUserId,
+                from: job.fromNumber || connectedNumber || 'Admin',
                 to: number,
                 message: reportContent,
-                status: 'failed'
+                status: 'failed',
+                session: job.fromNumber || 'default'
             });
 
             console.log(`❌ Failed: ${number}`, error.message);
@@ -1588,11 +1723,14 @@ async function processQueue() {
    JOB STATUS
 ========================================================= */
 
-app.get('/api/send-status/:jobId', (req, res) => {
+app.get('/api/send-status/:jobId', authRequired, (req, res) => {
     const jobId = req.params.jobId;
     const activeJob = sendingQueue.find(job => job.id === jobId);
 
     if (activeJob) {
+        if (req.user.role !== 'admin' && activeJob.ownerUserId !== req.user.userId) {
+            return res.status(403).json({ success: false, message: 'Access denied to this job.' });
+        }
         return res.json({
             success: true,
             status: 'queued',
@@ -1611,7 +1749,7 @@ app.get('/api/send-status/:jobId', (req, res) => {
    API & WEBHOOKS SYSTEM (EXTERNAL /send-text ENDPOINTS)
 ========================================================= */
 
-app.get('/api/settings/api-token', (req, res) => {
+app.get('/api/settings/api-token', authRequired, adminRequired, (req, res) => {
     try {
         const settings = getApiSettings();
         const activeSession = connectedNumber ? String(connectedNumber).replace(/\D/g, '').slice(-10) : '';
@@ -1643,7 +1781,7 @@ app.get('/api/settings/api-token', (req, res) => {
     }
 });
 
-app.post('/api/settings/api-token/regenerate', (req, res) => {
+app.post('/api/settings/api-token/regenerate', authRequired, adminRequired, (req, res) => {
     try {
         const settings = getApiSettings();
         const newToken = generateToken12();
@@ -1651,7 +1789,7 @@ app.post('/api/settings/api-token/regenerate', (req, res) => {
         settings.createdAt = new Date().toISOString();
         saveApiSettings(settings);
 
-        console.log(`[API Settings] Token regenerated: ${newToken}`);
+        console.log(`[API Settings] Token regenerated`);
         res.json({
             success: true,
             token: newToken,
@@ -1662,7 +1800,7 @@ app.post('/api/settings/api-token/regenerate', (req, res) => {
     }
 });
 
-app.post('/api/settings/api-token/toggle', (req, res) => {
+app.post('/api/settings/api-token/toggle', authRequired, adminRequired, (req, res) => {
     try {
         const settings = getApiSettings();
         settings.isEnabled = !settings.isEnabled;
@@ -1678,7 +1816,7 @@ app.post('/api/settings/api-token/toggle', (req, res) => {
     }
 });
 
-app.post('/api/settings/webhook', (req, res) => {
+app.post('/api/settings/webhook', authRequired, adminRequired, (req, res) => {
     try {
         const { webhookUrl, webhookEnabled } = req.body || {};
         const settings = getApiSettings();
@@ -1757,43 +1895,44 @@ async function handleSendText(req, res) {
         }
 
         // 2. Resolve WhatsApp Session and Socket
-        // 2. Resolve WhatsApp Session and Socket
         let activeSocket = null;
         let fromNumber = null;
         let activeSession10 = '';
 
         const { findOrLoadSession } = require('./userSessions');
+        const caller = isGlobalAdmin ? { role: 'admin', userId: 'admin' } : user;
 
-        // First attempt: search via userSessions (finds both user sessions and admin if matched)
-        const sessionMatch = await findOrLoadSession(providedSession, user?.userId);
-        if (sessionMatch && sessionMatch.session?.status === 'connected' && sessionMatch.session?.socket) {
-            activeSocket = sessionMatch.session.socket;
-            fromNumber = sessionMatch.session.connectedNumber || sessionMatch.userId;
-            activeSession10 = String(fromNumber).replace(/\D/g, '').slice(-10);
+        // Session target resolution:
+        // If caller is non-admin, target is caller's userId or caller's providedSession (must belong to caller)
+        const targetSessionParam = providedSession || (caller.role === 'admin' ? 'admin' : caller.userId);
+
+        try {
+            const sessionMatch = await findOrLoadSession(targetSessionParam, caller);
+            if (sessionMatch && sessionMatch.session?.status === 'connected' && sessionMatch.session?.socket) {
+                activeSocket = sessionMatch.session.socket;
+                fromNumber = sessionMatch.session.connectedNumber || sessionMatch.userId;
+                activeSession10 = String(fromNumber).replace(/\D/g, '').slice(-10);
+            }
+        } catch (authErr) {
+            return res.status(403).json({ status: false, message: authErr.message });
         }
 
-        // Second attempt / Fallback to Admin WhatsApp
-        if (!activeSocket) {
+        // Admin WhatsApp fallback: ONLY if caller is verified admin!
+        const isAdminAuthorized = isGlobalAdmin || user?.role === 'admin';
+        if (!activeSocket && isAdminAuthorized) {
             const adminPhone = global.__waAdminSocket?.user?.id 
                 ? String(global.__waAdminSocket.user.id).split(':')[0].replace(/\D/g, '') 
                 : (connectedNumber || '8840457632');
             const adminPhone10 = String(adminPhone).replace(/\D/g, '').slice(-10);
-            const provided10 = providedSession ? String(providedSession).replace(/\D/g, '').slice(-10) : '';
-            const userMobile10 = user?.mobile ? String(user.mobile).replace(/\D/g, '').slice(-10) : '';
 
-            const isAdminAuthorized = isGlobalAdmin || user?.role === 'admin' || userMobile10 === adminPhone10;
-            const isTargetingAdmin = provided10 === adminPhone10 || providedSession === 'admin' || !providedSession;
-
-            if (isAdminAuthorized || isTargetingAdmin) {
-                if (global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function') {
-                    activeSocket = global.__waAdminSocket;
-                    fromNumber = adminPhone;
-                    activeSession10 = adminPhone10;
-                } else if (connectionStatus === 'connected' && sock) {
-                    activeSocket = sock;
-                    fromNumber = connectedNumber || adminPhone;
-                    activeSession10 = adminPhone10;
-                }
+            if (global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function') {
+                activeSocket = global.__waAdminSocket;
+                fromNumber = adminPhone;
+                activeSession10 = adminPhone10;
+            } else if (connectionStatus === 'connected' && sock) {
+                activeSocket = sock;
+                fromNumber = connectedNumber || adminPhone;
+                activeSession10 = adminPhone10;
             }
         }
 
@@ -1809,6 +1948,8 @@ async function handleSendText(req, res) {
         const sendResult = await activeSocket.sendMessage(jid, { text: messageText });
         const messageId = sendResult?.key?.id || ('api_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7));
 
+        const ownerUserId = isGlobalAdmin ? 'admin' : (user?.userId || null);
+
         // 4. Log in Message Reports
         appendMessageReport({
             id: messageId,
@@ -1817,11 +1958,12 @@ async function handleSendText(req, res) {
             to: normalizedTo,
             message: messageText,
             status: 'sent',
-            session: activeSession10 || providedSession || 'default'
+            session: activeSession10 || providedSession || 'default',
+            ownerUserId: ownerUserId
         });
 
         // 5. Append to portal chat & broadcast event
-        appendIncomingMessage({
+        const incomingRecord = {
             id: messageId,
             chatJid: jid,
             from: fromNumber || activeSession10,
@@ -1829,16 +1971,11 @@ async function handleSendText(req, res) {
             message: messageText,
             date: new Date().toISOString(),
             timestamp: Date.now(),
-            isRead: true
-        });
-
-        broadcastIncomingEvent('new_message', {
-            id: messageId,
-            chatJid: jid,
-            from: fromNumber || activeSession10,
-            fromMe: true,
-            message: messageText
-        });
+            isRead: true,
+            ownerUserId: ownerUserId
+        };
+        appendIncomingMessage(incomingRecord);
+        broadcastIncomingEvent('new_message', incomingRecord);
 
         if (isGlobalAdmin) {
             settings.totalSent = (settings.totalSent || 0) + 1;
@@ -2023,169 +2160,180 @@ async function startBot() {
             }
         });
 
-        sock.ev.on('messages.upsert', async (m) => {
-            try {
-                const msgs = m.messages || [];
-                for (const rawMsg of msgs) {
-                    if (!rawMsg || !rawMsg.message) continue;
+async function handleIncomingMessageFromSocket(m, context = {}) {
+    try {
+        const targetSocket = context.socket || sock;
+        const ownerUserId = context.ownerUserId || 'admin';
+        const sessionConnectedNumber = context.sessionPhone || (ownerUserId === 'admin' ? connectedNumber : null);
 
-                    const rawRemoteJid = rawMsg.key?.remoteJid || '';
-                    if (!rawRemoteJid || rawRemoteJid === 'status@broadcast') continue;
+        const msgs = m.messages || [];
+        for (const rawMsg of msgs) {
+            if (!rawMsg || !rawMsg.message) continue;
 
-                    const unwrapped = unwrapMessage(rawMsg.message);
-                    if (!unwrapped) continue;
+            const rawRemoteJid = rawMsg.key?.remoteJid || '';
+            if (!rawRemoteJid || rawRemoteJid === 'status@broadcast') continue;
 
-                    const isFromMe = Boolean(rawMsg.key && rawMsg.key.fromMe);
-                    const isGroup = rawRemoteJid.endsWith('@g.us');
+            const unwrapped = unwrapMessage(rawMsg.message);
+            if (!unwrapped) continue;
 
-                    const resolvedRemote = resolveJidAndNumber(rawRemoteJid, rawMsg.key?.remoteJidAlt);
-                    const chatJid = resolvedRemote.jid;
+            const isFromMe = Boolean(rawMsg.key && rawMsg.key.fromMe);
+            const isGroup = rawRemoteJid.endsWith('@g.us');
 
-                    let senderJid = rawRemoteJid;
-                    if (isGroup) {
-                        senderJid = rawMsg.key?.participant || rawRemoteJid;
+            const resolvedRemote = resolveJidAndNumber(rawRemoteJid, rawMsg.key?.remoteJidAlt);
+            const chatJid = resolvedRemote.jid;
+
+            let senderJid = rawRemoteJid;
+            if (isGroup) {
+                senderJid = rawMsg.key?.participant || rawRemoteJid;
+            }
+            const resolvedSender = resolveJidAndNumber(senderJid, rawMsg.key?.participantAlt);
+            const fromNumber = isFromMe ? (sessionConnectedNumber || 'me') : (resolvedSender.number || resolvedRemote.number || senderJid.split('@')[0]);
+
+            let pushName = null;
+            if (!isFromMe) {
+                pushName = rawMsg.pushName || null;
+                if (pushName && resolvedSender.number) {
+                    saveContact({ id: resolvedSender.jid, notify: pushName });
+                }
+            }
+
+            let mediaType = null;
+            let mediaUrl = null;
+            let fileName = null;
+            let fileSize = 0;
+            let mimetype = null;
+
+            const imgMsg = unwrapped.imageMessage;
+            const vidMsg = unwrapped.videoMessage;
+            const audMsg = unwrapped.audioMessage;
+            const docMsg = unwrapped.documentMessage;
+            const stkMsg = unwrapped.stickerMessage;
+
+            if (imgMsg) {
+                mediaType = 'image';
+                mimetype = imgMsg.mimetype || 'image/jpeg';
+                fileName = `image_${Date.now()}.jpg`;
+            } else if (vidMsg) {
+                mediaType = 'video';
+                mimetype = vidMsg.mimetype || 'video/mp4';
+                fileName = `video_${Date.now()}.mp4`;
+            } else if (audMsg) {
+                mediaType = 'audio';
+                mimetype = audMsg.mimetype || 'audio/ogg';
+                fileName = `audio_${Date.now()}.ogg`;
+            } else if (docMsg) {
+                mediaType = 'document';
+                mimetype = docMsg.mimetype || 'application/pdf';
+                fileName = docMsg.fileName || `document_${Date.now()}.pdf`;
+            } else if (stkMsg) {
+                mediaType = 'sticker';
+                mimetype = stkMsg.mimetype || 'image/webp';
+                fileName = `sticker_${Date.now()}.webp`;
+            }
+
+            if (mediaType) {
+                try {
+                    const buffer = await downloadMediaMessage(rawMsg, 'buffer', {});
+                    if (buffer && buffer.length) {
+                        fileSize = buffer.length;
+                        const ext = path.extname(fileName) || (mediaType === 'image' ? '.jpg' : mediaType === 'video' ? '.mp4' : mediaType === 'audio' ? '.ogg' : '.bin');
+                        const savedFileName = `${rawMsg.key?.id || Date.now()}${ext}`;
+                        fs.writeFileSync(path.join(MEDIA_DIR, savedFileName), buffer);
+                        mediaUrl = `/media/${savedFileName}`;
                     }
-                    const resolvedSender = resolveJidAndNumber(senderJid, rawMsg.key?.participantAlt);
-                    // Fixed: use resolvedSender.number instead of resolvedSender.phoneNumber
-                    const fromNumber = isFromMe ? (connectedNumber || 'me') : (resolvedSender.number || resolvedRemote.number || senderJid.split('@')[0]);
+                } catch (mErr) {
+                    console.error('[Media Download Error]:', mErr.message);
+                }
+            }
 
-                    let pushName = null;
-                    if (!isFromMe) {
-                        pushName = rawMsg.pushName || null;
-                        if (pushName && resolvedSender.number) {
-                            saveContact({ id: resolvedSender.jid, notify: pushName });
-                        }
-                    }
-
-                    let mediaType = null;
-                    let mediaUrl = null;
-                    let fileName = null;
-                    let fileSize = 0;
-                    let mimetype = null;
-
-                    const imgMsg = unwrapped.imageMessage;
-                    const vidMsg = unwrapped.videoMessage;
-                    const audMsg = unwrapped.audioMessage;
-                    const docMsg = unwrapped.documentMessage;
-                    const stkMsg = unwrapped.stickerMessage;
-
-                    if (imgMsg) {
-                        mediaType = 'image';
-                        mimetype = imgMsg.mimetype || 'image/jpeg';
-                        fileName = `image_${Date.now()}.jpg`;
-                    } else if (vidMsg) {
-                        mediaType = 'video';
-                        mimetype = vidMsg.mimetype || 'video/mp4';
-                        fileName = `video_${Date.now()}.mp4`;
-                    } else if (audMsg) {
-                        mediaType = 'audio';
-                        mimetype = audMsg.mimetype || 'audio/ogg';
-                        fileName = `audio_${Date.now()}.ogg`;
-                    } else if (docMsg) {
-                        mediaType = 'document';
-                        mimetype = docMsg.mimetype || 'application/pdf';
-                        fileName = docMsg.fileName || `document_${Date.now()}.pdf`;
-                    } else if (stkMsg) {
-                        mediaType = 'sticker';
-                        mimetype = stkMsg.mimetype || 'image/webp';
-                        fileName = `sticker_${Date.now()}.webp`;
-                    }
-
-                    if (mediaType) {
-                        try {
-                            const buffer = await downloadMediaMessage(rawMsg, 'buffer', {});
-                            if (buffer && buffer.length) {
-                                fileSize = buffer.length;
-                                const ext = path.extname(fileName) || (mediaType === 'image' ? '.jpg' : mediaType === 'video' ? '.mp4' : mediaType === 'audio' ? '.ogg' : '.bin');
-                                const savedFileName = `${rawMsg.key?.id || Date.now()}${ext}`;
-                                fs.writeFileSync(path.join(MEDIA_DIR, savedFileName), buffer);
-                                mediaUrl = `/media/${savedFileName}`;
-                            }
-                        } catch (mErr) {
-                            console.error('[Media Download Error]:', mErr.message);
-                        }
-                    }
-
-                    let groupName = null;
-                    if (isGroup) {
-                        if (groupMetaCache.has(rawRemoteJid)) {
-                            groupName = groupMetaCache.get(rawRemoteJid);
-                        } else {
-                            try {
-                                const groupMeta = await sock.groupMetadata(rawRemoteJid);
-                                groupName = groupMeta.subject || 'WhatsApp Group';
-                                groupMetaCache.set(rawRemoteJid, groupName);
-                            } catch {
-                                groupName = 'WhatsApp Group';
-                            }
-                        }
-                    }
-
-                    let quotedText = null;
-                    let quotedParticipant = null;
-                    const contextInfo = unwrapped.extendedTextMessage?.contextInfo ||
-                        unwrapped.imageMessage?.contextInfo ||
-                        unwrapped.videoMessage?.contextInfo ||
-                        unwrapped.documentMessage?.contextInfo;
-
-                    if (contextInfo?.quotedMessage) {
-                        const unwrappedQuoted = unwrapMessage(contextInfo.quotedMessage);
-                        quotedText = extractMessageText(unwrappedQuoted) || 'Message';
-                        const resolvedQuotedPart = resolveJidAndNumber(contextInfo.participant || '');
-                        quotedParticipant = resolvedQuotedPart.number || contextInfo.participant?.split('@')[0] || null;
-                    }
-
-                    const text = extractMessageText(unwrapped);
-                    if (!text && !mediaType) {
-                        continue;
-                    }
-
-                    const record = {
-                        id: rawMsg.key?.id || ('inc_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6)),
-                        date: new Date(rawMsg.messageTimestamp ? (rawMsg.messageTimestamp * 1000) : Date.now()).toISOString(),
-                        from: fromNumber,
-                        fromMe: isFromMe,
-                        pushName: pushName,
-                        chatJid: chatJid,
-                        isGroup: isGroup,
-                        groupName: groupName,
-                        message: text || (mediaType ? `[${mediaType}]` : 'Media'),
-                        mediaType: mediaType,
-                        mediaUrl: mediaUrl,
-                        fileName: fileName,
-                        fileSize: fileSize,
-                        mimetype: mimetype,
-                        quotedText: quotedText,
-                        quotedParticipant: quotedParticipant,
-                        isRead: isFromMe ? true : false
-                    };
-
-                    console.log(`[WhatsApp Message] ${isFromMe ? 'OUT' : 'IN'}:`, record.from, record.message);
-                    const appended = appendIncomingMessage(record);
-                    if (appended) {
-                        broadcastIncomingEvent('new_message', record);
-                    }
-
-                    if (!isFromMe) {
-                        try {
-                            const apiSet = getApiSettings();
-                            if (apiSet.webhookEnabled && apiSet.webhookUrl) {
-                                fetch(apiSet.webhookUrl, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        event: 'incoming_message',
-                                        data: record,
-                                        timestamp: new Date().toISOString()
-                                    })
-                                }).catch(wErr => console.error('[Webhook Dispatch Error]', wErr.message));
-                            }
-                        } catch {}
+            let groupName = null;
+            if (isGroup) {
+                if (groupMetaCache.has(rawRemoteJid)) {
+                    groupName = groupMetaCache.get(rawRemoteJid);
+                } else if (targetSocket?.groupMetadata) {
+                    try {
+                        const groupMeta = await targetSocket.groupMetadata(rawRemoteJid);
+                        groupName = groupMeta.subject || 'WhatsApp Group';
+                        groupMetaCache.set(rawRemoteJid, groupName);
+                    } catch {
+                        groupName = 'WhatsApp Group';
                     }
                 }
-            } catch (err) {
-                console.error('Error handling messages.upsert:', err.message);
             }
+
+            let quotedText = null;
+            let quotedParticipant = null;
+            const contextInfo = unwrapped.extendedTextMessage?.contextInfo ||
+                unwrapped.imageMessage?.contextInfo ||
+                unwrapped.videoMessage?.contextInfo ||
+                unwrapped.documentMessage?.contextInfo;
+
+            if (contextInfo?.quotedMessage) {
+                const unwrappedQuoted = unwrapMessage(contextInfo.quotedMessage);
+                quotedText = extractMessageText(unwrappedQuoted) || 'Message';
+                const resolvedQuotedPart = resolveJidAndNumber(contextInfo.participant || '');
+                quotedParticipant = resolvedQuotedPart.number || contextInfo.participant?.split('@')[0] || null;
+            }
+
+            const text = extractMessageText(unwrapped);
+            if (!text && !mediaType) {
+                continue;
+            }
+
+            const record = {
+                id: rawMsg.key?.id || ('inc_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6)),
+                date: new Date(rawMsg.messageTimestamp ? (rawMsg.messageTimestamp * 1000) : Date.now()).toISOString(),
+                from: fromNumber,
+                fromMe: isFromMe,
+                pushName: pushName,
+                chatJid: chatJid,
+                isGroup: isGroup,
+                groupName: groupName,
+                message: text || (mediaType ? `[${mediaType}]` : 'Media'),
+                mediaType: mediaType,
+                mediaUrl: mediaUrl,
+                fileName: fileName,
+                fileSize: fileSize,
+                mimetype: mimetype,
+                quotedText: quotedText,
+                quotedParticipant: quotedParticipant,
+                isRead: isFromMe ? true : false,
+                ownerUserId: ownerUserId
+            };
+
+            const appended = appendIncomingMessage(record);
+            if (appended) {
+                broadcastIncomingEvent('new_message', record);
+            }
+
+            if (!isFromMe) {
+                try {
+                    const apiSet = getApiSettings();
+                    if (apiSet.webhookEnabled && apiSet.webhookUrl) {
+                        fetch(apiSet.webhookUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                event: 'incoming_message',
+                                data: record,
+                                timestamp: new Date().toISOString()
+                            })
+                        }).catch(wErr => console.error('[Webhook Dispatch Error]', wErr.message));
+                    }
+                } catch {}
+            }
+        }
+    } catch (err) {
+        console.error('Error handling incoming message from socket:', err.message);
+    }
+}
+
+        sock.ev.on('messages.upsert', async (m) => {
+            await handleIncomingMessageFromSocket(m, {
+                ownerUserId: 'admin',
+                socket: sock,
+                sessionPhone: connectedNumber
+            });
         });
     } catch (error) {
         console.error('WhatsApp startup error:', error);
@@ -2209,5 +2357,6 @@ module.exports = {
     appendIncomingMessage,
     broadcastIncomingEvent,
     getMessageReports,
-    normalizeIndianNumber
+    normalizeIndianNumber,
+    handleIncomingMessageFromSocket
 };

@@ -119,6 +119,21 @@ async function startUserSession(userId) {
 
     socket.ev.on('creds.update', saveCreds);
 
+    socket.ev.on('messages.upsert', async (m) => {
+        try {
+            const indexModule = require('./index');
+            if (indexModule && typeof indexModule.handleIncomingMessageFromSocket === 'function') {
+                indexModule.handleIncomingMessageFromSocket(m, {
+                    ownerUserId: userId,
+                    socket,
+                    sessionPhone: sessionData.connectedNumber
+                });
+            }
+        } catch (err) {
+            console.warn(`[UserSession ${userId}] messages.upsert warn:`, err.message);
+        }
+    });
+
     return {
         status: sessionData.status,
         qr: sessionData.qr,
@@ -201,17 +216,35 @@ function getSessionByPhoneOrUserId(param) {
     return null;
 }
 
-async function findOrLoadSession(sessionParam, userIdFallback = null) {
+/**
+ * findOrLoadSession with strict security & multi-tenant isolation
+ * @param {string} sessionParam - Requested session identifier or phone
+ * @param {object|string} caller - Authenticated caller user object ({ userId, role, mobile }) or userId string
+ */
+async function findOrLoadSession(sessionParam, caller = null) {
+    const callerUser = (caller && typeof caller === 'object') ? caller : (caller ? { userId: caller, role: 'user' } : null);
+    const isAdmin = callerUser?.role === 'admin';
+    const callerUserId = callerUser?.userId || null;
+    const callerMobile10 = callerUser?.mobile ? String(callerUser.mobile).replace(/\D/g, '').slice(-10) : '';
+
     const clean = sessionParam ? String(sessionParam).replace(/\D/g, '') : '';
     const clean10 = clean.slice(-10);
 
-    // 1. Check if sessionParam matches Admin WhatsApp or 'admin'
     const adminPhone = global.__waAdminSocket?.user?.id 
         ? String(global.__waAdminSocket.user.id).split(':')[0].replace(/\D/g, '') 
         : (process.env.ADMIN_PHONE || '8840457632');
     const adminPhone10 = String(adminPhone).replace(/\D/g, '').slice(-10);
 
-    if (sessionParam === 'admin' || (clean10 && clean10 === adminPhone10)) {
+    // 1. SECURITY CHECK: Non-admin users cannot access the Admin session
+    const isTargetingAdmin = sessionParam === 'admin' || (clean10 && clean10 === adminPhone10);
+    if (isTargetingAdmin && !isAdmin) {
+        const err = new Error('केवल एडमिन को एडमिन व्हाट्सऐप सेशन का उपयोग करने की अनुमति है।');
+        err.statusCode = 403;
+        throw err;
+    }
+
+    // 2. If Admin explicitly requests or defaults to Admin session
+    if (isAdmin && (isTargetingAdmin || !sessionParam)) {
         if (global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function') {
             return {
                 userId: 'ADMIN',
@@ -225,14 +258,48 @@ async function findOrLoadSession(sessionParam, userIdFallback = null) {
         }
     }
 
-    // 2. Try active in-memory session first
+    // 3. For NON-ADMIN: Strict user session isolation
+    if (!isAdmin && callerUserId) {
+        // If sessionParam was provided, ensure it belongs to this caller
+        if (sessionParam && sessionParam !== `user-${callerUserId}` && sessionParam !== callerUserId) {
+            const activeS = sessions.get(callerUserId);
+            const active10 = activeS?.connectedNumber ? String(activeS.connectedNumber).replace(/\D/g, '').slice(-10) : '';
+            if (clean10 && clean10 !== callerMobile10 && clean10 !== active10) {
+                const err = new Error('सुरक्षा उल्लंघन: आप केवल अपने स्वयं के व्हाट्सऐप सेशन का उपयोग कर सकते हैं।');
+                err.statusCode = 403;
+                throw err;
+            }
+        }
+
+        // Return user's session
+        let s = sessions.get(callerUserId);
+        if (s && s.status === 'connected') return { userId: callerUserId, session: s };
+
+        const dbS = await WhatsAppSession.findOne({ 
+            ownerUserId: callerUserId, 
+            status: { $ne: 'logged_out' } 
+        });
+        if (dbS) {
+            await startUserSession(callerUserId);
+            for (let wait = 0; wait < 12; wait++) {
+                s = sessions.get(callerUserId);
+                if (s && s.status === 'connected') {
+                    return { userId: callerUserId, session: s, dbSession: dbS };
+                }
+                await new Promise(r => setTimeout(r, 500));
+            }
+            if (s) return { userId: callerUserId, session: s, dbSession: dbS };
+        }
+        return null;
+    }
+
+    // 4. For ADMIN managing other user sessions:
     let match = getSessionByPhoneOrUserId(sessionParam);
     if (match && match.session?.status === 'connected') {
         return match;
     }
 
-    // 3. Try by userIdFallback or targetUserId in DB
-    const targetUserId = match?.userId || userIdFallback;
+    const targetUserId = match?.userId || (callerUserId && isAdmin ? null : callerUserId);
     if (targetUserId) {
         let s = sessions.get(targetUserId);
         if (s && s.status === 'connected') return { userId: targetUserId, session: s };
@@ -243,7 +310,6 @@ async function findOrLoadSession(sessionParam, userIdFallback = null) {
         });
         if (dbS) {
             await startUserSession(targetUserId);
-            // Wait up to 6 seconds for Baileys to connect
             for (let wait = 0; wait < 12; wait++) {
                 s = sessions.get(targetUserId);
                 if (s && s.status === 'connected') {
@@ -255,8 +321,7 @@ async function findOrLoadSession(sessionParam, userIdFallback = null) {
         }
     }
 
-    // 4. Search in MongoDB by phone number
-    if (sessionParam && clean10.length === 10) {
+    if (sessionParam && clean10.length === 10 && isAdmin) {
         const dbS = await WhatsAppSession.findOne({
             phone: { $regex: clean10 + '$' },
             status: { $ne: 'logged_out' }

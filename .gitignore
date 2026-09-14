@@ -1,0 +1,35 @@
+# Dependency directories
+node_modules/
+whatsapp-dashboard/node_modules/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+!.env.auth.example
+
+# Local WhatsApp credentials & session info
+auth_info/
+whatsapp_sessions/
+sessions/
+
+# Media uploads and storage
+media_storage/
+whatsapp-dashboard/dist/
+
+# Local database & state cache files
+*.json
+!package.json
+!package-lock.json
+!api_settings.json
+!whatsapp-dashboard/package.json
+!whatsapp-dashboard/package-lock.json
+!whatsapp-dashboard/.oxlintrc.json
+
+# Logs & temp
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db

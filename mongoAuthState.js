@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const SessionAuth = require('./models/SessionAuth');
 const { initAuthCreds } = require('@whiskeysockets/baileys');
 
@@ -6,19 +7,65 @@ const BufferJSON = {
   reviver: (k, v) => (v && typeof v === 'object' && v.type === 'Buffer' ? Buffer.from(v.data, 'base64') : v),
 };
 
+// Derive 32-byte key for AES-256-GCM encryption
+function getEncryptionKey() {
+  const secret = process.env.SESSION_ENCRYPTION_KEY || process.env.AUTH_SECRET || process.env.MONGO_URI || 'wa-automation-secure-salt-key-2026';
+  return crypto.scryptSync(secret, 'wa_session_auth_salt_v1', 32);
+}
+
+function encryptPayload(plaintext) {
+  try {
+    const key = getEncryptionKey();
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    let encrypted = cipher.update(plaintext, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    const authTag = cipher.getAuthTag().toString('hex');
+    return {
+      encrypted: true,
+      iv: iv.toString('hex'),
+      tag: authTag,
+      data: encrypted
+    };
+  } catch (err) {
+    console.error('[SessionAuth] Encryption error:', err.message);
+    throw err;
+  }
+}
+
+function decryptPayload(payload) {
+  try {
+    if (!payload || !payload.encrypted) {
+      return null;
+    }
+    const key = getEncryptionKey();
+    const iv = Buffer.from(payload.iv, 'hex');
+    const authTag = Buffer.from(payload.tag, 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(authTag);
+    let decrypted = decipher.update(payload.data, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (err) {
+    console.error('[SessionAuth] Decryption error:', err.message);
+    return null;
+  }
+}
+
 async function useMongoAuthState(sessionId) {
   const writeData = async (data, file) => {
     try {
       const key = `${sessionId}_${file}`;
       const jsonString = JSON.stringify(data, BufferJSON.replacer);
-      const jsonObject = JSON.parse(jsonString);
+      // Encrypt sensitive WhatsApp credentials before saving to MongoDB
+      const encryptedRecord = encryptPayload(jsonString);
       await SessionAuth.findOneAndUpdate(
         { id: key },
-        { data: jsonObject },
+        { data: encryptedRecord },
         { upsert: true }
       );
     } catch (e) {
-      console.error(`Error writing ${file}:`, e);
+      console.error(`[SessionAuth] Error writing ${file}:`, e.message);
     }
   };
 
@@ -27,6 +74,15 @@ async function useMongoAuthState(sessionId) {
       const key = `${sessionId}_${file}`;
       const result = await SessionAuth.findOne({ id: key });
       if (!result || !result.data) return null;
+
+      // Handle encrypted payload
+      if (result.data.encrypted === true) {
+        const decryptedJson = decryptPayload(result.data);
+        if (!decryptedJson) return null;
+        return JSON.parse(decryptedJson, BufferJSON.reviver);
+      }
+
+      // Backward-compatible for previously stored unencrypted data
       const jsonString = JSON.stringify(result.data);
       return JSON.parse(jsonString, BufferJSON.reviver);
     } catch (error) {
@@ -74,4 +130,10 @@ async function useMongoAuthState(sessionId) {
   };
 }
 
-module.exports = { useMongoAuthState };
+module.exports = { 
+  useMongoAuthState,
+  encryptPayload,
+  decryptPayload,
+  encryptData: encryptPayload,
+  decryptData: decryptPayload
+};

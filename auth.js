@@ -147,8 +147,16 @@ async function authenticateToken(token) {
 async function authRequired(req, res, next) {
   try {
     const header = req.headers.authorization || '';
-    const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
-    const user = await authenticateToken(token);
+    let token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+    if (!token && req.query && req.query.token) {
+      token = String(req.query.token).trim();
+    }
+    let user = await authenticateToken(token);
+    if (!user && token) {
+      try {
+        user = await User.findOne({ apiToken: token, status: 'active' });
+      } catch {}
+    }
     if (!user) return res.status(401).json({ success: false, message: 'लॉगिन समाप्त हो गया है। फिर से लॉगिन करें।' });
     req.user = user;
     next();
@@ -665,7 +673,7 @@ router.post('/api/user/send', authRequired, async (req, res) => {
 
     if (req.user.role === 'admin') {
       if (session && session !== 'admin') {
-        const match = await findOrLoadSession(session);
+        const match = await findOrLoadSession(session, req.user);
         if (match && match.session?.status === 'connected' && match.session?.socket) {
           activeSocket = match.session.socket;
           fromNumber = match.session.connectedNumber || match.userId;
@@ -680,7 +688,7 @@ router.post('/api/user/send', authRequired, async (req, res) => {
         }
       }
     } else {
-      const match = await findOrLoadSession(session, req.user.userId);
+      const match = await findOrLoadSession(session, req.user);
       if (match && match.session?.status === 'connected' && match.session?.socket) {
         activeSocket = match.session.socket;
         fromNumber = match.session.connectedNumber || req.user.mobile || req.user.userId;
@@ -763,6 +771,7 @@ router.post('/api/user/send', authRequired, async (req, res) => {
       appendMessageReport({
         id: messageId,
         date: new Date().toISOString(),
+        ownerUserId: req.user.userId,
         from: fromNumber || sessionName || 'User',
         to: normalized,
         message: reportText,
@@ -773,6 +782,7 @@ router.post('/api/user/send', authRequired, async (req, res) => {
       appendIncomingMessage({
         id: messageId,
         chatJid: jid,
+        ownerUserId: req.user.userId,
         from: fromNumber || sessionName || 'User',
         fromMe: true,
         message: reportText,
@@ -897,4 +907,4 @@ async function recordAdminWhatsAppSession(info = {}) {
   }
 }
 
-module.exports = { router, authRequired, ensureAdminUser, recordAdminWhatsAppSession, User, WhatsAppSession };
+module.exports = { router, authRequired, adminRequired, ensureAdminUser, recordAdminWhatsAppSession, User, WhatsAppSession };

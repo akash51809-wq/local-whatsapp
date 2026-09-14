@@ -141,7 +141,17 @@ try { require('./index'); } finally { express.application.listen = originalListe
 if (!botApp) throw new Error('WhatsApp backend app could not be loaded from index.js');
 
 const app = express();
-app.use(express.json({ limit: '100mb' }));
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.removeHeader('X-Powered-By');
+  next();
+});
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ limit: '1mb', extended: true }));
 /* =========================================================
    AUTO-PING / KEEP-ALIVE SYSTEM (PREVENT RENDER SLEEP)
 ========================================================= */

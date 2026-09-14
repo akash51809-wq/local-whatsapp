@@ -158,14 +158,15 @@ function App() {
   useEffect(() => { if (page === 'reports') loadReports() }, [page, loadReports])
 
   useEffect(() => {
-    const es = new EventSource('/api/incoming/events')
+    if (!login) return
+    const es = new EventSource(`/api/incoming/events?token=${encodeURIComponent(login)}`)
     es.onmessage = () => { 
       if (page === 'incoming' || page === 'dashboard') loadChats()
       if (selected) loadMessages(selected.chatJid) 
     }
     es.onerror = () => {}
     return () => es.close()
-  }, [page, selected, loadChats, loadMessages])
+  }, [login, page, selected, loadChats, loadMessages])
 
   const stats = useMemo(() => ({
     chats: chats.length,
@@ -475,10 +476,13 @@ function IncomingPage({ chats, selected, setSelected, messages, search, setSearc
 }
 
 function Message({ m }) { 
+  const token = getToken()
+  const mediaSrc = m.mediaUrl ? `${m.mediaUrl}${m.mediaUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}` : null
+
   return <div className={`message-row ${m.fromMe ? 'mine' : ''}`}>
     <div className="bubble">
       {m.quotedText && <div className="quote">↪ {m.quotedText}</div>}
-      {m.mediaUrl && m.mediaType === 'image' ? <img src={m.mediaUrl} alt="media" /> : null}
+      {mediaSrc && m.mediaType === 'image' ? <img src={mediaSrc} alt="media" /> : null}
       <div>{m.message || `[${m.mediaType || 'media'}]`}</div>
       <time>{m.date ? new Date(m.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''} {m.fromMe ? '✓✓' : ''}</time>
     </div>
