@@ -157,8 +157,19 @@ router.post('/api/auth/login', async (req, res) => {
     const username = String(req.body?.username || '').trim();
     const password = String(req.body?.password || '');
     if (!username || !password) return res.status(400).json({ success: false, message: 'Username और password आवश्यक हैं।' });
-    const user = await User.findOne({ username, status: 'active' });
-    if (!user || !(await verifyPassword(password, user.passwordHash))) return res.status(401).json({ success: false, message: 'Username या password गलत है।' });
+    
+    // Support login using username, mobile number, or userId
+    const user = await User.findOne({ 
+      $or: [
+        { username },
+        { mobile: username },
+        { userId: username }
+      ], 
+      status: 'active' 
+    });
+    if (!user || !(await verifyPassword(password, user.passwordHash))) {
+      return res.status(401).json({ success: false, message: 'Username या password गलत है।' });
+    }
     const token = await createLoginToken(user);
     res.json({ success: true, user: { token, userId: user.userId, username: user.username, mobile: user.mobile || null, role: user.role } });
   } catch (error) {
@@ -168,51 +179,55 @@ router.post('/api/auth/login', async (req, res) => {
 });
 
 function getLiveAdminWhatsAppSender() {
-  const socket = global.__waAdminSocket;
-  const hasReadySocket = socket && typeof socket.sendMessage === 'function' && 
-                         (socket.__waReady === true || socket.user);
-
-  // Only return the global sender function if the socket is actually ready
-  if (hasReadySocket && typeof global.__waSendAdminText === 'function') {
+  if (typeof global.__waSendAdminText === 'function') {
     return global.__waSendAdminText;
   }
-
-  // Fallback: check socket directly
-  if (hasReadySocket) {
+  const socket = global.__waAdminSocket;
+  if (socket && typeof socket.sendMessage === 'function') {
     return async (number, text) => {
-      const digits = String(number || '').replace(/\D/g, '');
-      const normalized = /^91[6-9]\d{9}$/.test(digits) ? digits : (/^[6-9]\d{9}$/.test(digits) ? `91${digits}` : '');
-      if (!normalized) throw new Error('Invalid Indian WhatsApp mobile number');
-      return socket.sendMessage(`${normalized}@s.whatsapp.net`, { text: String(text) });
+      let digits = String(number || '').replace(/\D/g, '');
+      if (digits.length === 10) digits = `91${digits}`;
+      return socket.sendMessage(`${digits}@s.whatsapp.net`, { text: String(text) });
     };
   }
-
   return null;
 }
 
-async function waitForAdminWhatsAppSender(timeoutMs = 15000) {
+async function waitForAdminWhatsAppSender(timeoutMs = 8000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     const sender = getLiveAdminWhatsAppSender();
     if (sender) return sender;
     await new Promise(resolve => setTimeout(resolve, 500));
   }
-  console.warn(`[Auth WhatsApp] waitForAdminWhatsAppSender timed out after ${timeoutMs}ms. Socket exists: ${!!global.__waAdminSocket}, has user: ${!!global.__waAdminSocket?.user}`);
   return null;
 }
+
+/* =========================================================
+   OTP-BASED SIGNUP (Credentials sent via Admin WhatsApp)
+========================================================= */
 
 router.post('/api/auth/signup/request-otp', async (req, res) => {
   try {
     const mobile = cleanMobile(req.body?.mobile);
-    if (!/^\d{10}$/.test(mobile)) return res.status(400).json({ success: false, message: '10 अंकों का मोबाइल नंबर डालें।' });
-    if (await User.exists({ mobile })) return res.status(409).json({ success: false, message: 'इस मोबाइल नंबर का account पहले से मौजूद है।' });
+    if (!/^\d{10}$/.test(mobile)) {
+      return res.status(400).json({ success: false, message: '10 अंकों का मोबाइल नंबर डालें।' });
+    }
+    if (await User.exists({ $or: [{ mobile }, { username: mobile }] })) {
+      return res.status(409).json({ success: false, message: 'इस मोबाइल नंबर का account पहले से मौजूद है।' });
+    }
 
     const latest = await Otp.findOne({ mobile }).sort({ createdAt: -1 });
-    if (latest?.lastSentAt && Date.now() - latest.lastSentAt.getTime() < 60000) return res.status(429).json({ success: false, message: 'OTP दोबारा भेजने से पहले 60 सेकंड प्रतीक्षा करें।' });
+    if (latest?.lastSentAt && Date.now() - latest.lastSentAt.getTime() < 60000) {
+      return res.status(429).json({ success: false, message: 'OTP दोबारा भेजने से पहले 60 सेकंड प्रतीक्षा करें।' });
+    }
 
-    const sender = await waitForAdminWhatsAppSender(15000);
+    const sender = await waitForAdminWhatsAppSender(8000);
     if (!sender) {
-      return res.status(503).json({ success: false, message: 'Admin WhatsApp अभी connected नहीं है। पहले Admin WhatsApp scan करें।' });
+      return res.status(503).json({ 
+        success: false, 
+        message: 'Admin WhatsApp अभी connected नहीं है। कृपया कुछ देर बाद प्रयास करें।' 
+      });
     }
 
     const otp = randomDigits(Number(process.env.OTP_LENGTH || 6));
@@ -232,11 +247,17 @@ router.post('/api/auth/signup/verify', async (req, res) => {
   try {
     const mobile = cleanMobile(req.body?.mobile);
     const otp = String(req.body?.otp || '').trim();
-    if (!/^\d{10}$/.test(mobile) || !/^\d{6}$/.test(otp)) return res.status(400).json({ success: false, message: 'मोबाइल और 6 अंकों का OTP सही डालें।' });
+    if (!/^\d{10}$/.test(mobile) || !/^\d{6}$/.test(otp)) {
+      return res.status(400).json({ success: false, message: 'मोबाइल और 6 अंकों का OTP सही डालें।' });
+    }
 
     const record = await Otp.findOne({ mobile });
-    if (!record || record.expiresAt <= new Date() || record.verified) return res.status(400).json({ success: false, message: 'OTP expired या invalid है।' });
-    if (record.attempts >= 5) return res.status(429).json({ success: false, message: 'OTP attempts की सीमा समाप्त हो गई है।' });
+    if (!record || record.expiresAt <= new Date() || record.verified) {
+      return res.status(400).json({ success: false, message: 'OTP expired या invalid है।' });
+    }
+    if (record.attempts >= 5) {
+      return res.status(429).json({ success: false, message: 'OTP attempts की सीमा समाप्त हो गई है।' });
+    }
 
     record.attempts += 1;
     if (hashText(otp) !== record.otpHash) {
@@ -246,33 +267,179 @@ router.post('/api/auth/signup/verify', async (req, res) => {
     record.verified = true;
     await record.save();
 
-    if (await User.exists({ mobile })) return res.status(409).json({ success: false, message: 'Account पहले से मौजूद है।' });
+    if (await User.exists({ $or: [{ mobile }, { username: mobile }] })) {
+      return res.status(409).json({ success: false, message: 'Account पहले से मौजूद है।' });
+    }
 
     const userId = await makeUserId();
-    const username = await makeUsername();
-    const password = makePassword();
-    const user = await User.create({ userId, username, mobile, passwordHash: await hashPassword(password), role: 'user', status: 'active' });
-    const token = await createLoginToken(user);
+    const username = mobile; // User ID = Registered mobile number
+    const password = makePassword(); // Random password
 
+    const user = await User.create({
+      userId,
+      username,
+      mobile,
+      passwordHash: await hashPassword(password),
+      role: 'user',
+      status: 'active'
+    });
+
+    // Create a WhatsApp session record for this user
     await WhatsAppSession.updateOne(
       { sessionId: `user-${userId}` },
-      { $setOnInsert: { ownerUserId: userId, role: 'user', authPath: `${process.env.WHATSAPP_SESSION_DIR || './whatsapp_sessions'}/${userId}`, status: 'waiting' } },
+      { 
+        $setOnInsert: { 
+          ownerUserId: userId, 
+          role: 'user', 
+          status: 'waiting', 
+          createdAt: new Date() 
+        }, 
+        $set: { updatedAt: new Date() } 
+      },
       { upsert: true }
     );
 
+    // Send credentials to user's registered WhatsApp via Admin WhatsApp
     const sender = getLiveAdminWhatsAppSender();
+    let sentOnWhatsApp = false;
     if (sender) {
       try {
-        await sender(mobile, `WA Control Center account created.\nUser ID: ${userId}\nLogin ID: ${username}\nPassword: ${password}\nइन्हें सुरक्षित रखें।`);
-      } catch (sendError) {
-        console.error('Credential WhatsApp send failed:', sendError.message);
+        await sender(
+          mobile,
+          `*WA Control Center Account Created!* 🎉\n\nLogin ID: *${username}*\nPassword: *${password}*\n\nकृपया लॉगिन करने के बाद Dashboard से अपना WhatsApp scan करें। सुरक्षा के लिए आप Settings से पासवर्ड बदल सकते हैं।`
+        );
+        sentOnWhatsApp = true;
+      } catch (sendErr) {
+        console.error('Failed to send credentials via WhatsApp:', sendErr.message);
       }
     }
 
-    res.json({ success: true, message: 'Account successfully created.', user: { token, userId, username, mobile, role: 'user' } });
+    // Do NOT return password on screen — credentials sent to WhatsApp!
+    res.json({
+      success: true,
+      message: 'Account सफलतापूर्वक बन गया है! Login ID और Password आपके WhatsApp नंबर पर भेज दिया गया है।',
+      sentOnWhatsApp,
+      user: {
+        userId,
+        username,
+        mobile
+      }
+    });
   } catch (error) {
     console.error('Signup verify error:', error);
     res.status(500).json({ success: false, message: error.message || 'Account creation failed' });
+  }
+});
+
+/* =========================================================
+   USER PASSWORD CHANGE (in user panel)
+========================================================= */
+
+router.post('/api/auth/change-password', authRequired, async (req, res) => {
+  try {
+    const currentPassword = String(req.body?.currentPassword || '');
+    const newPassword = String(req.body?.newPassword || '').trim();
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'वर्तमान और नया पासवर्ड दोनों आवश्यक हैं।' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'नया पासवर्ड कम से कम 6 अक्षरों का होना चाहिए।' });
+    }
+
+    const isValid = await verifyPassword(currentPassword, req.user.passwordHash);
+    if (!isValid) {
+      return res.status(400).json({ success: false, message: 'वर्तमान पासवर्ड गलत है।' });
+    }
+
+    req.user.passwordHash = await hashPassword(newPassword);
+    req.user.updatedAt = new Date();
+    await req.user.save();
+
+    res.json({ success: true, message: 'पासवर्ड सफलतापूर्वक बदल दिया गया है।' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ success: false, message: error.message || 'पासवर्ड बदलने में समस्या हुई।' });
+  }
+});
+
+/* =========================================================
+   USER WHATSAPP SESSION APIs (auth-protected)
+========================================================= */
+
+// Get user's own WhatsApp connection status
+router.get('/api/user/whatsapp/status', authRequired, async (req, res) => {
+  try {
+    const { getUserSession } = require('./userSessions');
+    const session = getUserSession(req.user.userId);
+    const dbSession = await WhatsAppSession.findOne({ sessionId: `user-${req.user.userId}` });
+
+    res.json({
+      success: true,
+      status: session?.status || dbSession?.status || 'waiting',
+      number: session?.connectedNumber || dbSession?.phone || null,
+      profileName: session?.profileName || (session?.connectedNumber ? `+${session.connectedNumber}` : 'WhatsApp Account'),
+      ready: session?.status === 'connected',
+      lastConnected: dbSession?.lastConnectedAt || null,
+    });
+  } catch (error) {
+    console.error('User WhatsApp status error:', error);
+    res.status(500).json({ success: false, message: 'Status check failed' });
+  }
+});
+
+// Get QR code for user to scan their own WhatsApp
+router.get('/api/user/whatsapp/qr', authRequired, async (req, res) => {
+  try {
+    const { getUserQR } = require('./userSessions');
+    const result = await getUserQR(req.user.userId);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('User WhatsApp QR error:', error);
+    res.status(500).json({ success: false, message: 'QR generation failed' });
+  }
+});
+
+// Start/connect user's WhatsApp session
+router.post('/api/user/whatsapp/connect', authRequired, async (req, res) => {
+  try {
+    const { startUserSession } = require('./userSessions');
+    const result = await startUserSession(req.user.userId);
+    res.json({ success: true, message: 'WhatsApp session started.', ...result });
+  } catch (error) {
+    console.error('User WhatsApp connect error:', error);
+    res.status(500).json({ success: false, message: error.message || 'WhatsApp connect failed' });
+  }
+});
+
+// Disconnect user's WhatsApp session
+router.post('/api/user/whatsapp/disconnect', authRequired, async (req, res) => {
+  try {
+    const { stopUserSession } = require('./userSessions');
+    await stopUserSession(req.user.userId);
+    res.json({ success: true, message: 'WhatsApp disconnected.' });
+  } catch (error) {
+    console.error('User WhatsApp disconnect error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Disconnect failed' });
+  }
+});
+
+// Send message from user's own WhatsApp
+router.post('/api/user/send', authRequired, async (req, res) => {
+  try {
+    const { sendUserMessage } = require('./userSessions');
+    const { to, text } = req.body || {};
+    if (!to || !text) return res.status(400).json({ success: false, message: 'to और text दोनों ज़रूरी हैं।' });
+
+    const digits = String(to).replace(/\D/g, '');
+    const normalized = /^91[6-9]\d{9}$/.test(digits) ? digits : (/^[6-9]\d{9}$/.test(digits) ? `91${digits}` : digits);
+    const jid = normalized.includes('@') ? normalized : `${normalized}@s.whatsapp.net`;
+
+    const result = await sendUserMessage(req.user.userId, jid, { text: String(text) });
+    res.json({ success: true, message: 'Message sent.', messageId: result?.key?.id || null });
+  } catch (error) {
+    console.error('User send error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Message send failed' });
   }
 });
 

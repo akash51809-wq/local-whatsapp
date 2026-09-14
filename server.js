@@ -25,10 +25,12 @@ try {
 
   function normalizeIndianWhatsAppNumber(value) {
     let digits = String(value ?? '').trim().replace(/\D/g, '');
-    if (/^0091[6-9]\d{9}$/.test(digits)) digits = digits.slice(2);
-    if (/^[6-9]\d{9}$/.test(digits)) return `91${digits}`;
-    if (/^91[6-9]\d{9}$/.test(digits)) return digits;
-    throw new Error('Invalid Indian WhatsApp mobile number');
+    if (digits.startsWith('0091')) digits = digits.slice(4);
+    if (digits.startsWith('0') && digits.length === 11) digits = digits.slice(1);
+    if (digits.length === 10) return `91${digits}`;
+    if (digits.length === 12 && digits.startsWith('91')) return digits;
+    if (digits.length >= 10) return digits;
+    throw new Error('Invalid WhatsApp mobile number: ' + value);
   }
 
   // Robust helper to send message through active Baileys socket
@@ -184,6 +186,12 @@ async function startServer() {
       console.log(`Unified Server running and listening on 0.0.0.0:${PORT}`);
       if (botStartup) {
         try { botStartup(); } catch (err) { console.error('WhatsApp bot startup failed:', err); }
+      }
+      try {
+        const { restoreAllSessions } = require('./userSessions');
+        restoreAllSessions().catch(e => console.error('[UserSessions] Restore error:', e));
+      } catch (err) {
+        console.error('[UserSessions] Load error:', err);
       }
     });
   } catch (err) {
