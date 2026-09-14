@@ -2160,6 +2160,20 @@ async function startBot() {
             }
         });
 
+        sock.ev.on('messages.upsert', async (m) => {
+            await handleIncomingMessageFromSocket(m, {
+                ownerUserId: 'admin',
+                socket: sock,
+                sessionPhone: connectedNumber
+            });
+        });
+    } catch (error) {
+        console.error('WhatsApp startup error:', error);
+        connectionStatus = 'disconnected';
+        setTimeout(() => { startBot(); }, 5000);
+    }
+}
+
 async function handleIncomingMessageFromSocket(m, context = {}) {
     try {
         const targetSocket = context.socket || sock;
@@ -2325,20 +2339,6 @@ async function handleIncomingMessageFromSocket(m, context = {}) {
         }
     } catch (err) {
         console.error('Error handling incoming message from socket:', err.message);
-    }
-}
-
-        sock.ev.on('messages.upsert', async (m) => {
-            await handleIncomingMessageFromSocket(m, {
-                ownerUserId: 'admin',
-                socket: sock,
-                sessionPhone: connectedNumber
-            });
-        });
-    } catch (error) {
-        console.error('WhatsApp startup error:', error);
-        connectionStatus = 'disconnected';
-        setTimeout(() => { startBot(); }, 5000);
     }
 }
 
