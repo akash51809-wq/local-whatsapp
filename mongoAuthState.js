@@ -1,4 +1,4 @@
-const SessionAuth = require('../models/SessionAuth');
+const SessionAuth = require('./models/SessionAuth');
 const { initAuthCreds } = require('@whiskeysockets/baileys');
 
 const BufferJSON = {
