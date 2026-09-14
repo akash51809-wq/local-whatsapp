@@ -333,9 +333,9 @@ async function findOrLoadSession(sessionParam, caller = null) {
         let s = sessions.get(callerUserId);
         if (s && s.status === 'connected' && s.socket) return { userId: callerUserId, session: s };
 
-        // If currently connecting, wait up to 10 seconds for it to finish connecting
+        // If currently connecting, wait up to 3 seconds for it to finish connecting
         if (s && s.status === 'connecting') {
-            for (let wait = 0; wait < 20; wait++) {
+            for (let wait = 0; wait < 6; wait++) {
                 s = sessions.get(callerUserId);
                 if (s && s.status === 'connected' && s.socket) {
                     return { userId: callerUserId, session: s };
@@ -350,7 +350,7 @@ async function findOrLoadSession(sessionParam, caller = null) {
         });
         if (dbS) {
             await startUserSession(callerUserId);
-            for (let wait = 0; wait < 20; wait++) {
+            for (let wait = 0; wait < 6; wait++) {
                 s = sessions.get(callerUserId);
                 if (s && s.status === 'connected' && s.socket) {
                     return { userId: callerUserId, session: s, dbSession: dbS };
@@ -374,7 +374,7 @@ async function findOrLoadSession(sessionParam, caller = null) {
         if (s && s.status === 'connected' && s.socket) return { userId: targetUserId, session: s };
         
         if (s && s.status === 'connecting') {
-            for (let wait = 0; wait < 20; wait++) {
+            for (let wait = 0; wait < 6; wait++) {
                 s = sessions.get(targetUserId);
                 if (s && s.status === 'connected' && s.socket) {
                     return { userId: targetUserId, session: s };
@@ -389,7 +389,7 @@ async function findOrLoadSession(sessionParam, caller = null) {
         });
         if (dbS) {
             await startUserSession(targetUserId);
-            for (let wait = 0; wait < 20; wait++) {
+            for (let wait = 0; wait < 6; wait++) {
                 s = sessions.get(targetUserId);
                 if (s && s.status === 'connected' && s.socket) {
                     return { userId: targetUserId, session: s, dbSession: dbS };
@@ -409,7 +409,7 @@ async function findOrLoadSession(sessionParam, caller = null) {
             let s = sessions.get(dbS.ownerUserId);
             if (!s || s.status !== 'connected') {
                 await startUserSession(dbS.ownerUserId);
-                for (let wait = 0; wait < 20; wait++) {
+                for (let wait = 0; wait < 6; wait++) {
                     s = sessions.get(dbS.ownerUserId);
                     if (s && s.status === 'connected' && s.socket) {
                         return { userId: dbS.ownerUserId, session: s, dbSession: dbS };

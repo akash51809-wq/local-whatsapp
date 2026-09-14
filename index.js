@@ -1835,12 +1835,16 @@ app.post('/api/settings/webhook', authRequired, adminRequired, (req, res) => {
     }
 });
 
+const apiTokenCache = new Map();
+
 async function handleSendText(req, res) {
+    res.setHeader('Connection', 'keep-alive');
     try {
         const token = String(req.query.token || req.body?.token || req.headers['x-api-token'] || '').trim();
         const to = String(req.query.to || req.body?.to || '').trim();
         const rawMessage = req.query.message !== undefined ? req.query.message : (req.body?.message !== undefined ? req.body?.message : (req.query.text !== undefined ? req.query.text : req.body?.text));
         const providedSession = String(req.query.session || req.body?.session || '').trim();
+        const isAsync = req.query.async === '1' || req.query.fast === '1' || req.body?.async === 1;
 
         if (!token) {
             return res.status(401).json({ status: false, message: "Authentication failed: 'token' parameter is required." });
@@ -1864,32 +1868,45 @@ async function handleSendText(req, res) {
             else return res.status(400).json({ status: false, message: "Invalid mobile number. Provide a valid 10-digit mobile number." });
         }
 
-        // 1. Authenticate token: Check MongoDB User first, then admin settings, then login token
+        // 1. Authenticate token (Check in-memory cache first for lightning fast response)
         let user = null;
         let isGlobalAdmin = false;
-        try {
-            const { User } = require('./auth');
-            user = await User.findOne({ apiToken: token, status: 'active' });
-        } catch (dbErr) {
-            console.warn('[API /send-text] DB user token lookup warn:', dbErr.message);
-        }
+        const now = Date.now();
+        const cached = apiTokenCache.get(token);
 
-        const settings = getApiSettings();
-        if (!user && token === settings.token) {
-            isGlobalAdmin = true;
-        }
-
-        if (!user && !isGlobalAdmin) {
+        if (cached && cached.expiresAt > now) {
+            user = cached.user;
+            isGlobalAdmin = cached.isGlobalAdmin;
+        } else {
             try {
-                const { authenticateToken } = require('./auth');
-                user = await authenticateToken(token);
-            } catch {}
+                const { User } = require('./auth');
+                user = await User.findOne({ apiToken: token, status: 'active' }).lean();
+            } catch (dbErr) {
+                console.warn('[API /send-text] DB user token lookup warn:', dbErr.message);
+            }
+
+            const settings = getApiSettings();
+            if (!user && token === settings.token) {
+                isGlobalAdmin = true;
+            }
+
+            if (!user && !isGlobalAdmin) {
+                try {
+                    const { authenticateToken } = require('./auth');
+                    user = await authenticateToken(token);
+                } catch {}
+            }
+
+            if (user || isGlobalAdmin) {
+                apiTokenCache.set(token, { user, isGlobalAdmin, expiresAt: now + 60000 });
+            }
         }
 
         if (!user && !isGlobalAdmin) {
             return res.status(401).json({ status: false, message: "Unauthorized: Invalid API token." });
         }
 
+        const settings = getApiSettings();
         if (isGlobalAdmin && settings.isEnabled === false) {
             return res.status(403).json({ status: false, message: "Forbidden: API access is currently paused or disabled in settings." });
         }
@@ -1902,8 +1919,7 @@ async function handleSendText(req, res) {
         const { findOrLoadSession } = require('./userSessions');
         const caller = isGlobalAdmin ? { role: 'admin', userId: 'admin' } : user;
 
-        // Session target resolution:
-        // If caller is non-admin, target is caller's userId or caller's providedSession (must belong to caller)
+        // Session target resolution
         const targetSessionParam = providedSession || (caller.role === 'admin' ? 'admin' : caller.userId);
 
         try {
@@ -1943,49 +1959,68 @@ async function handleSendText(req, res) {
             });
         }
 
-        // 3. Send message via WhatsApp socket
         const jid = `${normalizedTo}@s.whatsapp.net`;
+        const ownerUserId = isGlobalAdmin ? 'admin' : (user?.userId || null);
+
+        // Fast / Async Mode: Instant HTTP response under 15ms
+        if (isAsync) {
+            const tempMessageId = 'api_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+            res.status(200).json({
+                status: true,
+                message: "Message queued for immediate delivery",
+                data: {
+                    to: normalizedTo,
+                    message: messageText,
+                    session: activeSession10 || providedSession || null,
+                    messageId: tempMessageId
+                }
+            });
+
+            setImmediate(async () => {
+                try {
+                    const sendResult = await activeSocket.sendMessage(jid, { text: messageText });
+                    const messageId = sendResult?.key?.id || tempMessageId;
+                    appendMessageReport({
+                        id: messageId,
+                        date: new Date().toISOString(),
+                        from: fromNumber || activeSession10,
+                        to: normalizedTo,
+                        message: messageText,
+                        status: 'sent',
+                        session: activeSession10 || providedSession || 'default',
+                        ownerUserId: ownerUserId
+                    });
+                    const incomingRecord = {
+                        id: messageId,
+                        chatJid: jid,
+                        from: fromNumber || activeSession10,
+                        fromMe: true,
+                        message: messageText,
+                        date: new Date().toISOString(),
+                        timestamp: Date.now(),
+                        isRead: true,
+                        ownerUserId: ownerUserId
+                    };
+                    appendIncomingMessage(incomingRecord);
+                    broadcastIncomingEvent('new_message', incomingRecord);
+                    if (isGlobalAdmin) {
+                        settings.totalSent = (settings.totalSent || 0) + 1;
+                        settings.lastUsed = new Date().toISOString();
+                        saveApiSettings(settings);
+                    }
+                } catch (sendErr) {
+                    console.error('[API /send-text Async] Send failed:', sendErr.message);
+                }
+            });
+            return;
+        }
+
+        // 3. Normal Synchronous Mode: Send message via WhatsApp socket
         const sendResult = await activeSocket.sendMessage(jid, { text: messageText });
         const messageId = sendResult?.key?.id || ('api_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7));
 
-        const ownerUserId = isGlobalAdmin ? 'admin' : (user?.userId || null);
-
-        // 4. Log in Message Reports
-        appendMessageReport({
-            id: messageId,
-            date: new Date().toISOString(),
-            from: fromNumber || activeSession10,
-            to: normalizedTo,
-            message: messageText,
-            status: 'sent',
-            session: activeSession10 || providedSession || 'default',
-            ownerUserId: ownerUserId
-        });
-
-        // 5. Append to portal chat & broadcast event
-        const incomingRecord = {
-            id: messageId,
-            chatJid: jid,
-            from: fromNumber || activeSession10,
-            fromMe: true,
-            message: messageText,
-            date: new Date().toISOString(),
-            timestamp: Date.now(),
-            isRead: true,
-            ownerUserId: ownerUserId
-        };
-        appendIncomingMessage(incomingRecord);
-        broadcastIncomingEvent('new_message', incomingRecord);
-
-        if (isGlobalAdmin) {
-            settings.totalSent = (settings.totalSent || 0) + 1;
-            settings.lastUsed = new Date().toISOString();
-            saveApiSettings(settings);
-        }
-
-        console.log(`[API /send-text] Message sent successfully to ${normalizedTo} via session ${activeSession10 || 'default'} (ID: ${messageId})`);
-
-        return res.status(200).json({
+        // 4. Send HTTP Response IMMEDIATELY (Do not wait for disk I/O)
+        res.status(200).json({
             status: true,
             message: "Message sent successfully",
             data: {
@@ -1995,6 +2030,47 @@ async function handleSendText(req, res) {
                 messageId: messageId
             }
         });
+
+        // 5. Asynchronous background logging and notifications
+        setImmediate(() => {
+            try {
+                appendMessageReport({
+                    id: messageId,
+                    date: new Date().toISOString(),
+                    from: fromNumber || activeSession10,
+                    to: normalizedTo,
+                    message: messageText,
+                    status: 'sent',
+                    session: activeSession10 || providedSession || 'default',
+                    ownerUserId: ownerUserId
+                });
+
+                const incomingRecord = {
+                    id: messageId,
+                    chatJid: jid,
+                    from: fromNumber || activeSession10,
+                    fromMe: true,
+                    message: messageText,
+                    date: new Date().toISOString(),
+                    timestamp: Date.now(),
+                    isRead: true,
+                    ownerUserId: ownerUserId
+                };
+                appendIncomingMessage(incomingRecord);
+                broadcastIncomingEvent('new_message', incomingRecord);
+
+                if (isGlobalAdmin) {
+                    settings.totalSent = (settings.totalSent || 0) + 1;
+                    settings.lastUsed = new Date().toISOString();
+                    saveApiSettings(settings);
+                }
+            } catch (postErr) {
+                console.warn('[API /send-text] Background report logging warning:', postErr.message);
+            }
+        });
+
+        console.log(`[API /send-text] Message sent successfully to ${normalizedTo} via session ${activeSession10 || 'default'} (ID: ${messageId})`);
+        return;
     } catch (error) {
         console.error('Error in /send-text API:', error);
         return res.status(500).json({ status: false, message: `Internal Server Error: ${error.message}` });
