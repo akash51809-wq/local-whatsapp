@@ -172,6 +172,71 @@ async function sendUserMessage(userId, jid, content) {
     return await session.socket.sendMessage(jid, content);
 }
 
+function getSessionByPhoneOrUserId(param) {
+    if (!param) return null;
+    const clean = String(param).replace(/\D/g, '');
+    const clean10 = clean.slice(-10);
+
+    // 1. Direct match by userId in sessions map
+    if (sessions.has(param)) {
+        return { userId: param, session: sessions.get(param) };
+    }
+
+    // 2. Match by connectedNumber in active sessions
+    for (const [userId, session] of sessions.entries()) {
+        if (session.connectedNumber) {
+            const sClean = String(session.connectedNumber).replace(/\D/g, '');
+            if (sClean === clean || (clean10.length === 10 && sClean.slice(-10) === clean10)) {
+                return { userId, session };
+            }
+        }
+    }
+
+    return null;
+}
+
+async function findOrLoadSession(sessionParam, userIdFallback = null) {
+    // 1. Try active in-memory session first
+    let match = getSessionByPhoneOrUserId(sessionParam);
+    if (match && match.session?.status === 'connected') {
+        return match;
+    }
+
+    // 2. Try by userIdFallback if provided
+    const targetUserId = match?.userId || userIdFallback;
+    if (targetUserId) {
+        const s = sessions.get(targetUserId);
+        if (s && s.status === 'connected') return { userId: targetUserId, session: s };
+        
+        const dbS = await WhatsAppSession.findOne({ ownerUserId: targetUserId });
+        if (dbS && dbS.status === 'connected') {
+            await startUserSession(targetUserId);
+            const reloaded = sessions.get(targetUserId);
+            if (reloaded) return { userId: targetUserId, session: reloaded };
+        }
+    }
+
+    // 3. Search in MongoDB by phone number
+    if (sessionParam) {
+        const clean10 = String(sessionParam).replace(/\D/g, '').slice(-10);
+        if (clean10.length === 10) {
+            const dbS = await WhatsAppSession.findOne({
+                phone: { $regex: clean10 + '$' },
+                role: 'user'
+            });
+            if (dbS && dbS.ownerUserId) {
+                if (!sessions.has(dbS.ownerUserId) && dbS.status === 'connected') {
+                    await startUserSession(dbS.ownerUserId);
+                }
+                const s = sessions.get(dbS.ownerUserId);
+                return { userId: dbS.ownerUserId, session: s, dbSession: dbS };
+            }
+        }
+    }
+
+    return null;
+}
+
 async function restoreAllSessions() {
     try {
         const activeSessions = await WhatsAppSession.find({ role: 'user', status: 'connected' });
@@ -195,5 +260,7 @@ module.exports = {
     getUserSession,
     getUserQR,
     sendUserMessage,
+    getSessionByPhoneOrUserId,
+    findOrLoadSession,
     restoreAllSessions
 };

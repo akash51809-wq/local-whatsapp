@@ -9,6 +9,7 @@ const UserSchema = new mongoose.Schema({
   username: { type: String, unique: true, index: true },
   mobile: { type: String, unique: true, sparse: true, index: true },
   passwordHash: { type: String, required: true },
+  apiToken: { type: String, unique: true, sparse: true, index: true },
   role: { type: String, enum: ['admin', 'user'], default: 'user', index: true },
   status: { type: String, enum: ['active', 'blocked'], default: 'active' },
   sessions: [{
@@ -96,6 +97,7 @@ const makePassword = () => {
   return value;
 };
 const tokenHash = (token) => hashText(token);
+const generateApiToken = () => 'wa_' + crypto.randomBytes(12).toString('hex');
 
 async function ensureAdminUser() {
   if (mongoose.connection.readyState !== 1) return null;
@@ -104,9 +106,12 @@ async function ensureAdminUser() {
   let admin = await User.findOne({ role: 'admin' });
   if (!admin) {
     admin = await User.create({
-      userId: 'ADMIN', username, passwordHash: await hashPassword(password), role: 'admin', status: 'active',
+      userId: 'ADMIN', username, passwordHash: await hashPassword(password), apiToken: generateApiToken(), role: 'admin', status: 'active',
     });
     console.log(`Admin user created: ${username}`);
+  } else if (!admin.apiToken) {
+    admin.apiToken = generateApiToken();
+    await admin.save();
   }
   await WhatsAppSession.updateOne(
     { sessionId: process.env.ADMIN_WHATSAPP_SESSION_ID || 'admin' },
@@ -280,6 +285,7 @@ router.post('/api/auth/signup/verify', async (req, res) => {
       username,
       mobile,
       passwordHash: await hashPassword(password),
+      apiToken: generateApiToken(),
       role: 'user',
       status: 'active'
     });
@@ -440,6 +446,60 @@ router.post('/api/user/send', authRequired, async (req, res) => {
   } catch (error) {
     console.error('User send error:', error);
     res.status(500).json({ success: false, message: error.message || 'Message send failed' });
+  }
+});
+
+/* =========================================================
+   USER API TOKEN & INTEGRATION
+========================================================= */
+
+router.get('/api/user/api-token', authRequired, async (req, res) => {
+  try {
+    if (!req.user.apiToken) {
+      req.user.apiToken = generateApiToken();
+      await req.user.save();
+    }
+
+    const { getUserSession } = require('./userSessions');
+    const active = getUserSession(req.user.userId);
+    const dbSession = await WhatsAppSession.findOne({ ownerUserId: req.user.userId });
+    const rawNumber = active?.connectedNumber || dbSession?.phone || req.user.mobile || '';
+    const session10 = String(rawNumber).replace(/\D/g, '').slice(-10);
+
+    const host = req.get('host') || 'local-whatsapp.onrender.com';
+    const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+    const baseUrl = `${protocol}://${host}`;
+    const sampleUrl = `${baseUrl}/send-text?token=${req.user.apiToken}&to=9876543210&message=Hello&session=${session10 || 'YOUR_10_DIGIT_NUMBER'}`;
+
+    res.json({
+      success: true,
+      token: req.user.apiToken,
+      session: session10 || null,
+      connectedNumber: active?.connectedNumber || dbSession?.phone || null,
+      status: active?.status || dbSession?.status || 'disconnected',
+      baseUrl,
+      sampleUrl,
+      sampleProductionUrl: `https://local-whatsapp.onrender.com/send-text?token=${req.user.apiToken}&to=9876543210&message=Hello&session=${session10 || 'YOUR_10_DIGIT_NUMBER'}`
+    });
+  } catch (error) {
+    console.error('Fetch user api-token error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.post('/api/user/api-token/regenerate', authRequired, async (req, res) => {
+  try {
+    req.user.apiToken = generateApiToken();
+    req.user.updatedAt = new Date();
+    await req.user.save();
+    res.json({
+      success: true,
+      token: req.user.apiToken,
+      message: 'नया API Token सफलतापूर्वक जनरेट हो गया है।'
+    });
+  } catch (error) {
+    console.error('Regenerate API token error:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

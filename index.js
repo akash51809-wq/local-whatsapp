@@ -1699,37 +1699,17 @@ app.post('/api/settings/webhook', (req, res) => {
 
 async function handleSendText(req, res) {
     try {
-        const token = String(req.query.token || req.body?.token || '').trim();
+        const token = String(req.query.token || req.body?.token || req.headers['x-api-token'] || '').trim();
         const to = String(req.query.to || req.body?.to || '').trim();
-        const rawMessage = req.query.message !== undefined ? req.query.message : (req.body?.message !== undefined ? req.body?.message : '');
+        const rawMessage = req.query.message !== undefined ? req.query.message : (req.body?.message !== undefined ? req.body?.message : (req.query.text !== undefined ? req.query.text : req.body?.text));
         const providedSession = String(req.query.session || req.body?.session || '').trim();
 
         if (!token) {
             return res.status(401).json({ status: false, message: "Authentication failed: 'token' parameter is required." });
         }
 
-        const settings = getApiSettings();
-        if (token !== settings.token) {
-            return res.status(401).json({ status: false, message: "Unauthorized: Invalid API token." });
-        }
-
-        if (settings.isEnabled === false) {
-            return res.status(403).json({ status: false, message: "Forbidden: API access is currently paused or disabled in settings." });
-        }
-
-        if (connectionStatus !== 'connected' || !sock) {
-            return res.status(503).json({ status: false, message: "Service Unavailable: WhatsApp is not connected." });
-        }
-
-        const activeSession = connectedNumber ? String(connectedNumber).replace(/\D/g, '').slice(-10) : '';
-
         if (!to) {
             return res.status(400).json({ status: false, message: "Bad Request: Recipient phone number 'to' is required." });
-        }
-
-        const normalizedTo = normalizeIndianNumber(to);
-        if (!normalizedTo) {
-            return res.status(400).json({ status: false, message: "Invalid mobile number. Provide a valid 10-digit Indian mobile number." });
         }
 
         const messageText = String(rawMessage || '').trim();
@@ -1737,24 +1717,128 @@ async function handleSendText(req, res) {
             return res.status(400).json({ status: false, message: "Bad Request: 'message' parameter cannot be empty." });
         }
 
+        // Normalize destination number
+        let normalizedTo = normalizeIndianNumber(to);
+        if (!normalizedTo) {
+            const clean = String(to).replace(/\D/g, '');
+            if (clean.length === 10) normalizedTo = '91' + clean;
+            else if (clean.length >= 11) normalizedTo = clean;
+            else return res.status(400).json({ status: false, message: "Invalid mobile number. Provide a valid 10-digit mobile number." });
+        }
+
+        // 1. Authenticate token: Check MongoDB User first, then admin settings, then login token
+        let user = null;
+        let isGlobalAdmin = false;
+        try {
+            const { User } = require('./auth');
+            user = await User.findOne({ apiToken: token, status: 'active' });
+        } catch (dbErr) {
+            console.warn('[API /send-text] DB user token lookup warn:', dbErr.message);
+        }
+
+        const settings = getApiSettings();
+        if (!user && token === settings.token) {
+            isGlobalAdmin = true;
+        }
+
+        if (!user && !isGlobalAdmin) {
+            try {
+                const { authenticateToken } = require('./auth');
+                user = await authenticateToken(token);
+            } catch {}
+        }
+
+        if (!user && !isGlobalAdmin) {
+            return res.status(401).json({ status: false, message: "Unauthorized: Invalid API token." });
+        }
+
+        if (isGlobalAdmin && settings.isEnabled === false) {
+            return res.status(403).json({ status: false, message: "Forbidden: API access is currently paused or disabled in settings." });
+        }
+
+        // 2. Resolve WhatsApp Session and Socket
+        let activeSocket = null;
+        let fromNumber = null;
+        let activeSession10 = '';
+
+        const { findOrLoadSession } = require('./userSessions');
+
+        if (user && user.role !== 'admin') {
+            // Regular user: must send from this user's scanned WhatsApp session
+            const userSessionMatch = await findOrLoadSession(providedSession, user.userId);
+            if (!userSessionMatch || userSessionMatch.session?.status !== 'connected' || !userSessionMatch.session?.socket) {
+                return res.status(503).json({
+                    status: false,
+                    message: `WhatsApp is not connected for this user session (${providedSession || user.mobile || user.userId}). कृपया डैशबोर्ड से पहले WhatsApp स्कैन करें।`
+                });
+            }
+            activeSocket = userSessionMatch.session.socket;
+            fromNumber = userSessionMatch.session.connectedNumber || user.mobile || user.userId;
+            activeSession10 = String(fromNumber).replace(/\D/g, '').slice(-10);
+        } else {
+            // User is admin or global admin token was used
+            if (providedSession) {
+                const sessionMatch = await findOrLoadSession(providedSession);
+                if (sessionMatch && sessionMatch.session?.status === 'connected' && sessionMatch.session?.socket) {
+                    activeSocket = sessionMatch.session.socket;
+                    fromNumber = sessionMatch.session.connectedNumber || sessionMatch.userId;
+                    activeSession10 = String(fromNumber).replace(/\D/g, '').slice(-10);
+                }
+            }
+
+            if (!activeSocket) {
+                if (connectionStatus !== 'connected' || !sock) {
+                    return res.status(503).json({ status: false, message: "Service Unavailable: WhatsApp is not connected." });
+                }
+                activeSocket = sock;
+                fromNumber = connectedNumber || 'Admin';
+                activeSession10 = connectedNumber ? String(connectedNumber).replace(/\D/g, '').slice(-10) : (providedSession || '');
+            }
+        }
+
+        // 3. Send message via WhatsApp socket
         const jid = `${normalizedTo}@s.whatsapp.net`;
-        const sendResult = await sock.sendMessage(jid, { text: messageText });
+        const sendResult = await activeSocket.sendMessage(jid, { text: messageText });
         const messageId = sendResult?.key?.id || ('api_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7));
 
+        // 4. Log in Message Reports
         appendMessageReport({
             id: messageId,
             date: new Date().toISOString(),
-            from: connectedNumber || ('91' + activeSession),
+            from: fromNumber || activeSession10,
             to: normalizedTo,
             message: messageText,
-            status: 'sent'
+            status: 'sent',
+            session: activeSession10 || providedSession || 'default'
         });
 
-        settings.totalSent = (settings.totalSent || 0) + 1;
-        settings.lastUsed = new Date().toISOString();
-        saveApiSettings(settings);
+        // 5. Append to portal chat & broadcast event
+        appendIncomingMessage({
+            id: messageId,
+            chatJid: jid,
+            from: fromNumber || activeSession10,
+            fromMe: true,
+            message: messageText,
+            date: new Date().toISOString(),
+            timestamp: Date.now(),
+            isRead: true
+        });
 
-        console.log(`[API /send-text] Message sent successfully to ${normalizedTo} (ID: ${messageId})`);
+        broadcastIncomingEvent('new_message', {
+            id: messageId,
+            chatJid: jid,
+            from: fromNumber || activeSession10,
+            fromMe: true,
+            message: messageText
+        });
+
+        if (isGlobalAdmin) {
+            settings.totalSent = (settings.totalSent || 0) + 1;
+            settings.lastUsed = new Date().toISOString();
+            saveApiSettings(settings);
+        }
+
+        console.log(`[API /send-text] Message sent successfully to ${normalizedTo} via session ${activeSession10 || 'default'} (ID: ${messageId})`);
 
         return res.status(200).json({
             status: true,
@@ -1762,7 +1846,7 @@ async function handleSendText(req, res) {
             data: {
                 to: normalizedTo,
                 message: messageText,
-                session: activeSession || providedSession || null,
+                session: activeSession10 || providedSession || null,
                 messageId: messageId
             }
         });
