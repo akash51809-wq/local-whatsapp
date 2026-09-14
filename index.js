@@ -2351,6 +2351,18 @@ app.listen(PORT, () => {
     startBot();
 });
 
+// Admin Watchdog: Ensure Admin WhatsApp socket remains 24/7 active
+setInterval(() => {
+    if (connectionStatus === 'disconnected') {
+        const fs = require('fs');
+        const authPath = path.join(__dirname, 'auth_info');
+        if (fs.existsSync(path.join(authPath, 'creds.json'))) {
+            console.log('[AdminWatchdog] Admin WhatsApp offline, auto-reconnecting...');
+            startBot().catch(e => console.error('[AdminWatchdog] Reconnect err:', e.message));
+        }
+    }
+}, 45000);
+
 module.exports = {
     app,
     appendMessageReport,

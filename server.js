@@ -287,8 +287,11 @@ async function startServer() {
         try { botStartup(); } catch (err) { console.error('WhatsApp bot startup failed:', err); }
       }
       try {
-        const { restoreAllSessions } = require('./userSessions');
+        const { restoreAllSessions, startUserSessionWatchdog } = require('./userSessions');
         restoreAllSessions().catch(e => console.error('[UserSessions] Restore error:', e));
+        if (typeof startUserSessionWatchdog === 'function') {
+          startUserSessionWatchdog();
+        }
       } catch (err) {
         console.error('[UserSessions] Load error:', err);
       }

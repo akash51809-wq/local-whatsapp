@@ -149,7 +149,7 @@ function App() {
   useEffect(() => { 
     loadStatus()
     loadQr()
-    const t = setInterval(() => { loadStatus(); loadQr() }, 5000)
+    const t = setInterval(() => { loadStatus(); loadQr() }, 3500)
     return () => clearInterval(t) 
   }, [loadStatus, loadQr])
 
@@ -160,13 +160,20 @@ function App() {
   useEffect(() => {
     if (!login) return
     const es = new EventSource(`/api/incoming/events?token=${encodeURIComponent(login)}`)
-    es.onmessage = () => { 
+    es.onmessage = (e) => { 
+      try {
+        const payload = JSON.parse(e.data || '{}')
+        if (payload.type === 'connection_status' || payload.type === 'qr' || payload.type === 'refresh') {
+          loadStatus()
+          loadQr()
+        }
+      } catch {}
       if (page === 'incoming' || page === 'dashboard') loadChats()
       if (selected) loadMessages(selected.chatJid) 
     }
     es.onerror = () => {}
     return () => es.close()
-  }, [login, page, selected, loadChats, loadMessages])
+  }, [login, page, selected, loadChats, loadMessages, loadStatus, loadQr])
 
   const stats = useMemo(() => ({
     chats: chats.length,
@@ -236,6 +243,10 @@ function App() {
     setLogin(token)
     setCurrentUser(user || {})
     setPage('dashboard')
+    setTimeout(() => {
+      loadStatus()
+      loadQr()
+    }, 50)
   }} />
 
   return <div className="app-shell">

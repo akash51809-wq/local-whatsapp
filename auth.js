@@ -536,15 +536,26 @@ router.post('/api/admin/users/:userId/send-password', authRequired, adminRequire
 // Get user's own WhatsApp connection status
 router.get('/api/user/whatsapp/status', authRequired, async (req, res) => {
   try {
-    const { getUserSession } = require('./userSessions');
-    const session = getUserSession(req.user.userId);
-    const dbSession = await WhatsAppSession.findOne({ sessionId: `user-${req.user.userId}` });
+    const { getUserSession, startUserSession } = require('./userSessions');
+    let session = getUserSession(req.user.userId);
+    const dbSession = await WhatsAppSession.findOne({ 
+      $or: [{ ownerUserId: req.user.userId }, { sessionId: `user-${req.user.userId}` }] 
+    });
+
+    // Proactively wake up/reconnect session if not in memory and user hasn't logged out
+    if ((!session || session.status === 'disconnected') && dbSession && dbSession.status !== 'logged_out') {
+      console.log(`[AutoWake] Proactively starting session for user ${req.user.userId}`);
+      startUserSession(req.user.userId).catch(err => console.error('[AutoWake] Session error:', err.message));
+      session = getUserSession(req.user.userId);
+    }
+
+    const currentStatus = session?.status || (dbSession?.status === 'connected' ? 'connecting' : (dbSession?.status || 'waiting'));
 
     res.json({
       success: true,
-      status: session?.status || dbSession?.status || 'waiting',
+      status: currentStatus,
       number: session?.connectedNumber || dbSession?.phone || null,
-      profileName: session?.profileName || (session?.connectedNumber ? `+${session.connectedNumber}` : 'WhatsApp Account'),
+      profileName: session?.profileName || (session?.connectedNumber ? `+${session.connectedNumber}` : (dbSession?.phone ? `+${dbSession.phone}` : 'WhatsApp Account')),
       ready: session?.status === 'connected',
       lastConnected: dbSession?.lastConnectedAt || null,
     });
@@ -557,7 +568,11 @@ router.get('/api/user/whatsapp/status', authRequired, async (req, res) => {
 // Get QR code for user to scan their own WhatsApp
 router.get('/api/user/whatsapp/qr', authRequired, async (req, res) => {
   try {
-    const { getUserQR } = require('./userSessions');
+    const { getUserQR, getUserSession, startUserSession } = require('./userSessions');
+    let session = getUserSession(req.user.userId);
+    if (!session || session.status === 'disconnected') {
+      await startUserSession(req.user.userId).catch(() => {});
+    }
     const result = await getUserQR(req.user.userId);
     res.json({ success: true, ...result });
   } catch (error) {
