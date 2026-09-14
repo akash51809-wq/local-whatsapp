@@ -16,11 +16,7 @@ mongoose.connection.on('error', (err) => console.error('[MongoDB] Connection err
 
 /* =========================================================
    BAILEYS ADMIN WHATSAPP BRIDGE
-   =========================================================
-   There is ONE Baileys socket. The bridge exposes that exact socket to
-   auth.js. Readiness is based on the socket itself, not MongoDB session
-   status and not a stale boolean from a previous connection.
-*/
+   ========================================================= */
 try {
   const baileysModulePath = require.resolve('@whiskeysockets/baileys');
   const originalBaileys = require(baileysModulePath);
@@ -36,34 +32,36 @@ try {
     throw new Error('Invalid Indian WhatsApp mobile number');
   }
 
-  async function sendAdminText(number, text) {
-    const current = global.__waAdminSocket;
-    const ready = !!(current && (current.__waReady === true || current.user));
+  // Helper with automatic retry if socket is temporarily reconnecting
+  async function sendAdminText(number, text, retries = 3) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      const current = global.__waAdminSocket;
+      const ready = !!(current && (current.__waReady === true || current.user));
 
-    if (!current || !ready || typeof current.sendMessage !== 'function') {
-      throw new Error('Admin WhatsApp अभी connected नहीं है। पहले Admin WhatsApp scan करें।');
+      if (current && ready && typeof current.sendMessage === 'function') {
+        try {
+          const digits = normalizeIndianWhatsAppNumber(number);
+          const jid = `${digits}@s.whatsapp.net`;
+          const result = await current.sendMessage(jid, { text: String(text) });
+          console.log(`[Auth WhatsApp] Message sent successfully to ${digits}`);
+          return result;
+        } catch (error) {
+          console.error(`[Auth WhatsApp] Attempt ${attempt} failed:`, error?.message || error);
+        }
+      }
+
+      if (attempt < retries) {
+        console.log(`[Auth WhatsApp] Socket reconnecting, waiting 2s before retry (${attempt}/${retries})...`);
+        await new Promise(res => setTimeout(res, 2000));
+      }
     }
-
-    const digits = normalizeIndianWhatsAppNumber(number);
-    const jid = `${digits}@s.whatsapp.net`;
-    console.log(`[Auth WhatsApp] Admin socket ready: ${current.user?.id || 'authenticated'}`);
-    console.log(`[Auth WhatsApp] Sending message to ${jid}`);
-
-    try {
-      const result = await current.sendMessage(jid, { text: String(text) });
-      console.log(`[Auth WhatsApp] Message sent successfully to ${digits}`);
-      return result;
-    } catch (error) {
-      console.error(`[Auth WhatsApp] Send failed to ${jid}:`, error?.message || error);
-      throw error;
-    }
+    throw new Error('Admin WhatsApp अभी connected नहीं है। कृपया कुछ देर, फिर प्रयास करें।');
   }
 
   if (typeof originalMakeWASocket === 'function') {
     wrappedBaileys.default = function wrappedMakeWASocket(...args) {
       const socket = originalMakeWASocket(...args);
 
-      // Always expose the newest socket. Baileys creates a new socket after reconnect.
       global.__waAdminSocket = socket;
       global.__waSendAdminText = sendAdminText;
       socket.__waReady = false;
@@ -90,12 +88,10 @@ try {
               global.__waSendAdminText = sendAdminText;
               console.log(`[Auth WhatsApp] Connection OPEN. Admin account: ${phone || 'unknown'}`);
               await recordAdminWhatsAppSession({ status: 'connected', phone });
-              console.log('[Auth WhatsApp] Admin WhatsApp is READY for OTP delivery');
             } else if (connection === 'close') {
               socket.__waReady = false;
               if (global.__waAdminSocket === socket) global.__waSendAdminText = sendAdminText;
               await recordAdminWhatsAppSession({ status: 'disconnected', phone });
-              console.log('[Auth WhatsApp] Admin WhatsApp connection closed; waiting for Baileys reconnect.');
             } else if (connection === 'connecting') {
               socket.__waReady = false;
               await recordAdminWhatsAppSession({ status: 'connecting', phone });
@@ -164,19 +160,14 @@ app.use((req, res, next) => {
   next();
 });
 
-if (!fs.existsSync(path.join(distPath, 'index.html'))) console.warn('WARNING: whatsapp-dashboard/dist/index.html not found. Run: npm run build');
-
 const PORT = process.env.PORT || 10000;
 const MONGO_URI = String(process.env.MONGO_URI || '').trim();
 
 async function startServer() {
   if (!MONGO_URI) {
-    console.error('FATAL: MONGO_URI is not configured. Authentication cannot start.');
+    console.error('FATAL: MONGO_URI is not configured.');
     process.exit(1);
   }
-
-  console.log('[MongoDB] Starting connection...');
-  console.log(`[MongoDB] URI configured: ${MONGO_URI.startsWith('mongodb+srv://') ? 'yes (mongodb+srv)' : 'yes'}`);
 
   try {
     await mongoose.connect(MONGO_URI, {
@@ -186,14 +177,8 @@ async function startServer() {
       maxPoolSize: 10,
     });
 
-    if (mongoose.connection.readyState !== 1) throw new Error(`MongoDB connected call completed but readyState=${mongoose.connection.readyState}`);
-
     console.log('MongoDB Atlas Connected Successfully');
-    console.log(`[MongoDB] Host: ${mongoose.connection.host || 'unknown'}`);
-    console.log(`[MongoDB] Database: ${mongoose.connection.name || 'unknown'}`);
-
     await ensureAdminUser();
-    console.log('MongoDB authentication system ready');
 
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`Unified Server running and listening on 0.0.0.0:${PORT}`);
@@ -202,12 +187,7 @@ async function startServer() {
       }
     });
   } catch (err) {
-    console.error('FATAL: MongoDB connection failed. Signup/Login cannot work.');
-    console.error(`[MongoDB] Error name: ${err?.name || 'unknown'}`);
-    console.error(`[MongoDB] Error code: ${err?.code ?? 'none'}`);
-    console.error(`[MongoDB] Error message: ${err?.message || err}`);
-    if (err?.reason) console.error('[MongoDB] Server selection reason:', err.reason?.message || err.reason);
-    console.error('[MongoDB] Check Render MONGO_URI, MongoDB user/password, Atlas Network Access, and database-user permissions.');
+    console.error('FATAL: MongoDB connection failed:', err?.message || err);
     process.exit(1);
   }
 }
