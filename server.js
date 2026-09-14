@@ -21,7 +21,6 @@ try {
   const baileysModulePath = require.resolve('@whiskeysockets/baileys');
   const originalBaileys = require(baileysModulePath);
   const originalMakeWASocket = originalBaileys.default;
-  const originalAuthState = originalBaileys.useMultiFileAuthState;
   const wrappedBaileys = Object.create(originalBaileys);
 
   function normalizeIndianWhatsAppNumber(value) {
@@ -106,15 +105,9 @@ try {
     };
   }
 
-  if (typeof originalAuthState === 'function') {
-    wrappedBaileys.useMultiFileAuthState = function wrappedAuthState(folder, ...args) {
-      const requested = String(folder || '');
-      if (requested === 'auth_info' || requested.endsWith('/auth_info') || requested.endsWith('\\auth_info')) {
-        folder = process.env.ADMIN_WHATSAPP_SESSION_DIR || requested;
-      }
-      return originalAuthState(folder, ...args);
-    };
-  }
+  // Hook into useMongoAuthState instead of multi file auth state if needed by the bot index
+  const { useMongoAuthState } = require('./mongoAuthState');
+  wrappedBaileys.useMongoAuthState = useMongoAuthState;
 
   require.cache[baileysModulePath].exports = wrappedBaileys;
   global.__waSendAdminText = sendAdminText;

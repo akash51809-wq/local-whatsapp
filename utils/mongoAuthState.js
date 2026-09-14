@@ -70,7 +70,7 @@ async function useMongoAuthState(sessionId) {
         },
       },
     },
-    saveCreds: () => writeData(state.creds, 'creds.json'),
+    saveCreds: () => writeData(creds, 'creds.json'),
   };
 }
 
