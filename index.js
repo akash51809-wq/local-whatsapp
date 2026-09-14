@@ -1801,6 +1801,9 @@ async function startBot() {
             }
         });
 
+        // Expose socket globally so auth.js can use it for OTP/signup messages
+        global.__waAdminSocket = sock;
+
         sock.ev.on('connection.update', (update) => {
             const { connection, lastDisconnect, qr } = update;
 
@@ -1816,6 +1819,9 @@ async function startBot() {
                 latestQR = null;
                 connectedNumber = sock.user?.id?.split(':')[0] || sock.user?.id?.split('@')[0] || null;
 
+                // Refresh global socket reference for auth.js OTP sending
+                global.__waAdminSocket = sock;
+
                 console.log('=================================');
                 console.log('✅ WhatsApp connected successfully!');
                 console.log('WhatsApp:', connectedNumber);
@@ -1829,6 +1835,7 @@ async function startBot() {
             if (connection === 'close') {
                 connectionStatus = 'disconnected';
                 connectedNumber = null;
+                global.__waAdminSocket = null; // Clear so auth.js knows WhatsApp is disconnected
                 broadcastIncomingEvent('connection_status', { status: 'disconnected', number: null });
 
                 const statusCode = lastDisconnect?.error instanceof Boom ? lastDisconnect.error.output?.statusCode : null;

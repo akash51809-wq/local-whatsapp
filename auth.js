@@ -168,10 +168,17 @@ router.post('/api/auth/login', async (req, res) => {
 });
 
 function getLiveAdminWhatsAppSender() {
-  if (typeof global.__waSendAdminText === 'function') return global.__waSendAdminText;
-
   const socket = global.__waAdminSocket;
-  if (socket && (socket.__waReady === true || socket.user) && typeof socket.sendMessage === 'function') {
+  const hasReadySocket = socket && typeof socket.sendMessage === 'function' && 
+                         (socket.__waReady === true || socket.user);
+
+  // Only return the global sender function if the socket is actually ready
+  if (hasReadySocket && typeof global.__waSendAdminText === 'function') {
+    return global.__waSendAdminText;
+  }
+
+  // Fallback: check socket directly
+  if (hasReadySocket) {
     return async (number, text) => {
       const digits = String(number || '').replace(/\D/g, '');
       const normalized = /^91[6-9]\d{9}$/.test(digits) ? digits : (/^[6-9]\d{9}$/.test(digits) ? `91${digits}` : '');
@@ -188,8 +195,9 @@ async function waitForAdminWhatsAppSender(timeoutMs = 15000) {
   while (Date.now() - started < timeoutMs) {
     const sender = getLiveAdminWhatsAppSender();
     if (sender) return sender;
-    await new Promise(resolve => setTimeout(resolve, 250));
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
+  console.warn(`[Auth WhatsApp] waitForAdminWhatsAppSender timed out after ${timeoutMs}ms. Socket exists: ${!!global.__waAdminSocket}, has user: ${!!global.__waAdminSocket?.user}`);
   return null;
 }
 
