@@ -74,17 +74,21 @@ async function startUserSession(userId) {
         }
 
         if (connection === 'close') {
-            const shouldReconnect = (lastDisconnect.error instanceof Boom)
-                ? lastDisconnect.error.output.statusCode !== DisconnectReason.loggedOut
-                : true;
+            const isLoggedOut = (lastDisconnect?.error instanceof Boom)
+                ? lastDisconnect.error.output.statusCode === DisconnectReason.loggedOut
+                : false;
+            const shouldReconnect = !isLoggedOut;
             
-            console.log(`[UserSession] Connection closed for user ${userId}, reconnecting: ${shouldReconnect}`);
+            console.log(`[UserSession] Connection closed for user ${userId}, reconnecting: ${shouldReconnect}, isLoggedOut: ${isLoggedOut}`);
             
-            currentSession.status = 'disconnected';
+            currentSession.status = isLoggedOut ? 'logged_out' : 'connecting';
             
             await WhatsAppSession.updateOne(
                 { ownerUserId: userId },
-                { status: 'disconnected', updatedAt: new Date() }
+                { 
+                    status: isLoggedOut ? 'logged_out' : 'connecting', 
+                    updatedAt: new Date() 
+                }
             );
 
             if (shouldReconnect) {
@@ -96,14 +100,16 @@ async function startUserSession(userId) {
             console.log(`[UserSession] User ${userId} connected`);
             currentSession.status = 'connected';
             currentSession.qr = null;
-            currentSession.connectedNumber = socket.user?.id?.split(':')[0] || null;
-            currentSession.profileName = socket.user?.name || null;
+            const rawId = socket.user?.id || '';
+            const phoneNum = rawId ? rawId.split(':')[0].split('@')[0].replace(/\D/g, '') : null;
+            currentSession.connectedNumber = phoneNum;
+            currentSession.profileName = socket.user?.name || socket.user?.notify || (phoneNum ? `+${phoneNum}` : null);
             
             await WhatsAppSession.updateOne(
                 { ownerUserId: userId },
                 { 
                     status: 'connected', 
-                    phone: currentSession.connectedNumber,
+                    phone: phoneNum,
                     lastConnectedAt: new Date(),
                     updatedAt: new Date() 
                 }
@@ -196,41 +202,78 @@ function getSessionByPhoneOrUserId(param) {
 }
 
 async function findOrLoadSession(sessionParam, userIdFallback = null) {
-    // 1. Try active in-memory session first
+    const clean = sessionParam ? String(sessionParam).replace(/\D/g, '') : '';
+    const clean10 = clean.slice(-10);
+
+    // 1. Check if sessionParam matches Admin WhatsApp or 'admin'
+    const adminPhone = global.__waAdminSocket?.user?.id 
+        ? String(global.__waAdminSocket.user.id).split(':')[0].replace(/\D/g, '') 
+        : (process.env.ADMIN_PHONE || '8840457632');
+    const adminPhone10 = String(adminPhone).replace(/\D/g, '').slice(-10);
+
+    if (sessionParam === 'admin' || (clean10 && clean10 === adminPhone10)) {
+        if (global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function') {
+            return {
+                userId: 'ADMIN',
+                isAdmin: true,
+                session: {
+                    socket: global.__waAdminSocket,
+                    status: 'connected',
+                    connectedNumber: adminPhone
+                }
+            };
+        }
+    }
+
+    // 2. Try active in-memory session first
     let match = getSessionByPhoneOrUserId(sessionParam);
     if (match && match.session?.status === 'connected') {
         return match;
     }
 
-    // 2. Try by userIdFallback if provided
+    // 3. Try by userIdFallback or targetUserId in DB
     const targetUserId = match?.userId || userIdFallback;
     if (targetUserId) {
-        const s = sessions.get(targetUserId);
+        let s = sessions.get(targetUserId);
         if (s && s.status === 'connected') return { userId: targetUserId, session: s };
         
-        const dbS = await WhatsAppSession.findOne({ ownerUserId: targetUserId });
-        if (dbS && dbS.status === 'connected') {
+        const dbS = await WhatsAppSession.findOne({ 
+            ownerUserId: targetUserId, 
+            status: { $ne: 'logged_out' } 
+        });
+        if (dbS) {
             await startUserSession(targetUserId);
-            const reloaded = sessions.get(targetUserId);
-            if (reloaded) return { userId: targetUserId, session: reloaded };
+            // Wait up to 6 seconds for Baileys to connect
+            for (let wait = 0; wait < 12; wait++) {
+                s = sessions.get(targetUserId);
+                if (s && s.status === 'connected') {
+                    return { userId: targetUserId, session: s, dbSession: dbS };
+                }
+                await new Promise(r => setTimeout(r, 500));
+            }
+            if (s) return { userId: targetUserId, session: s, dbSession: dbS };
         }
     }
 
-    // 3. Search in MongoDB by phone number
-    if (sessionParam) {
-        const clean10 = String(sessionParam).replace(/\D/g, '').slice(-10);
-        if (clean10.length === 10) {
-            const dbS = await WhatsAppSession.findOne({
-                phone: { $regex: clean10 + '$' },
-                role: 'user'
-            });
-            if (dbS && dbS.ownerUserId) {
-                if (!sessions.has(dbS.ownerUserId) && dbS.status === 'connected') {
-                    await startUserSession(dbS.ownerUserId);
+    // 4. Search in MongoDB by phone number
+    if (sessionParam && clean10.length === 10) {
+        const dbS = await WhatsAppSession.findOne({
+            phone: { $regex: clean10 + '$' },
+            status: { $ne: 'logged_out' }
+        });
+        if (dbS && dbS.ownerUserId) {
+            if (!sessions.has(dbS.ownerUserId) || sessions.get(dbS.ownerUserId)?.status !== 'connected') {
+                await startUserSession(dbS.ownerUserId);
+                for (let wait = 0; wait < 12; wait++) {
+                    const s = sessions.get(dbS.ownerUserId);
+                    if (s && s.status === 'connected') {
+                        return { userId: dbS.ownerUserId, session: s, dbSession: dbS };
+                    }
+                    await new Promise(r => setTimeout(r, 500));
                 }
-                const s = sessions.get(dbS.ownerUserId);
-                return { userId: dbS.ownerUserId, session: s, dbSession: dbS };
             }
+            const s = sessions.get(dbS.ownerUserId);
+            return { userId: dbS.ownerUserId, session: s, dbSession: dbS };
         }
     }
 
@@ -239,14 +282,23 @@ async function findOrLoadSession(sessionParam, userIdFallback = null) {
 
 async function restoreAllSessions() {
     try {
-        const activeSessions = await WhatsAppSession.find({ role: 'user', status: 'connected' });
-        console.log(`[UserSession] Found ${activeSessions.length} active sessions to restore`);
+        const sessionsToRestore = await WhatsAppSession.find({ 
+            role: 'user', 
+            status: { $nin: ['logged_out'] },
+            $or: [
+                { phone: { $exists: true, $ne: null } },
+                { status: { $in: ['connected', 'connecting', 'waiting'] } }
+            ]
+        });
+        console.log(`[UserSession] Found ${sessionsToRestore.length} active/saved sessions to restore`);
         
-        for (const sessionRecord of activeSessions) {
+        for (const sessionRecord of sessionsToRestore) {
             const userId = sessionRecord.ownerUserId;
             if (userId) {
                 console.log(`[UserSession] Restoring session for user ${userId}`);
-                await startUserSession(userId);
+                await startUserSession(userId).catch(err => 
+                    console.error(`[UserSession] Restore failed for user ${userId}:`, err.message)
+                );
             }
         }
     } catch (error) {

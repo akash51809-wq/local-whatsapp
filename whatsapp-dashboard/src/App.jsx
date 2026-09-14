@@ -20,7 +20,7 @@ const api = async (url, options = {}) => {
   return data
 }
 
-const nav = [
+const defaultNav = [
   ['dashboard', '⌂', 'Dashboard'],
   ['send', '➤', 'Send Message'],
   ['incoming', '◉', 'Incoming Messages'],
@@ -28,6 +28,7 @@ const nav = [
   ['api', '{}', 'API & Webhook'],
   ['system', '⚙', 'System & Settings'],
 ]
+
 
 function App() {
   const [page, setPage] = useState('dashboard')
@@ -222,6 +223,16 @@ function App() {
 
   if (!login) return <Login onLogin={(token, user) => { setLogin(token); setCurrentUser(user) }} />
 
+  const navList = useMemo(() => [
+    ['dashboard', '⌂', 'Dashboard'],
+    ...(isAdmin ? [['users', '👥', 'User Management']] : []),
+    ['send', '➤', 'Send Message'],
+    ['incoming', '◉', 'Incoming Messages'],
+    ['reports', '▤', 'Message Reports'],
+    ['api', '{}', 'API & Webhook'],
+    ['system', '⚙', 'System & Settings'],
+  ], [isAdmin])
+
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand">
@@ -235,7 +246,7 @@ function App() {
           <small>{status.number ? `+${status.number}` : (status.status === 'connected' ? 'Connected' : 'Not connected')}</small>
         </div>
       </div>
-      <nav>{nav.map(([id, icon, label]) => <button key={id} className={page === id ? 'active' : ''} onClick={() => setPage(id)}><span>{icon}</span>{label}</button>)}</nav>
+      <nav>{navList.map(([id, icon, label]) => <button key={id} className={page === id ? 'active' : ''} onClick={() => setPage(id)}><span>{icon}</span>{label}</button>)}</nav>
       <div className="sidebar-bottom">
         <button onClick={() => { loadStatus(); loadQr(); notify('Status refreshed') }}>↻ Refresh status</button>
         <button onClick={logout}>⇥ Logout</button>
@@ -245,7 +256,7 @@ function App() {
     <main className="main">
       <header className="topbar">
         <div>
-          <h1>{nav.find(n => n[0] === page)?.[2]}</h1>
+          <h1>{navList.find(n => n[0] === page)?.[2]}</h1>
           <p>{isAdmin ? 'System Admin Control Center' : `Logged in as: ${currentUser?.username || currentUser?.mobile || 'User'}`}</p>
         </div>
         <div className={`connection ${status.status === 'connected' ? 'connected' : ''}`}>
@@ -269,6 +280,7 @@ function App() {
         onChat={chooseChat} 
         onRefresh={loadQr}
       />}
+      {page === 'users' && <UsersPage notify={notify} />}
       {page === 'send' && <SendPage 
         notify={notify}
         status={status}
@@ -1491,7 +1503,352 @@ function SystemPage({ status, currentUser, notify }) {
         </div>
       ))}
     </div>
-  </section> 
+  </section>
+}
+
+function UsersPage({ notify }) {
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [waFilter, setWaFilter] = useState('all')
+  const [editingUser, setEditingUser] = useState(null)
+  const [editForm, setEditForm] = useState({ name: '', mobile: '', plan: 'Standard', role: 'user', status: 'active' })
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [actionLoading, setActionLoading] = useState('')
+  const [sentNotice, setSentNotice] = useState(null)
+
+  const fetchUsers = useCallback(async () => {
+    setLoading(true)
+    try {
+      const d = await api('/api/admin/users')
+      if (d.success) {
+        setUsers(d.users || [])
+      }
+    } catch (e) {
+      notify('उपयोगकर्ता लोड करने में त्रुटि: ' + e.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [notify])
+
+  useEffect(() => {
+    fetchUsers()
+  }, [fetchUsers])
+
+  const toggleStatus = async (u) => {
+    setActionLoading(u.userId)
+    try {
+      const d = await api(`/api/admin/users/${u.userId}/toggle-status`, { method: 'POST' })
+      if (d.success) {
+        notify(`User ${u.name || u.userId} is now ${d.status}`)
+        setUsers(prev => prev.map(item => item.userId === u.userId ? { ...item, status: d.status } : item))
+      }
+    } catch (e) {
+      notify('Status update failed: ' + e.message)
+    } finally {
+      setActionLoading('')
+    }
+  }
+
+  const sendPassword = async (u) => {
+    const confirmSend = window.confirm(`क्या आप यूजर ${u.name || u.userId} (${u.mobile || u.username}) के लिए नया पासवर्ड जेनरेट करके उनके WhatsApp पर भेजना चाहते हैं?`)
+    if (!confirmSend) return
+
+    setActionLoading('pwd-' + u.userId)
+    try {
+      const d = await api(`/api/admin/users/${u.userId}/send-password`, { method: 'POST' })
+      if (d.success) {
+        setSentNotice({ userId: u.userId, mobile: u.mobile || u.username, newPassword: d.newPassword })
+        notify(`नया पासवर्ड ${u.mobile || u.username} के WhatsApp पर भेज दिया गया है!`)
+      }
+    } catch (e) {
+      notify('पासवर्ड भेजने में त्रुटि: ' + e.message)
+    } finally {
+      setActionLoading('')
+    }
+  }
+
+  const openEdit = (u) => {
+    setEditingUser(u)
+    setEditForm({
+      name: u.name || '',
+      mobile: u.mobile || u.username || '',
+      plan: u.plan || 'Standard',
+      role: u.role || 'user',
+      status: u.status || 'active'
+    })
+  }
+
+  const saveEdit = async (e) => {
+    e.preventDefault()
+    if (!editingUser) return
+    setSavingEdit(true)
+    try {
+      const d = await api(`/api/admin/users/${editingUser.userId}`, {
+        method: 'PUT',
+        body: JSON.stringify(editForm)
+      })
+      if (d.success) {
+        notify('User profile updated successfully!')
+        setUsers(prev => prev.map(item => item.userId === editingUser.userId ? { ...item, ...editForm } : item))
+        setEditingUser(null)
+      }
+    } catch (e) {
+      notify('Update failed: ' + e.message)
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  const filteredUsers = useMemo(() => {
+    return users.filter(u => {
+      const term = search.toLowerCase().trim()
+      const matchesSearch = !term || (
+        (u.name && u.name.toLowerCase().includes(term)) ||
+        (u.userId && u.userId.toLowerCase().includes(term)) ||
+        (u.username && u.username.toLowerCase().includes(term)) ||
+        (u.mobile && u.mobile.toLowerCase().includes(term))
+      )
+      const matchesStatus = statusFilter === 'all' || u.status === statusFilter
+      const matchesWa = waFilter === 'all' || (
+        waFilter === 'connected' ? u.whatsappStatus === 'connected' :
+        waFilter === 'waiting' ? (u.whatsappStatus === 'waiting' || u.whatsappStatus === 'connecting') :
+        (u.whatsappStatus === 'disconnected' || !u.whatsappStatus)
+      )
+      return matchesSearch && matchesStatus && matchesWa
+    })
+  }, [users, search, statusFilter, waFilter])
+
+  return <section className="page-user-management">
+    {/* Filter & Search Bar */}
+    <div className="users-filter-card">
+      <div className="users-search-box">
+        <span>🔍</span>
+        <input 
+          type="text" 
+          placeholder="Search by name, mobile, username, user ID..." 
+          value={search} 
+          onChange={e => setSearch(e.target.value)} 
+        />
+      </div>
+
+      <select className="filter-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+        <option value="all">All Status (सभी)</option>
+        <option value="active">Active Only</option>
+        <option value="inactive">Inactive Only</option>
+      </select>
+
+      <select className="filter-select" value={waFilter} onChange={e => setWaFilter(e.target.value)}>
+        <option value="all">All WhatsApp Status</option>
+        <option value="connected">Connected 🟢</option>
+        <option value="waiting">Waiting Scan 🟡</option>
+        <option value="disconnected">Not Connected ⚪</option>
+      </select>
+
+      <button className="btn-action-icon" onClick={fetchUsers} title="Refresh User List">
+        ↻ Refresh
+      </button>
+
+      <div style={{ marginLeft: 'auto', fontSize: 13, color: '#64748b', fontWeight: 600 }}>
+        Total: <span style={{ color: '#0d835f', fontWeight: 700 }}>{filteredUsers.length}</span> / {users.length} Users
+      </div>
+    </div>
+
+    {/* Notice when password sent */}
+    {sentNotice && (
+      <div className="alert" style={{ background: '#e9f8f2', borderColor: '#7ae0bd', color: '#055b44', marginBottom: 16 }}>
+        <span>
+          ✓ <strong>Password Sent to WhatsApp!</strong> User <strong>{sentNotice.mobile}</strong> ({sentNotice.userId}) को नया पासवर्ड भेज दिया गया है। 
+          Temporary Password: <code style={{background:'#fff',padding:'2px 8px',borderRadius:4,border:'1px solid #7ae0bd',fontWeight:'bold',color:'#0d835f'}}>{sentNotice.newPassword}</code>
+        </span>
+        <button onClick={() => setSentNotice(null)}>×</button>
+      </div>
+    )}
+
+    {/* Users Table */}
+    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="report-table" style={{ margin: 0, width: '100%' }}>
+          <thead>
+            <tr>
+              <th>User Details</th>
+              <th>Mobile / Login</th>
+              <th>Connection Status</th>
+              <th>Plan</th>
+              <th>Account Status</th>
+              <th style={{ textAlign: 'right' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={6} style={{ textAlign: 'center', padding: 36, color: '#64748b' }}>
+                  ⏳ Loading registered users...
+                </td>
+              </tr>
+            ) : filteredUsers.length === 0 ? (
+              <tr>
+                <td colSpan={6} style={{ textAlign: 'center', padding: 36, color: '#64748b' }}>
+                  कोई यूजर नहीं मिला (No users found matching your search).
+                </td>
+              </tr>
+            ) : (
+              filteredUsers.map(u => (
+                <tr key={u.userId || u._id}>
+                  <td>
+                    <div style={{ fontWeight: 600, color: '#1a202c', fontSize: 14 }}>
+                      {u.name || u.username || 'No Name'}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#8fa0b2', marginTop: 3 }}>
+                      ID: <span style={{ fontFamily: 'monospace' }}>{u.userId}</span>
+                      <span className={`user-role-badge ${u.role || 'user'}`}>{u.role || 'user'}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <strong style={{ fontSize: 13, color: '#1f2937' }}>+91 {u.mobile || u.username}</strong>
+                    <div style={{ fontSize: 11, color: '#8fa0b2', marginTop: 3 }}>
+                      Joined: {u.createdAt ? new Date(u.createdAt).toLocaleDateString('hi-IN') : 'N/A'}
+                    </div>
+                  </td>
+                  <td>
+                    {u.whatsappStatus === 'connected' ? (
+                      <div>
+                        <span className="status-pill connected">Connected</span>
+                        <div style={{ fontSize: 11, color: '#0d835f', marginTop: 3 }}>
+                          +{u.whatsappPhone || u.mobile}
+                        </div>
+                      </div>
+                    ) : u.whatsappStatus === 'connecting' || u.whatsappStatus === 'waiting' ? (
+                      <div>
+                        <span className="status-pill waiting">Waiting Scan</span>
+                        <div style={{ fontSize: 10, color: '#b45309', marginTop: 2 }}>QR Generated</div>
+                      </div>
+                    ) : (
+                      <span className="status-pill disconnected">Not Connected</span>
+                    )}
+                  </td>
+                  <td>
+                    <span className="plan-badge">{u.plan || 'Standard'}</span>
+                  </td>
+                  <td>
+                    <span className={`status-pill ${u.status === 'active' ? 'connected' : 'disconnected'}`}>
+                      {u.status === 'active' ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="user-actions-group" style={{ justifyContent: 'flex-end' }}>
+                      <button 
+                        className="btn-action-icon" 
+                        onClick={() => openEdit(u)} 
+                        title="Edit profile"
+                      >
+                        ✏ Edit
+                      </button>
+
+                      <button 
+                        className={`btn-action-icon toggle-btn ${u.status === 'active' ? 'active' : 'inactive'}`} 
+                        onClick={() => toggleStatus(u)} 
+                        disabled={actionLoading === u.userId}
+                        title={u.status === 'active' ? 'Deactivate user account' : 'Activate user account'}
+                      >
+                        {actionLoading === u.userId ? '...' : u.status === 'active' ? 'Deactivate' : 'Activate'}
+                      </button>
+
+                      <button 
+                        className="btn-action-icon pwd-btn" 
+                        onClick={() => sendPassword(u)} 
+                        disabled={actionLoading === 'pwd-' + u.userId}
+                        title="Send new random password to user WhatsApp"
+                      >
+                        {actionLoading === 'pwd-' + u.userId ? 'Sending...' : '🔑 Send Password'}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {/* Edit Modal */}
+    {editingUser && (
+      <div className="modal-overlay" onClick={() => setEditingUser(null)}>
+        <div className="modal-content-card" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>Edit User: {editingUser.name || editingUser.userId}</h3>
+            <button onClick={() => setEditingUser(null)}>×</button>
+          </div>
+          <form onSubmit={saveEdit}>
+            <div className="modal-body">
+              <label>
+                Full Name (नाम)
+                <input 
+                  type="text" 
+                  value={editForm.name} 
+                  onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))} 
+                  placeholder="User Name"
+                />
+              </label>
+              <label>
+                WhatsApp Mobile Number
+                <input 
+                  type="text" 
+                  value={editForm.mobile} 
+                  onChange={e => setEditForm(prev => ({ ...prev, mobile: e.target.value }))} 
+                  placeholder="10 digit mobile"
+                />
+              </label>
+              <label>
+                Subscription Plan (प्लान)
+                <select 
+                  value={editForm.plan} 
+                  onChange={e => setEditForm(prev => ({ ...prev, plan: e.target.value }))}
+                >
+                  <option value="Free">Free (मुफ़्त)</option>
+                  <option value="Starter">Starter</option>
+                  <option value="Standard">Standard</option>
+                  <option value="Pro">Pro</option>
+                  <option value="Enterprise">Enterprise</option>
+                </select>
+              </label>
+              <label>
+                Role
+                <select 
+                  value={editForm.role} 
+                  onChange={e => setEditForm(prev => ({ ...prev, role: e.target.value }))}
+                >
+                  <option value="user">User</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </label>
+              <label>
+                Account Status
+                <select 
+                  value={editForm.status} 
+                  onChange={e => setEditForm(prev => ({ ...prev, status: e.target.value }))}
+                >
+                  <option value="active">Active (सक्रिय)</option>
+                  <option value="inactive">Inactive (निष्क्रिय)</option>
+                </select>
+              </label>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn-action-icon" onClick={() => setEditingUser(null)}>
+                Cancel
+              </button>
+              <button type="submit" className="primary" disabled={savingEdit}>
+                {savingEdit ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
+  </section>
 }
 
 export default App
+

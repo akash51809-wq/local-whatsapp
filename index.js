@@ -1757,43 +1757,51 @@ async function handleSendText(req, res) {
         }
 
         // 2. Resolve WhatsApp Session and Socket
+        // 2. Resolve WhatsApp Session and Socket
         let activeSocket = null;
         let fromNumber = null;
         let activeSession10 = '';
 
         const { findOrLoadSession } = require('./userSessions');
 
-        if (user && user.role !== 'admin') {
-            // Regular user: must send from this user's scanned WhatsApp session
-            const userSessionMatch = await findOrLoadSession(providedSession, user.userId);
-            if (!userSessionMatch || userSessionMatch.session?.status !== 'connected' || !userSessionMatch.session?.socket) {
-                return res.status(503).json({
-                    status: false,
-                    message: `WhatsApp is not connected for this user session (${providedSession || user.mobile || user.userId}). कृपया डैशबोर्ड से पहले WhatsApp स्कैन करें।`
-                });
-            }
-            activeSocket = userSessionMatch.session.socket;
-            fromNumber = userSessionMatch.session.connectedNumber || user.mobile || user.userId;
+        // First attempt: search via userSessions (finds both user sessions and admin if matched)
+        const sessionMatch = await findOrLoadSession(providedSession, user?.userId);
+        if (sessionMatch && sessionMatch.session?.status === 'connected' && sessionMatch.session?.socket) {
+            activeSocket = sessionMatch.session.socket;
+            fromNumber = sessionMatch.session.connectedNumber || sessionMatch.userId;
             activeSession10 = String(fromNumber).replace(/\D/g, '').slice(-10);
-        } else {
-            // User is admin or global admin token was used
-            if (providedSession) {
-                const sessionMatch = await findOrLoadSession(providedSession);
-                if (sessionMatch && sessionMatch.session?.status === 'connected' && sessionMatch.session?.socket) {
-                    activeSocket = sessionMatch.session.socket;
-                    fromNumber = sessionMatch.session.connectedNumber || sessionMatch.userId;
-                    activeSession10 = String(fromNumber).replace(/\D/g, '').slice(-10);
-                }
-            }
+        }
 
-            if (!activeSocket) {
-                if (connectionStatus !== 'connected' || !sock) {
-                    return res.status(503).json({ status: false, message: "Service Unavailable: WhatsApp is not connected." });
+        // Second attempt / Fallback to Admin WhatsApp
+        if (!activeSocket) {
+            const adminPhone = global.__waAdminSocket?.user?.id 
+                ? String(global.__waAdminSocket.user.id).split(':')[0].replace(/\D/g, '') 
+                : (connectedNumber || '8840457632');
+            const adminPhone10 = String(adminPhone).replace(/\D/g, '').slice(-10);
+            const provided10 = providedSession ? String(providedSession).replace(/\D/g, '').slice(-10) : '';
+            const userMobile10 = user?.mobile ? String(user.mobile).replace(/\D/g, '').slice(-10) : '';
+
+            const isAdminAuthorized = isGlobalAdmin || user?.role === 'admin' || userMobile10 === adminPhone10;
+            const isTargetingAdmin = provided10 === adminPhone10 || providedSession === 'admin' || !providedSession;
+
+            if (isAdminAuthorized || isTargetingAdmin) {
+                if (global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function') {
+                    activeSocket = global.__waAdminSocket;
+                    fromNumber = adminPhone;
+                    activeSession10 = adminPhone10;
+                } else if (connectionStatus === 'connected' && sock) {
+                    activeSocket = sock;
+                    fromNumber = connectedNumber || adminPhone;
+                    activeSession10 = adminPhone10;
                 }
-                activeSocket = sock;
-                fromNumber = connectedNumber || 'Admin';
-                activeSession10 = connectedNumber ? String(connectedNumber).replace(/\D/g, '').slice(-10) : (providedSession || '');
             }
+        }
+
+        if (!activeSocket) {
+            return res.status(503).json({
+                status: false,
+                message: `WhatsApp is not connected for this user session (${providedSession || user?.mobile || user?.userId || 'default'}). कृपया डैशबोर्ड से पहले WhatsApp स्कैन करें।`
+            });
         }
 
         // 3. Send message via WhatsApp socket
