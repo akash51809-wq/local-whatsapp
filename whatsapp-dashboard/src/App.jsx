@@ -789,13 +789,37 @@ function ApiPage({ notify }) {
 
 function SystemPage({ status, currentUser, notify }) { 
   const [info, setInfo] = useState(null)
+  const [pingData, setPingData] = useState(null)
+  const [pinging, setPinging] = useState(false)
   const [curPass, setCurPass] = useState('')
   const [newPass, setNewPass] = useState('')
   const [passErr, setPassErr] = useState('')
   const [passOk, setPassOk] = useState('')
   const [savingPass, setSavingPass] = useState(false)
 
-  useEffect(() => { api('/api/admin/system-info').then(d => setInfo(d.info)).catch(() => {}) }, [])
+  const loadPingStatus = useCallback(() => {
+    api('/api/system/autoping').then(setPingData).catch(() => {})
+  }, [])
+
+  useEffect(() => { 
+    api('/api/admin/system-info').then(d => setInfo(d.info)).catch(() => {}) 
+    loadPingStatus()
+    const t = setInterval(loadPingStatus, 15000)
+    return () => clearInterval(t)
+  }, [loadPingStatus])
+
+  const triggerManualPing = async () => {
+    setPinging(true)
+    try {
+      const res = await api('/api/system/autoping/trigger', { method: 'POST' })
+      setPingData(res)
+      if (notify) notify('Keep-Alive Ping सफलतापुर्वक भेजा गया!')
+    } catch (e) {
+      if (notify) notify('Ping failed: ' + e.message)
+    } finally {
+      setPinging(false)
+    }
+  }
 
   const handleChangePassword = async (e) => {
     e.preventDefault()
@@ -825,7 +849,41 @@ function SystemPage({ status, currentUser, notify }) {
       <div>
         <span className="eyebrow">SETTINGS & SECURITY</span>
         <h2>System & Account Settings</h2>
-        <p>अकाउंट सुरक्षा और सिस्टम जानकारी</p>
+        <p>अकाउंट सुरक्षा, सर्वर की स्थिति और Render 24/7 Keep-Alive जानकारी</p>
+      </div>
+    </div>
+
+    {/* Auto-Ping / Render Sleep Prevention Card */}
+    <div className="api-card" style={{marginBottom:24}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+        <div>
+          <h3 style={{margin:0}}>⏰ Server Auto-Ping (Render 24/7 Keep-Alive)</h3>
+          <p style={{color:'#666',fontSize:13,margin:'4px 0 0'}}>
+            Render सर्वर 10-15 मिनट में स्लीप (Sleep) होने से रोकने के लिए ऑटो-पिंग लगातार सक्रिय है:
+          </p>
+        </div>
+        <button className="secondary" onClick={triggerManualPing} disabled={pinging} style={{padding:'7px 14px',fontSize:12}}>
+          {pinging ? 'Pinging...' : '⚡ Ping Now'}
+        </button>
+      </div>
+
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))',gap:12,marginTop:14}}>
+        <div style={{background:'#f8fafc',padding:12,borderRadius:8,border:'1px solid #e2e8f0'}}>
+          <small style={{color:'#64748b',fontWeight:700,display:'block',marginBottom:4}}>स्थिति (Status)</small>
+          <strong style={{color:'#16a34a'}}>● Active (24/7 Awake)</strong>
+        </div>
+        <div style={{background:'#f8fafc',padding:12,borderRadius:8,border:'1px solid #e2e8f0'}}>
+          <small style={{color:'#64748b',fontWeight:700,display:'block',marginBottom:4}}>Ping Frequency</small>
+          <strong>हर {pingData?.stats?.intervalMinutes || 5} मिनट में</strong>
+        </div>
+        <div style={{background:'#f8fafc',padding:12,borderRadius:8,border:'1px solid #e2e8f0'}}>
+          <small style={{color:'#64748b',fontWeight:700,display:'block',marginBottom:4}}>Last Ping Result</small>
+          <strong style={{fontSize:12,color:'#0f172a',wordBreak:'break-all'}}>{pingData?.stats?.lastPingStatus || 'Starting...'}</strong>
+        </div>
+        <div style={{background:'#f8fafc',padding:12,borderRadius:8,border:'1px solid #e2e8f0'}}>
+          <small style={{color:'#64748b',fontWeight:700,display:'block',marginBottom:4}}>Total Pings Sent</small>
+          <strong>{pingData?.stats?.totalPings || 0} Pings</strong>
+        </div>
       </div>
     </div>
 
@@ -866,6 +924,7 @@ function SystemPage({ status, currentUser, notify }) {
         ['Login Username', currentUser?.username || currentUser?.mobile || 'Admin'],
         ['WhatsApp Status', status.status],
         ['Connected Number', status.number ? '+' + status.number : 'Not connected'],
+        ['Render Keep-Alive', 'Active (24/7 Awake)'],
         ['Node.js Version', info?.nodeVersion || 'Loading'],
         ['Uptime', info?.uptime || 'Loading']
       ].map(([a,b]) => (

@@ -142,9 +142,101 @@ if (!botApp) throw new Error('WhatsApp backend app could not be loaded from inde
 
 const app = express();
 app.use(express.json({ limit: '100mb' }));
+/* =========================================================
+   AUTO-PING / KEEP-ALIVE SYSTEM (PREVENT RENDER SLEEP)
+========================================================= */
+
+const autoPingStats = {
+  enabled: true,
+  url: '',
+  intervalMinutes: 5,
+  lastPingTime: null,
+  lastPingStatus: null,
+  totalPings: 0,
+  failures: 0
+};
+
+function getAutoPingUrl() {
+  if (process.env.AUTOPING_URL) return process.env.AUTOPING_URL.trim();
+  if (process.env.RENDER_EXTERNAL_URL) return `${process.env.RENDER_EXTERNAL_URL.trim().replace(/\/$/, '')}/ping`;
+  if (process.env.APP_URL) return `${process.env.APP_URL.trim().replace(/\/$/, '')}/ping`;
+  return 'https://local-whatsapp.onrender.com/ping';
+}
+
+async function performAutoPing() {
+  const pingUrl = getAutoPingUrl();
+  autoPingStats.url = pingUrl;
+  autoPingStats.totalPings += 1;
+  const started = Date.now();
+
+  try {
+    const res = await fetch(pingUrl, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'WA-Control-AutoPing/1.0 (Keep-Alive)'
+      },
+      signal: AbortSignal.timeout(15000)
+    });
+    const elapsed = Date.now() - started;
+    autoPingStats.lastPingTime = new Date().toISOString();
+    autoPingStats.lastPingStatus = `${res.status} ${res.statusText} (${elapsed}ms)`;
+    console.log(`[AutoPing] Keep-Alive Ping -> ${pingUrl} [${autoPingStats.lastPingStatus}]`);
+  } catch (err) {
+    autoPingStats.failures += 1;
+    autoPingStats.lastPingTime = new Date().toISOString();
+    autoPingStats.lastPingStatus = `Error: ${err.message}`;
+    console.warn(`[AutoPing] Keep-Alive Ping to ${pingUrl} failed:`, err.message);
+  }
+}
+
+function startAutoPing() {
+  const minutes = Math.max(1, Number(process.env.AUTOPING_INTERVAL_MINUTES || 5));
+  autoPingStats.intervalMinutes = minutes;
+  autoPingStats.url = getAutoPingUrl();
+
+  console.log(`[AutoPing] Render Keep-Alive active. Pinging ${autoPingStats.url} every ${minutes} minute(s).`);
+
+  // First ping after 30 seconds
+  setTimeout(performAutoPing, 30000);
+
+  // Then recurring ping every intervalMinutes
+  setInterval(performAutoPing, minutes * 60 * 1000);
+}
+
 const distPath = path.join(__dirname, 'whatsapp-dashboard', 'dist');
 
-app.get('/ping', (req, res) => res.status(200).send('OK - Alive'));
+app.get('/ping', (req, res) => {
+  res.status(200).json({
+    status: 'alive',
+    message: 'OK - Alive',
+    serverTime: new Date().toISOString(),
+    uptimeSeconds: Math.floor(process.uptime()),
+    autoping: {
+      enabled: autoPingStats.enabled,
+      interval: `${autoPingStats.intervalMinutes}m`,
+      lastPingTime: autoPingStats.lastPingTime,
+      lastPingStatus: autoPingStats.lastPingStatus,
+      totalPings: autoPingStats.totalPings
+    }
+  });
+});
+
+app.get('/api/system/autoping', (req, res) => {
+  res.json({
+    success: true,
+    stats: autoPingStats,
+    targetUrl: getAutoPingUrl()
+  });
+});
+
+app.post('/api/system/autoping/trigger', async (req, res) => {
+  await performAutoPing();
+  res.json({
+    success: true,
+    stats: autoPingStats
+  });
+});
+
 app.use(authRouter);
 app.use(botApp);
 app.use(express.static(distPath, { index: false }));
@@ -192,6 +284,12 @@ async function startServer() {
         restoreAllSessions().catch(e => console.error('[UserSessions] Restore error:', e));
       } catch (err) {
         console.error('[UserSessions] Load error:', err);
+      }
+      // Start Auto-Ping keep-alive to keep Render awake 24/7
+      try {
+        startAutoPing();
+      } catch (pingErr) {
+        console.error('[AutoPing] Initialization error:', pingErr);
       }
     });
   } catch (err) {
