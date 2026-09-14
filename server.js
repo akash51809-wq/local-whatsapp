@@ -33,10 +33,14 @@ try {
 
   // Robust helper to send message through active Baileys socket
   async function sendAdminText(number, text, retries = 3) {
+    let lastError = null;
+    let socketWasAvailable = false;
+
     for (let attempt = 1; attempt <= retries; attempt++) {
       const current = global.__waAdminSocket;
 
       if (current && typeof current.sendMessage === 'function') {
+        socketWasAvailable = true;
         try {
           const digits = normalizeIndianWhatsAppNumber(number);
           const jid = `${digits}@s.whatsapp.net`;
@@ -44,8 +48,11 @@ try {
           console.log(`[Auth WhatsApp] Message sent successfully to ${digits}`);
           return result;
         } catch (error) {
-          console.error(`[Auth WhatsApp] Attempt ${attempt} failed:`, error?.message || error);
+          lastError = error;
+          console.error(`[Auth WhatsApp] Attempt ${attempt}/${retries} failed:`, error?.message || error);
         }
+      } else {
+        console.warn(`[Auth WhatsApp] Attempt ${attempt}/${retries}: Admin socket not available (socket=${!!current}, sendMessage=${typeof current?.sendMessage})`);
       }
 
       if (attempt < retries) {
@@ -53,6 +60,13 @@ try {
         await new Promise(res => setTimeout(res, 2000));
       }
     }
+
+    // If the socket was available but sending failed, throw the actual error
+    if (socketWasAvailable && lastError) {
+      console.error('[Auth WhatsApp] All retries exhausted. Last error:', lastError?.message || lastError);
+      throw new Error(`WhatsApp message भेजने में error: ${lastError?.message || 'Unknown error'}`);
+    }
+
     throw new Error('Admin WhatsApp अभी connected नहीं है। कृपया कुछ देर, फिर प्रयास करें।');
   }
 
