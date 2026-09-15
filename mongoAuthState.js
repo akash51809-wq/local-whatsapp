@@ -176,7 +176,9 @@ async function useMongoAuthState(sessionId) {
       // Handle encrypted payload
       if (result.data.encrypted === true) {
         const decryptedJson = decryptPayload(result.data);
-        if (!decryptedJson) return null;
+        if (!decryptedJson) {
+          throw new Error(`Failed to decrypt ${key} with any candidate key`);
+        }
         return JSON.parse(decryptedJson, BufferJSON.reviver);
       }
 
@@ -184,6 +186,9 @@ async function useMongoAuthState(sessionId) {
       const jsonString = JSON.stringify(result.data);
       return JSON.parse(jsonString, BufferJSON.reviver);
     } catch (error) {
+      if (file === 'creds.json') {
+        throw error;
+      }
       return null;
     }
   };
@@ -195,7 +200,63 @@ async function useMongoAuthState(sessionId) {
     } catch (error) {}
   };
 
-  const creds = (await readData('creds.json')) || initAuthCreds();
+  const isAdmin = (sessionId === 'admin');
+  const credsKey = `${sessionId}_creds.json`;
+
+  // Verify whether SessionAuth contains existing credentials for this session
+  let hasExistingCreds = false;
+  try {
+    hasExistingCreds = Boolean(await SessionAuth.exists({ id: credsKey }));
+  } catch (err) {
+    if (isAdmin) hasExistingCreds = true; // Err on the side of safety for Admin
+  }
+
+  // Read creds with bounded retry logic
+  const retryDelays = [250, 500, 1000, 2000, 4000];
+  let creds = null;
+  let lastReadError = null;
+
+  for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
+    try {
+      creds = await readData('creds.json');
+      if (creds && (creds.me || !hasExistingCreds)) {
+        break;
+      }
+      if (creds && isAdmin && creds.me) {
+        break;
+      }
+      if (!hasExistingCreds && !isAdmin) {
+        break;
+      }
+    } catch (err) {
+      lastReadError = err;
+      console.warn(`[SessionAuth] Attempt ${attempt + 1}/${retryDelays.length + 1} read ${credsKey} failed:`, err.message);
+    }
+
+    if (attempt < retryDelays.length && (hasExistingCreds || isAdmin)) {
+      const delay = retryDelays[attempt];
+      await new Promise((res) => setTimeout(res, delay));
+    }
+  }
+
+  if (isAdmin) {
+    // Explicit Admin safety guard: Existing Admin session + read failure => THROW, NEVER initAuthCreds() / QR
+    if (hasExistingCreds || lastReadError) {
+      if (!creds || !creds.me) {
+        const msg = lastReadError
+          ? `FATAL: Failed to read existing Admin WhatsApp credentials (${credsKey}): ${lastReadError.message}`
+          : `FATAL: Existing Admin WhatsApp credentials (${credsKey}) missing or incomplete. Aborting to prevent empty session / QR fallback.`;
+        console.error(`[SessionAuth] ${msg}`);
+        throw new Error(msg);
+      }
+    } else if (!creds) {
+      creds = initAuthCreds();
+    }
+  } else {
+    if (!creds) {
+      creds = initAuthCreds();
+    }
+  }
 
   return {
     state: {
@@ -205,8 +266,12 @@ async function useMongoAuthState(sessionId) {
           const data = {};
           await Promise.all(
             ids.map(async (id) => {
-              let value = await readData(`${type}-${id}.json`);
-              data[id] = value;
+              try {
+                let value = await readData(`${type}-${id}.json`);
+                data[id] = value;
+              } catch (e) {
+                data[id] = null;
+              }
             })
           );
           return data;

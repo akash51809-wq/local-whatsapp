@@ -2122,13 +2122,35 @@ async function startBot() {
         // Expose socket globally so auth.js can use it for OTP/signup messages
         global.__waAdminSocket = newSock;
 
-        newSock.ev.on('connection.update', (update) => {
+        newSock.ev.on('connection.update', async (update) => {
             // Guard against stale events from an older or replaced socket
             if (newSock !== sock) return;
 
             const { connection, lastDisconnect, qr } = update;
 
             if (qr) {
+                // Defensive guard: check if Admin credentials already exist in MongoDB
+                let hasAdminCredsInDb = false;
+                try {
+                    const SessionAuth = require('./models/SessionAuth');
+                    hasAdminCredsInDb = Boolean(await SessionAuth.exists({ id: 'admin_creds.json' }));
+                } catch (dbErr) {
+                    hasAdminCredsInDb = true; // Err on side of caution
+                }
+
+                if (hasAdminCredsInDb) {
+                    console.warn('\n[Admin WhatsApp] ADMIN QR BLOCKED: existing MongoDB Admin session detected. Re-authenticating instead of pairing new device...\n');
+                    connectionStatus = 'connecting';
+                    broadcastIncomingEvent('connection_status', { status: 'connecting', number: null });
+
+                    if (adminReconnectTimer) clearTimeout(adminReconnectTimer);
+                    adminReconnectTimer = setTimeout(() => {
+                        adminReconnectTimer = null;
+                        startBot();
+                    }, 3000);
+                    return;
+                }
+
                 latestQR = qr;
                 connectionStatus = 'qr';
                 console.log('\nScan this QR code with WhatsApp:\n');
