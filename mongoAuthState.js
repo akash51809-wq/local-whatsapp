@@ -7,10 +7,28 @@ const BufferJSON = {
   reviver: (k, v) => (v && typeof v === 'object' && v.type === 'Buffer' ? Buffer.from(v.data, 'base64') : v),
 };
 
-// Derive 32-byte key for AES-256-GCM encryption
+let cachedDerivedKey = null;
+let cachedSecret = null;
+
+// Derive 32-byte key for AES-256-GCM encryption with caching for high performance
 function getEncryptionKey() {
-  const secret = process.env.SESSION_ENCRYPTION_KEY || process.env.AUTH_SECRET || process.env.MONGO_URI || 'wa-automation-secure-salt-key-2026';
-  return crypto.scryptSync(secret, 'wa_session_auth_salt_v1', 32);
+  const secret = process.env.SESSION_ENCRYPTION_KEY ? String(process.env.SESSION_ENCRYPTION_KEY).trim() : '';
+  if (!secret) {
+    cachedDerivedKey = null;
+    cachedSecret = null;
+    throw new Error('FATAL: SESSION_ENCRYPTION_KEY environment variable is missing. A secure key (min 16 chars) is required to encrypt/decrypt WhatsApp session credentials.');
+  }
+  if (secret.length < 16) {
+    cachedDerivedKey = null;
+    cachedSecret = null;
+    throw new Error('FATAL: SESSION_ENCRYPTION_KEY is too short (minimum 16 characters required for strong AES-256 key derivation).');
+  }
+  if (cachedSecret === secret && cachedDerivedKey) {
+    return cachedDerivedKey;
+  }
+  cachedDerivedKey = crypto.scryptSync(secret, 'wa_session_auth_salt_v1', 32);
+  cachedSecret = secret;
+  return cachedDerivedKey;
 }
 
 function encryptPayload(plaintext) {

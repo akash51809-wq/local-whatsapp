@@ -72,55 +72,8 @@ try {
     throw new Error('Admin WhatsApp अभी connected नहीं है। कृपया कुछ देर, फिर प्रयास करें।');
   }
 
-  if (typeof originalMakeWASocket === 'function') {
-    wrappedBaileys.default = function wrappedMakeWASocket(...args) {
-      const socket = originalMakeWASocket(...args);
-
-      global.__waAdminSocket = socket;
-      global.__waSendAdminText = sendAdminText;
-
-      console.log('[Baileys bridge] Admin socket instance captured');
-
-      if (socket?.ev?.on) {
-        socket.ev.on('connection.update', async (update) => {
-          try {
-            const { connection } = update || {};
-            const { recordAdminWhatsAppSession } = require('./auth');
-
-            let phone = null;
-            try {
-              phone = socket?.user?.id
-                ? String(socket.user.id).split(':')[0].split('@')[0].replace(/\D/g, '')
-                : null;
-              if (phone && /^91[6-9]\d{9}$/.test(phone)) phone = `+${phone}`;
-            } catch {}
-
-            if (connection === 'open') {
-              global.__waAdminSocket = socket;
-              global.__waSendAdminText = sendAdminText;
-              console.log(`[Auth WhatsApp] Connection OPEN. Admin account: ${phone || 'unknown'}`);
-              await recordAdminWhatsAppSession({ status: 'connected', phone });
-            } else if (connection === 'close') {
-              await recordAdminWhatsAppSession({ status: 'disconnected', phone });
-            } else if (connection === 'connecting') {
-              await recordAdminWhatsAppSession({ status: 'connecting', phone });
-            }
-          } catch (err) {
-            console.error('[Auth WhatsApp] Session tracking error:', err?.message || err);
-          }
-        });
-      }
-
-      return socket;
-    };
-  }
-
-  const { useMongoAuthState } = require('./mongoAuthState');
-  wrappedBaileys.useMongoAuthState = useMongoAuthState;
-
-  require.cache[baileysModulePath].exports = wrappedBaileys;
   global.__waSendAdminText = sendAdminText;
-  console.log('[Baileys bridge] Admin socket/auth wrappers installed');
+  console.log('[Baileys bridge] Admin send text helper initialized');
 } catch (error) {
   console.error('[Baileys bridge] Setup failed:', error?.message || error);
 }
@@ -267,6 +220,12 @@ const MONGO_URI = String(process.env.MONGO_URI || '').trim();
 async function startServer() {
   if (!MONGO_URI) {
     console.error('FATAL: MONGO_URI is not configured.');
+    process.exit(1);
+  }
+
+  const encryptionKey = process.env.SESSION_ENCRYPTION_KEY ? String(process.env.SESSION_ENCRYPTION_KEY).trim() : '';
+  if (!encryptionKey || encryptionKey.length < 16) {
+    console.error('FATAL: SESSION_ENCRYPTION_KEY is missing or too short (min 16 chars). Required for secure WhatsApp credentials storage.');
     process.exit(1);
   }
 

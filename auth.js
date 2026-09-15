@@ -117,7 +117,7 @@ async function ensureAdminUser() {
   }
   await WhatsAppSession.updateOne(
     { sessionId: process.env.ADMIN_WHATSAPP_SESSION_ID || 'admin' },
-    { $setOnInsert: { ownerUserId: admin.userId, role: 'admin', authPath: process.env.ADMIN_WHATSAPP_SESSION_DIR || './auth_info', status: 'waiting' } },
+    { $setOnInsert: { ownerUserId: admin.userId, role: 'admin', status: 'waiting' } },
     { upsert: true }
   );
   return admin;
@@ -914,7 +914,7 @@ async function recordAdminWhatsAppSession(info = {}) {
     if (!admin) return;
     await WhatsAppSession.updateOne(
       { sessionId: process.env.ADMIN_WHATSAPP_SESSION_ID || 'admin' },
-      { $set: { ownerUserId: admin.userId, phone: info.phone || null, role: 'admin', authPath: process.env.ADMIN_WHATSAPP_SESSION_DIR || './auth_info', status: info.status || 'waiting', ...(info.status === 'connected' ? { lastConnectedAt: new Date() } : {}), updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
+      { $set: { ownerUserId: admin.userId, phone: info.phone || null, role: 'admin', status: info.status || 'waiting', ...(info.status === 'connected' ? { lastConnectedAt: new Date() } : {}), updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
       { upsert: true }
     );
   } catch (error) {

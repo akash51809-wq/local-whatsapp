@@ -1,9 +1,9 @@
 const {
     default: makeWASocket,
-    useMultiFileAuthState,
     DisconnectReason,
     downloadMediaMessage
 } = require('@whiskeysockets/baileys');
+const { useMongoAuthState } = require('./mongoAuthState');
 
 const { Boom } = require('@hapi/boom');
 const qrcodeTerminal = require('qrcode-terminal');
@@ -188,18 +188,6 @@ function getPhoneNumberFromLid(lid) {
     if (lidReverseCache.has(cleanLid)) {
         return lidReverseCache.get(cleanLid);
     }
-    try {
-        const filePath = path.join(__dirname, 'auth_info', `lid-mapping-${cleanLid}_reverse.json`);
-        if (fs.existsSync(filePath)) {
-            const raw = fs.readFileSync(filePath, 'utf-8');
-            const num = JSON.parse(raw);
-            if (num) {
-                const strNum = String(num);
-                lidReverseCache.set(cleanLid, strNum);
-                return strNum;
-            }
-        }
-    } catch {}
     return null;
 }
 
@@ -547,45 +535,42 @@ function generateToken12() {
 }
 
 function getApiSettings() {
+    const envToken = process.env.API_MASTER_TOKEN ? String(process.env.API_MASTER_TOKEN).trim() : '';
+    let settings = {
+        token: envToken || generateToken12(),
+        isEnabled: true,
+        webhookUrl: '',
+        webhookEnabled: false,
+        createdAt: new Date().toISOString(),
+        lastUsed: null,
+        totalSent: 0
+    };
     try {
-        if (!fs.existsSync(API_SETTINGS_FILE)) {
-            const initial = {
-                token: generateToken12(),
-                isEnabled: true,
-                webhookUrl: '',
-                webhookEnabled: false,
-                createdAt: new Date().toISOString(),
-                lastUsed: null,
-                totalSent: 0
-            };
-            fs.writeFileSync(API_SETTINGS_FILE, JSON.stringify(initial, null, 2), 'utf-8');
-            return initial;
+        if (fs.existsSync(API_SETTINGS_FILE)) {
+            const data = fs.readFileSync(API_SETTINGS_FILE, 'utf-8');
+            const parsed = JSON.parse(data || '{}');
+            settings = { ...settings, ...parsed };
         }
-        const data = fs.readFileSync(API_SETTINGS_FILE, 'utf-8');
-        const settings = JSON.parse(data || '{}');
-        if (!settings.token || settings.token.length !== 12) {
-            settings.token = generateToken12();
-            if (settings.isEnabled === undefined) settings.isEnabled = true;
-            fs.writeFileSync(API_SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf-8');
-        }
-        return settings;
     } catch (e) {
         console.error('Error reading API settings:', e);
-        return {
-            token: generateToken12(),
-            isEnabled: true,
-            webhookUrl: '',
-            webhookEnabled: false,
-            createdAt: new Date().toISOString(),
-            lastUsed: null,
-            totalSent: 0
-        };
     }
+    if (envToken) {
+        settings.token = envToken;
+    } else if (!settings.token || settings.token.length !== 12) {
+        settings.token = generateToken12();
+        if (settings.isEnabled === undefined) settings.isEnabled = true;
+    }
+    return settings;
 }
 
 function saveApiSettings(settings) {
     try {
-        fs.writeFileSync(API_SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf-8');
+        const toSave = { ...settings };
+        // If master token is managed via environment, do not write raw token to disk file
+        if (process.env.API_MASTER_TOKEN) {
+            toSave.token = '';
+        }
+        fs.writeFileSync(API_SETTINGS_FILE, JSON.stringify(toSave, null, 2), 'utf-8');
         return true;
     } catch (e) {
         console.error('Error saving API settings:', e);
@@ -2088,7 +2073,7 @@ app.post('/api/send-text', handleSendText);
 
 async function startBot() {
     try {
-        const { state, saveCreds } = await useMultiFileAuthState('auth_info');
+        const { state, saveCreds } = await useMongoAuthState('admin');
 
         sock = makeWASocket({
             auth: state,
@@ -2117,6 +2102,8 @@ async function startBot() {
                 connectionStatus = 'qr';
                 console.log('\nScan this QR code with WhatsApp:\n');
                 qrcodeTerminal.generate(qr, { small: true });
+                const { recordAdminWhatsAppSession } = require('./auth');
+                recordAdminWhatsAppSession({ status: 'waiting' }).catch(() => {});
             }
 
             if (connection === 'open') {
@@ -2132,6 +2119,9 @@ async function startBot() {
                 console.log('WhatsApp:', connectedNumber);
                 console.log('=================================');
 
+                const { recordAdminWhatsAppSession } = require('./auth');
+                recordAdminWhatsAppSession({ status: 'connected', phone: connectedNumber }).catch(() => {});
+
                 lastConnectedTime = new Date().toISOString();
                 broadcastIncomingEvent('connection_status', { status: 'connected', number: connectedNumber });
                 processQueue();
@@ -2142,6 +2132,9 @@ async function startBot() {
                 connectedNumber = null;
                 global.__waAdminSocket = null; // Clear so auth.js knows WhatsApp is disconnected
                 broadcastIncomingEvent('connection_status', { status: 'disconnected', number: null });
+
+                const { recordAdminWhatsAppSession } = require('./auth');
+                recordAdminWhatsAppSession({ status: 'disconnected', phone: null }).catch(() => {});
 
                 const statusCode = lastDisconnect?.error instanceof Boom ? lastDisconnect.error.output?.statusCode : null;
                 const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
@@ -2428,19 +2421,25 @@ app.listen(PORT, () => {
 });
 
 // Admin Watchdog: Ensure Admin WhatsApp socket remains 24/7 active
-setInterval(() => {
+const adminWatchdog = setInterval(async () => {
     if (connectionStatus === 'disconnected') {
-        const fs = require('fs');
-        const authPath = path.join(__dirname, 'auth_info');
-        if (fs.existsSync(path.join(authPath, 'creds.json'))) {
-            console.log('[AdminWatchdog] Admin WhatsApp offline, auto-reconnecting...');
-            startBot().catch(e => console.error('[AdminWatchdog] Reconnect err:', e.message));
+        try {
+            const SessionAuth = require('./models/SessionAuth');
+            const hasCreds = await SessionAuth.exists({ id: 'admin_creds.json' });
+            if (hasCreds) {
+                console.log('[AdminWatchdog] Admin WhatsApp offline, auto-reconnecting from MongoDB...');
+                startBot().catch(e => console.error('[AdminWatchdog] Reconnect err:', e.message));
+            }
+        } catch (e) {
+            // DB not connected or lookup error
         }
     }
 }, 45000);
+if (typeof adminWatchdog?.unref === 'function') adminWatchdog.unref();
 
 module.exports = {
     app,
+    startBot,
     appendMessageReport,
     appendIncomingMessage,
     broadcastIncomingEvent,
