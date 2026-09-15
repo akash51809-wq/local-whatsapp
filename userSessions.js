@@ -215,6 +215,11 @@ async function startUserSession(userId) {
 }
 
 async function stopUserSession(userId) {
+    if (String(userId || '').trim().toUpperCase() === 'ADMIN') {
+        console.warn(`[UserSession] BLOCKED stopUserSession for admin userId=${userId}`);
+        return;
+    }
+
     const session = sessions.get(userId);
     if (session) {
         if (session.socket) {
@@ -224,13 +229,14 @@ async function stopUserSession(userId) {
     }
     
     await WhatsAppSession.updateOne(
-        { ownerUserId: userId },
+        { ownerUserId: userId, role: 'user' },
         { status: 'disconnected', updatedAt: new Date() }
     );
     console.log(`[UserSession] Session stopped for user ${userId}`);
 }
 
 function getUserSession(userId) {
+    if (String(userId || '').trim().toUpperCase() === 'ADMIN') return null;
     return sessions.get(userId) || null;
 }
 
@@ -263,6 +269,9 @@ async function getUserQR(userId) {
 }
 
 async function sendUserMessage(userId, jid, content) {
+    if (String(userId || '').trim().toUpperCase() === 'ADMIN') {
+        throw new Error('Admin messages must use dedicated Admin WhatsApp socket');
+    }
     const session = sessions.get(userId);
     if (!session || session.status !== 'connected' || !session.socket) {
         throw new Error('User session is not connected');
@@ -283,6 +292,7 @@ function getSessionByPhoneOrUserId(param) {
 
     // 2. Match by connectedNumber in active sessions
     for (const [userId, session] of sessions.entries()) {
+        if (String(userId).trim().toUpperCase() === 'ADMIN') continue;
         if (session.connectedNumber) {
             const sClean = String(session.connectedNumber).replace(/\D/g, '');
             if (sClean === clean || (clean10.length === 10 && sClean.slice(-10) === clean10)) {
@@ -517,6 +527,10 @@ function startUserSessionWatchdog() {
             
             // 1. Check all in-memory sessions
             for (const [userId, session] of sessions.entries()) {
+                if (String(userId).trim().toUpperCase() === 'ADMIN') {
+                    sessions.delete(userId);
+                    continue;
+                }
                 if (session.status === 'connected') {
                     // Check if underlying websocket is alive (ws.OPEN === 1)
                     const wsState = session.socket?.ws?.readyState;

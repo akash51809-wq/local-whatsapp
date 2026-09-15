@@ -397,9 +397,9 @@ function adminRequired(req, res, next) {
 // 1. Get list of all registered users with their details and WhatsApp status
 router.get('/api/admin/users', authRequired, adminRequired, async (req, res) => {
   try {
-    const users = await User.find({}).sort({ createdAt: -1 });
+    const users = await User.find({ role: { $ne: 'admin' }, userId: { $ne: 'ADMIN' } }).sort({ createdAt: -1 });
     const { sessions } = require('./userSessions');
-    const dbSessions = await WhatsAppSession.find({});
+    const dbSessions = await WhatsAppSession.find({ role: 'user', ownerUserId: { $ne: 'ADMIN' } });
     const sessionMap = new Map();
     for (const s of dbSessions) {
       if (s.ownerUserId) sessionMap.set(s.ownerUserId, s);
@@ -410,17 +410,13 @@ router.get('/api/admin/users', authRequired, adminRequired, async (req, res) => 
       const dbS = sessionMap.get(u.userId);
       
       let waStatus = 'not_scanned';
-      if (u.role === 'admin') {
-        waStatus = (global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function') ? 'connected' : 'disconnected';
-      } else if (active && active.status === 'connected') {
+      if (active && active.status === 'connected') {
         waStatus = 'connected';
       } else if (dbS && dbS.status) {
         waStatus = dbS.status;
       }
 
-      const rawPhone = (u.role === 'admin' && global.__waAdminSocket?.user?.id) 
-        ? String(global.__waAdminSocket.user.id).split(':')[0].replace(/\D/g, '')
-        : (active?.connectedNumber || dbS?.phone || null);
+      const rawPhone = active?.connectedNumber || dbS?.phone || null;
 
       return {
         userId: u.userId,
@@ -448,8 +444,11 @@ router.get('/api/admin/users', authRequired, adminRequired, async (req, res) => 
 // 2. Update user profile (name, mobile, plan, role, status)
 router.put('/api/admin/users/:userId', authRequired, adminRequired, async (req, res) => {
   try {
+    if (String(req.params.userId || '').toUpperCase() === 'ADMIN') {
+      return res.status(403).json({ success: false, message: 'Admin account cannot be managed via user endpoints.' });
+    }
     const { name, mobile, plan, role, status } = req.body || {};
-    const user = await User.findOne({ userId: req.params.userId });
+    const user = await User.findOne({ userId: req.params.userId, role: { $ne: 'admin' } });
     if (!user) return res.status(404).json({ success: false, message: 'यूजर नहीं मिला।' });
 
     if (name !== undefined) user.name = String(name).trim();
@@ -470,7 +469,10 @@ router.put('/api/admin/users/:userId', authRequired, adminRequired, async (req, 
 // 3. Toggle user active / inactive status
 router.post('/api/admin/users/:userId/toggle-status', authRequired, adminRequired, async (req, res) => {
   try {
-    const user = await User.findOne({ userId: req.params.userId });
+    if (String(req.params.userId || '').toUpperCase() === 'ADMIN') {
+      return res.status(403).json({ success: false, message: 'Admin account status cannot be toggled.' });
+    }
+    const user = await User.findOne({ userId: req.params.userId, role: { $ne: 'admin' } });
     if (!user) return res.status(404).json({ success: false, message: 'यूजर नहीं मिला।' });
 
     const newStatus = user.status === 'active' ? 'inactive' : 'active';
@@ -492,7 +494,10 @@ router.post('/api/admin/users/:userId/toggle-status', authRequired, adminRequire
 // 4. Send new generated password to user's registered WhatsApp
 router.post('/api/admin/users/:userId/send-password', authRequired, adminRequired, async (req, res) => {
   try {
-    const user = await User.findOne({ userId: req.params.userId });
+    if (String(req.params.userId || '').toUpperCase() === 'ADMIN') {
+      return res.status(403).json({ success: false, message: 'Admin password cannot be reset via user endpoints.' });
+    }
+    const user = await User.findOne({ userId: req.params.userId, role: { $ne: 'admin' } });
     if (!user) return res.status(404).json({ success: false, message: 'यूजर नहीं मिला।' });
 
     const targetMobile = user.mobile || user.username;
