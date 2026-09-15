@@ -7,28 +7,93 @@ const BufferJSON = {
   reviver: (k, v) => (v && typeof v === 'object' && v.type === 'Buffer' ? Buffer.from(v.data, 'base64') : v),
 };
 
-let cachedDerivedKey = null;
-let cachedSecret = null;
+let cachedCandidateKeys = null;
+let lastEnvSignature = null;
+const SALT = 'wa_session_auth_salt_v1';
 
-// Derive 32-byte key for AES-256-GCM encryption with caching for high performance
-function getEncryptionKey() {
-  const secret = process.env.SESSION_ENCRYPTION_KEY ? String(process.env.SESSION_ENCRYPTION_KEY).trim() : '';
-  if (!secret) {
-    cachedDerivedKey = null;
-    cachedSecret = null;
+function normalizeSecret(val) {
+  if (!val) return '';
+  let str = String(val).trim();
+  if ((str.startsWith('"') && str.endsWith('"')) || (str.startsWith("'") && str.endsWith("'"))) {
+    str = str.slice(1, -1);
+  }
+  return str;
+}
+
+function deriveKey(secret) {
+  return crypto.scryptSync(secret, SALT, 32);
+}
+
+// Build candidate keys list: Primary key first, followed by legacy candidates (in memory)
+function getCandidateKeys() {
+  const primaryRaw = process.env.SESSION_ENCRYPTION_KEY;
+  const primary = normalizeSecret(primaryRaw);
+  if (!primary) {
+    cachedCandidateKeys = null;
+    lastEnvSignature = null;
     throw new Error('FATAL: SESSION_ENCRYPTION_KEY environment variable is missing. A secure key (min 16 chars) is required to encrypt/decrypt WhatsApp session credentials.');
   }
-  if (secret.length < 16) {
-    cachedDerivedKey = null;
-    cachedSecret = null;
+  if (primary.length < 16) {
+    cachedCandidateKeys = null;
+    lastEnvSignature = null;
     throw new Error('FATAL: SESSION_ENCRYPTION_KEY is too short (minimum 16 characters required for strong AES-256 key derivation).');
   }
-  if (cachedSecret === secret && cachedDerivedKey) {
-    return cachedDerivedKey;
+
+  const authSecret = normalizeSecret(process.env.AUTH_SECRET);
+  const mongoUri = normalizeSecret(process.env.MONGO_URI);
+  const legacyDefault = 'wa-automation-secure-salt-key-2026';
+
+  const envSig = `${primary}||${authSecret}||${mongoUri}`;
+  if (cachedCandidateKeys && lastEnvSignature === envSig) {
+    return cachedCandidateKeys;
   }
-  cachedDerivedKey = crypto.scryptSync(secret, 'wa_session_auth_salt_v1', 32);
-  cachedSecret = secret;
-  return cachedDerivedKey;
+
+  const candidates = [];
+  const seenSecrets = new Set();
+
+  // 1. Primary candidate (SESSION_ENCRYPTION_KEY)
+  candidates.push({
+    label: 'primary',
+    key: deriveKey(primary)
+  });
+  seenSecrets.add(primary);
+
+  // 2. Legacy fallback candidate: legacy default salt key
+  if (!seenSecrets.has(legacyDefault)) {
+    candidates.push({
+      label: 'legacy-default',
+      key: deriveKey(legacyDefault)
+    });
+    seenSecrets.add(legacyDefault);
+  }
+
+  // 3. Legacy fallback candidate: AUTH_SECRET (if defined)
+  if (authSecret && !seenSecrets.has(authSecret)) {
+    candidates.push({
+      label: 'AUTH_SECRET',
+      key: deriveKey(authSecret)
+    });
+    seenSecrets.add(authSecret);
+  }
+
+  // 4. Legacy fallback candidate: MONGO_URI (if defined)
+  if (mongoUri && !seenSecrets.has(mongoUri)) {
+    candidates.push({
+      label: 'MONGO_URI',
+      key: deriveKey(mongoUri)
+    });
+    seenSecrets.add(mongoUri);
+  }
+
+  cachedCandidateKeys = candidates;
+  lastEnvSignature = envSig;
+  return candidates;
+}
+
+// Derive 32-byte key for AES-256-GCM encryption using primary key
+function getEncryptionKey() {
+  const candidates = getCandidateKeys();
+  return candidates[0].key;
 }
 
 function encryptPayload(plaintext) {
@@ -51,19 +116,34 @@ function encryptPayload(plaintext) {
   }
 }
 
+// In-memory multi-key decryption: strictly read-only, NO MongoDB writes
 function decryptPayload(payload) {
   try {
-    if (!payload || !payload.encrypted) {
+    if (!payload || !payload.encrypted || !payload.iv || !payload.tag || !payload.data) {
       return null;
     }
-    const key = getEncryptionKey();
+    const candidates = getCandidateKeys();
     const iv = Buffer.from(payload.iv, 'hex');
     const authTag = Buffer.from(payload.tag, 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-    decipher.setAuthTag(authTag);
-    let decrypted = decipher.update(payload.data, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
+
+    for (let i = 0; i < candidates.length; i++) {
+      const candidate = candidates[i];
+      try {
+        const decipher = crypto.createDecipheriv('aes-256-gcm', candidate.key, iv);
+        decipher.setAuthTag(authTag);
+        let decrypted = decipher.update(payload.data, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+        if (i > 0) {
+          console.log(`[SessionAuth] Successfully decrypted record with legacy key candidate: ${candidate.label}`);
+        }
+        return decrypted;
+      } catch (err) {
+        // Tag verification failed for this candidate, try next
+      }
+    }
+
+    console.error('[SessionAuth] Decryption error: Unsupported state or unable to authenticate data with any known candidate key.');
+    return null;
   } catch (err) {
     console.error('[SessionAuth] Decryption error:', err.message);
     return null;
