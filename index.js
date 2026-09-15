@@ -2106,7 +2106,7 @@ async function startBot() {
             auth: state,
             printQRInTerminal: false,
             browser: ["Chrome (Windows)", "Desktop", "10.0"],
-            syncFullHistory: true,
+            syncFullHistory: false,
             keepAliveIntervalMs: 30000,
             getMessage: async (key) => {
                 const all = getIncomingMessages();
@@ -2159,18 +2159,18 @@ async function startBot() {
             }
 
             if (connection === 'close') {
-                connectionStatus = 'disconnected';
+                const statusCode = lastDisconnect?.error instanceof Boom ? lastDisconnect.error.output?.statusCode : null;
+                const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+
+                connectionStatus = shouldReconnect ? 'connecting' : 'disconnected';
                 connectedNumber = null;
                 if (global.__waAdminSocket === newSock) {
                     global.__waAdminSocket = null; // Clear so auth.js knows WhatsApp is disconnected
                 }
-                broadcastIncomingEvent('connection_status', { status: 'disconnected', number: null });
+                broadcastIncomingEvent('connection_status', { status: connectionStatus, number: null });
 
                 const { recordAdminWhatsAppSession } = require('./auth');
-                recordAdminWhatsAppSession({ status: 'disconnected', phone: null }).catch(() => {});
-
-                const statusCode = lastDisconnect?.error instanceof Boom ? lastDisconnect.error.output?.statusCode : null;
-                const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+                recordAdminWhatsAppSession({ status: shouldReconnect ? 'connecting' : 'disconnected', phone: null }).catch(() => {});
 
                 console.log('Connection closed. Reconnecting:', shouldReconnect);
                 if (shouldReconnect) {
