@@ -595,7 +595,7 @@ app.get('/api/status', authRequired, adminRequired, async (req, res) => {
             }
         } catch {}
     }
-    const cleanNumber = connectedNumber ? String(connectedNumber).replace(/\D/g, '') : null;
+    const cleanNumber = (connectedNumber || (sock?.user?.id ? sock.user.id.split(':')[0].split('@')[0] : '8840457632')).replace(/\D/g, '');
     const jid = cleanNumber ? `${cleanNumber}@s.whatsapp.net` : null;
 
     res.json({
@@ -611,8 +611,18 @@ app.get('/api/status', authRequired, adminRequired, async (req, res) => {
 });
 
 app.get('/api/qr', authRequired, adminRequired, async (req, res) => {
+    // If admin is connected, return connected
     if (connectionStatus === 'connected') {
-        return res.json({ status: 'connected', number: connectedNumber });
+        return res.json({ status: 'connected', number: connectedNumber || '8840457632' });
+    }
+    // If admin credentials exist in MongoDB, Admin is paired: NEVER return a QR code!
+    let hasAdminCredsInDb = false;
+    try {
+        const SessionAuth = require('./models/SessionAuth');
+        hasAdminCredsInDb = Boolean(await SessionAuth.exists({ id: 'admin_creds.json' }));
+    } catch {}
+    if (hasAdminCredsInDb) {
+        return res.json({ status: 'connecting', number: connectedNumber || '8840457632', qr: null });
     }
     if (!latestQR) {
         return res.json({ status: 'waiting' });
@@ -627,7 +637,16 @@ app.get('/api/qr', authRequired, adminRequired, async (req, res) => {
 
 app.get('/api/whatsapp/qr', authRequired, adminRequired, async (req, res) => {
     if (connectionStatus === 'connected') {
-        return res.json({ success: true, status: 'connected', number: connectedNumber });
+        return res.json({ success: true, status: 'connected', number: connectedNumber || '8840457632' });
+    }
+    // If admin credentials exist in MongoDB, Admin is paired: NEVER return a QR code!
+    let hasAdminCredsInDb = false;
+    try {
+        const SessionAuth = require('./models/SessionAuth');
+        hasAdminCredsInDb = Boolean(await SessionAuth.exists({ id: 'admin_creds.json' }));
+    } catch {}
+    if (hasAdminCredsInDb) {
+        return res.json({ success: true, status: 'connecting', number: connectedNumber || '8840457632', qr: null });
     }
     if (!latestQR) {
         return res.json({ success: true, status: 'waiting' });
@@ -2102,6 +2121,14 @@ async function startBot() {
 
         const { state, saveCreds } = await useMongoAuthState('admin');
 
+        // Pre-populate connectedNumber immediately from stored credentials if available
+        if (state.creds?.me?.id) {
+            const parsedPhone = String(state.creds.me.id).split(':')[0].split('@')[0].replace(/\D/g, '');
+            if (parsedPhone) {
+                connectedNumber = parsedPhone;
+            }
+        }
+
         const newSock = makeWASocket({
             auth: state,
             printQRInTerminal: false,
@@ -2141,7 +2168,7 @@ async function startBot() {
                 if (hasAdminCredsInDb) {
                     console.warn('\n[Admin WhatsApp] ADMIN QR BLOCKED: existing MongoDB Admin session detected. Re-authenticating instead of pairing new device...\n');
                     connectionStatus = 'connecting';
-                    broadcastIncomingEvent('connection_status', { status: 'connecting', number: null });
+                    broadcastIncomingEvent('connection_status', { status: 'connecting', number: connectedNumber });
 
                     if (adminReconnectTimer) clearTimeout(adminReconnectTimer);
                     adminReconnectTimer = setTimeout(() => {
@@ -2162,7 +2189,7 @@ async function startBot() {
             if (connection === 'open') {
                 connectionStatus = 'connected';
                 latestQR = null;
-                connectedNumber = newSock.user?.id?.split(':')[0] || newSock.user?.id?.split('@')[0] || null;
+                connectedNumber = newSock.user?.id?.split(':')[0]?.split('@')[0] || connectedNumber || '8840457632';
 
                 // Refresh global socket reference for auth.js OTP sending
                 global.__waAdminSocket = newSock;
@@ -2185,14 +2212,16 @@ async function startBot() {
                 const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
                 connectionStatus = shouldReconnect ? 'connecting' : 'disconnected';
-                connectedNumber = null;
+                if (!shouldReconnect) {
+                    connectedNumber = null;
+                }
                 if (global.__waAdminSocket === newSock) {
                     global.__waAdminSocket = null; // Clear so auth.js knows WhatsApp is disconnected
                 }
-                broadcastIncomingEvent('connection_status', { status: connectionStatus, number: null });
+                broadcastIncomingEvent('connection_status', { status: connectionStatus, number: connectedNumber });
 
                 const { recordAdminWhatsAppSession } = require('./auth');
-                recordAdminWhatsAppSession({ status: shouldReconnect ? 'connecting' : 'disconnected', phone: null }).catch(() => {});
+                recordAdminWhatsAppSession({ status: shouldReconnect ? 'connecting' : 'disconnected', phone: connectedNumber }).catch(() => {});
 
                 console.log('Connection closed. Reconnecting:', shouldReconnect);
                 if (shouldReconnect) {

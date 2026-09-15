@@ -664,9 +664,10 @@ router.get('/api/user/whatsapp/sessions', authRequired, async (req, res) => {
     const list = [];
 
     if (req.user.role === 'admin') {
+      const dbAdminS = await WhatsAppSession.findOne({ sessionId: 'admin' });
       const adminPhone = global.__waAdminSocket?.user?.id
         ? String(global.__waAdminSocket.user.id).split(':')[0].split('@')[0].replace(/\D/g, '')
-        : null;
+        : (dbAdminS?.phone || process.env.ADMIN_PHONE || '8840457632');
       const isAdminConnected = Boolean(global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function');
       list.push({
         id: 'admin',
@@ -964,9 +965,19 @@ async function recordAdminWhatsAppSession(info = {}) {
   try {
     const admin = await User.findOne({ role: 'admin' });
     if (!admin) return;
+    const updateFields = {
+      ownerUserId: admin.userId,
+      role: 'admin',
+      status: info.status || 'waiting',
+      ...(info.status === 'connected' ? { lastConnectedAt: new Date() } : {}),
+      updatedAt: new Date()
+    };
+    if (info.phone) {
+      updateFields.phone = info.phone;
+    }
     await WhatsAppSession.updateOne(
       { sessionId: process.env.ADMIN_WHATSAPP_SESSION_ID || 'admin' },
-      { $set: { ownerUserId: admin.userId, phone: info.phone || null, role: 'admin', status: info.status || 'waiting', ...(info.status === 'connected' ? { lastConnectedAt: new Date() } : {}), updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
+      { $set: updateFields, $setOnInsert: { createdAt: new Date() } },
       { upsert: true }
     );
   } catch (error) {
