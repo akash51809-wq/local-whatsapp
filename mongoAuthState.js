@@ -200,6 +200,14 @@ async function useMongoAuthState(sessionId) {
     } catch (error) {}
   };
 
+  const normalizedSessionId = String(sessionId || '').trim();
+  const isInvalidAdminUserSession = /^user-admin$/i.test(normalizedSessionId);
+  if (isInvalidAdminUserSession) {
+    const msg = `FATAL: Invalid Admin user session detected (sessionId='${sessionId}'). Admin must use canonical sessionId='admin'. Rejecting to prevent initAuthCreds() or credential pollution.`;
+    console.error(`[SessionAuth] ${msg}`);
+    throw new Error(msg);
+  }
+
   const isAdmin = (sessionId === 'admin');
   const credsKey = `${sessionId}_creds.json`;
 

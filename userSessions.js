@@ -7,6 +7,17 @@ const { Boom } = require('@hapi/boom');
 const sessions = new Map();
 
 async function startUserSession(userId) {
+    const normalizedUserId = String(userId || '').trim();
+    if (!normalizedUserId || normalizedUserId.toUpperCase() === 'ADMIN') {
+        console.warn(`[UserSession] BLOCKED admin userId=${userId} from user session`);
+        return {
+            status: 'blocked',
+            error: 'Admin user must use the dedicated Admin WhatsApp session (sessionId=admin)',
+            qr: null,
+            connectedNumber: null
+        };
+    }
+
     if (sessions.has(userId)) {
         const currentSession = sessions.get(userId);
         if (currentSession.status === 'connected' && currentSession.socket) {
@@ -86,6 +97,10 @@ async function startUserSession(userId) {
         if (!currentSession) return;
 
         if (qr) {
+            if (String(userId || '').trim().toUpperCase() === 'ADMIN') {
+                console.warn(`[UserSession] BLOCKED QR for admin user ${userId}`);
+                return;
+            }
             console.log(`[UserSession] Received QR for user ${userId}`);
             currentSession.qr = qr;
             currentSession.status = 'waiting';
@@ -220,6 +235,11 @@ function getUserSession(userId) {
 }
 
 async function getUserQR(userId) {
+    if (String(userId || '').trim().toUpperCase() === 'ADMIN') {
+        console.warn(`[UserSession] BLOCKED QR request for admin user ${userId}`);
+        return { status: 'blocked', qr: null, connectedNumber: null };
+    }
+
     const session = sessions.get(userId);
     if (!session) {
         return { status: 'disconnected', qr: null, connectedNumber: null };
@@ -314,6 +334,15 @@ async function findOrLoadSession(sessionParam, caller = null) {
                 }
             };
         }
+        return {
+            userId: 'ADMIN',
+            isAdmin: true,
+            session: {
+                socket: global.__waAdminSocket || null,
+                status: 'connecting',
+                connectedNumber: adminPhone
+            }
+        };
     }
 
     // 3. For NON-ADMIN: Strict user session isolation
@@ -369,7 +398,7 @@ async function findOrLoadSession(sessionParam, caller = null) {
     }
 
     const targetUserId = match?.userId || (callerUserId && isAdmin ? null : callerUserId);
-    if (targetUserId) {
+    if (targetUserId && String(targetUserId).trim().toUpperCase() !== 'ADMIN') {
         let s = sessions.get(targetUserId);
         if (s && s.status === 'connected' && s.socket) return { userId: targetUserId, session: s };
         
@@ -405,7 +434,7 @@ async function findOrLoadSession(sessionParam, caller = null) {
             phone: { $regex: clean10 + '$' },
             status: { $ne: 'logged_out' }
         });
-        if (dbS && dbS.ownerUserId) {
+        if (dbS && dbS.ownerUserId && String(dbS.ownerUserId).trim().toUpperCase() !== 'ADMIN') {
             let s = sessions.get(dbS.ownerUserId);
             if (!s || s.status !== 'connected') {
                 await startUserSession(dbS.ownerUserId);
@@ -436,7 +465,10 @@ async function restoreAllSessions() {
             for (const doc of credDocs) {
                 const match = doc.id.match(/^user-(.+?)_creds\.json$/);
                 if (match && match[1]) {
-                    userIdsToRestore.add(match[1]);
+                    const uId = match[1];
+                    if (String(uId).trim().toUpperCase() !== 'ADMIN') {
+                        userIdsToRestore.add(uId);
+                    }
                 }
             }
         } catch (e) {
@@ -451,7 +483,7 @@ async function restoreAllSessions() {
             }).lean();
 
             for (const sessionRecord of sessionsToRestore) {
-                if (sessionRecord.ownerUserId) {
+                if (sessionRecord.ownerUserId && String(sessionRecord.ownerUserId).trim().toUpperCase() !== 'ADMIN') {
                     userIdsToRestore.add(sessionRecord.ownerUserId);
                 }
             }
@@ -505,6 +537,7 @@ function startUserSessionWatchdog() {
                     const match = doc.id.match(/^user-(.+?)_creds\.json$/);
                     if (match && match[1]) {
                         const uId = match[1];
+                        if (String(uId).trim().toUpperCase() === 'ADMIN') continue;
                         const active = sessions.get(uId);
                         if (!active || active.status === 'disconnected') {
                             const dbRec = await WhatsAppSession.findOne({ 

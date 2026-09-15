@@ -536,6 +536,23 @@ router.post('/api/admin/users/:userId/send-password', authRequired, adminRequire
 // Get user's own WhatsApp connection status
 router.get('/api/user/whatsapp/status', authRequired, async (req, res) => {
   try {
+    const isRoleAdmin = req.user.role === 'admin' || String(req.user.userId || '').toUpperCase() === 'ADMIN';
+    if (isRoleAdmin) {
+      console.log('[AdminSession] Using dedicated sessionId=admin for status check');
+      const isConn = Boolean(global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function');
+      const adminPhone = global.__waAdminSocket?.user?.id
+        ? String(global.__waAdminSocket.user.id).split(':')[0].split('@')[0].replace(/\D/g, '')
+        : (process.env.ADMIN_PHONE || '8840457632');
+      return res.json({
+        success: true,
+        status: isConn ? 'connected' : 'waiting',
+        number: isConn && adminPhone ? adminPhone.slice(-10) : null,
+        profileName: global.__waAdminSocket?.user?.name || (adminPhone ? `+${adminPhone}` : 'Admin WhatsApp'),
+        ready: isConn,
+        lastConnected: null,
+      });
+    }
+
     const { getUserSession, startUserSession } = require('./userSessions');
     let session = getUserSession(req.user.userId);
     const dbSession = await WhatsAppSession.findOne({ 
@@ -568,6 +585,18 @@ router.get('/api/user/whatsapp/status', authRequired, async (req, res) => {
 // Get QR code for user to scan their own WhatsApp
 router.get('/api/user/whatsapp/qr', authRequired, async (req, res) => {
   try {
+    const isRoleAdmin = req.user.role === 'admin' || String(req.user.userId || '').toUpperCase() === 'ADMIN';
+    if (isRoleAdmin) {
+      console.warn('[UserSession] BLOCKED QR request for admin user ADMIN via user QR endpoint');
+      const isConn = Boolean(global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function');
+      return res.json({
+        success: true,
+        status: isConn ? 'connected' : 'waiting',
+        qr: null,
+        connectedNumber: isConn ? (global.__waAdminSocket?.user?.id?.split(':')[0]?.replace(/\D/g, '') || null) : null
+      });
+    }
+
     const { getUserQR, getUserSession, startUserSession } = require('./userSessions');
     let session = getUserSession(req.user.userId);
     if (!session || session.status === 'disconnected') {
@@ -584,6 +613,15 @@ router.get('/api/user/whatsapp/qr', authRequired, async (req, res) => {
 // Start/connect user's WhatsApp session
 router.post('/api/user/whatsapp/connect', authRequired, async (req, res) => {
   try {
+    const isRoleAdmin = req.user.role === 'admin' || String(req.user.userId || '').toUpperCase() === 'ADMIN';
+    if (isRoleAdmin) {
+      console.warn('[UserSession] BLOCKED admin userId=ADMIN from user session connect endpoint');
+      return res.status(400).json({
+        success: false,
+        message: 'Admin WhatsApp session is managed automatically via dedicated sessionId=admin.'
+      });
+    }
+
     const { startUserSession } = require('./userSessions');
     const result = await startUserSession(req.user.userId);
     res.json({ success: true, message: 'WhatsApp session started.', ...result });
@@ -596,6 +634,15 @@ router.post('/api/user/whatsapp/connect', authRequired, async (req, res) => {
 // Disconnect user's WhatsApp session
 router.post('/api/user/whatsapp/disconnect', authRequired, async (req, res) => {
   try {
+    const isRoleAdmin = req.user.role === 'admin' || String(req.user.userId || '').toUpperCase() === 'ADMIN';
+    if (isRoleAdmin) {
+      console.warn('[UserSession] BLOCKED admin userId=ADMIN from user session disconnect endpoint');
+      return res.status(400).json({
+        success: false,
+        message: 'Admin WhatsApp session cannot be disconnected via user session endpoint.'
+      });
+    }
+
     const { stopUserSession } = require('./userSessions');
     await stopUserSession(req.user.userId);
     res.json({ success: true, message: 'WhatsApp disconnected.' });
@@ -629,7 +676,7 @@ router.get('/api/user/whatsapp/sessions', authRequired, async (req, res) => {
 
       const dbSessions = await WhatsAppSession.find({});
       for (const s of dbSessions) {
-        if (s.sessionId === 'admin') continue;
+        if (s.sessionId === 'admin' || s.role === 'admin' || String(s.ownerUserId || '').toUpperCase() === 'ADMIN') continue;
         const active = sessions?.get(s.ownerUserId);
         const num = active?.connectedNumber || s.phone || null;
         const clean10 = num ? String(num).replace(/\D/g, '').slice(-10) : null;
