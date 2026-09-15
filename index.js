@@ -2071,11 +2071,38 @@ app.post('/api/send-text', handleSendText);
    WHATSAPP CONNECTION
 ========================================================= */
 
+let isStartingBot = false;
+let adminReconnectTimer = null;
+
 async function startBot() {
+    if (isStartingBot) {
+        console.log('[AdminSocket] Startup already in progress, skipping concurrent call.');
+        return;
+    }
+    isStartingBot = true;
+
+    if (adminReconnectTimer) {
+        clearTimeout(adminReconnectTimer);
+        adminReconnectTimer = null;
+    }
+
     try {
+        // Safely tear down and unbind existing Admin socket before creating a new one
+        if (sock) {
+            try {
+                console.log('[AdminSocket] Safely tearing down previous Admin socket...');
+                sock.ev?.removeAllListeners?.();
+                sock.end?.();
+            } catch (cleanupErr) {
+                console.warn('[AdminSocket] Warning during previous socket teardown:', cleanupErr.message);
+            } finally {
+                sock = null;
+            }
+        }
+
         const { state, saveCreds } = await useMongoAuthState('admin');
 
-        sock = makeWASocket({
+        const newSock = makeWASocket({
             auth: state,
             printQRInTerminal: false,
             browser: ["Chrome (Windows)", "Desktop", "10.0"],
@@ -2091,10 +2118,14 @@ async function startBot() {
             }
         });
 
+        sock = newSock;
         // Expose socket globally so auth.js can use it for OTP/signup messages
-        global.__waAdminSocket = sock;
+        global.__waAdminSocket = newSock;
 
-        sock.ev.on('connection.update', (update) => {
+        newSock.ev.on('connection.update', (update) => {
+            // Guard against stale events from an older or replaced socket
+            if (newSock !== sock) return;
+
             const { connection, lastDisconnect, qr } = update;
 
             if (qr) {
@@ -2109,10 +2140,10 @@ async function startBot() {
             if (connection === 'open') {
                 connectionStatus = 'connected';
                 latestQR = null;
-                connectedNumber = sock.user?.id?.split(':')[0] || sock.user?.id?.split('@')[0] || null;
+                connectedNumber = newSock.user?.id?.split(':')[0] || newSock.user?.id?.split('@')[0] || null;
 
                 // Refresh global socket reference for auth.js OTP sending
-                global.__waAdminSocket = sock;
+                global.__waAdminSocket = newSock;
 
                 console.log('=================================');
                 console.log('✅ WhatsApp connected successfully!');
@@ -2130,7 +2161,9 @@ async function startBot() {
             if (connection === 'close') {
                 connectionStatus = 'disconnected';
                 connectedNumber = null;
-                global.__waAdminSocket = null; // Clear so auth.js knows WhatsApp is disconnected
+                if (global.__waAdminSocket === newSock) {
+                    global.__waAdminSocket = null; // Clear so auth.js knows WhatsApp is disconnected
+                }
                 broadcastIncomingEvent('connection_status', { status: 'disconnected', number: null });
 
                 const { recordAdminWhatsAppSession } = require('./auth');
@@ -2141,7 +2174,11 @@ async function startBot() {
 
                 console.log('Connection closed. Reconnecting:', shouldReconnect);
                 if (shouldReconnect) {
-                    setTimeout(() => { startBot(); }, 3000);
+                    if (adminReconnectTimer) clearTimeout(adminReconnectTimer);
+                    adminReconnectTimer = setTimeout(() => {
+                        adminReconnectTimer = null;
+                        startBot();
+                    }, 3000);
                 }
             }
         });
@@ -2239,7 +2276,13 @@ async function startBot() {
     } catch (error) {
         console.error('WhatsApp startup error:', error);
         connectionStatus = 'disconnected';
-        setTimeout(() => { startBot(); }, 5000);
+        if (adminReconnectTimer) clearTimeout(adminReconnectTimer);
+        adminReconnectTimer = setTimeout(() => {
+            adminReconnectTimer = null;
+            startBot();
+        }, 5000);
+    } finally {
+        isStartingBot = false;
     }
 }
 
