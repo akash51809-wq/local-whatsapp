@@ -1256,16 +1256,17 @@ app.get('/api/whatsapp/list', authRequired, adminRequired, (req, res) => {
 app.get('/api/whatsapp/groups', authRequired, async (req, res) => {
     try {
         const { findOrLoadSession } = require('./userSessions');
-        const match = await findOrLoadSession(null, req.user);
+        const sessionParam = req.query.session || null;
+        const match = await findOrLoadSession(sessionParam, req.user);
         let activeSocket = null;
 
-        if (match && match.session?.status === 'connected' && match.session?.socket) {
+        if (match && match.session?.status === 'connected' && match.session?.socket && Boolean(match.session.socket.user?.id)) {
             activeSocket = match.session.socket;
         } else if (req.user.role === 'admin') {
             activeSocket = getActiveAdminSocket();
         }
 
-        if (!activeSocket) {
+        if (!activeSocket || !activeSocket.user?.id) {
             return res.status(400).json({ 
                 success: false, 
                 message: 'WhatsApp कनेक्टेड नहीं है। कृपया पहले Dashboard से QR कोड स्कैन करें।' 
@@ -1287,36 +1288,75 @@ app.get('/api/whatsapp/groups', authRequired, async (req, res) => {
             }
         }
 
-        const groupList = Object.values(groups).map(group => ({
-            id: group.id || group.jid,
-            subject: group.subject || group.name || 'Unnamed Group',
-            size: group.participants?.length || group.size || 0,
-            participants: group.participants || []
+        const myJid = activeSocket.user?.id?.split(':')[0]?.split('@')[0] || '';
+
+        // Extract metadata for all participating groups
+        const rawGroups = Object.values(groups);
+        const groupList = await Promise.all(rawGroups.map(async (group) => {
+            const gid = group.id || group.jid;
+            let dp = null;
+            try {
+                if (typeof activeSocket.profilePictureUrl === 'function') {
+                    // Quick timeout attempt for group picture
+                    dp = await Promise.race([
+                        activeSocket.profilePictureUrl(gid, 'image').catch(() => null),
+                        new Promise(resolve => setTimeout(() => resolve(null), 1000))
+                    ]);
+                }
+            } catch (e) {}
+
+            const participants = (group.participants || []).map(p => {
+                const phone = String(p.id || '').split(':')[0].split('@')[0].replace(/\D/g, '');
+                const isAdmin = p.admin === 'admin' || p.admin === 'superadmin';
+                return {
+                    id: p.id,
+                    phone: phone,
+                    role: p.admin === 'superadmin' ? 'Super Admin' : (p.admin === 'admin' ? 'Admin' : 'Member'),
+                    isAdmin: isAdmin,
+                    isSuperAdmin: p.admin === 'superadmin'
+                };
+            });
+
+            const myParticipant = participants.find(p => p.phone === myJid);
+            const myRole = myParticipant?.isSuperAdmin ? 'Super Admin' : (myParticipant?.isAdmin ? 'Admin' : 'Member');
+
+            return {
+                id: gid,
+                subject: group.subject || group.name || 'Unnamed Group',
+                size: participants.length || group.size || 0,
+                desc: group.desc?.toString() || '',
+                creation: group.creation ? new Date(group.creation * 1000).toISOString() : null,
+                owner: group.owner ? String(group.owner).split(':')[0].split('@')[0] : null,
+                dp: dp,
+                myRole: myRole,
+                participants: participants
+            };
         }));
 
         res.json({ 
             success: true, 
-            groups: groupList 
+            groups: groupList,
+            total: groupList.length 
         });
     } catch (error) {
         console.error('Fetch groups error:', error);
         res.status(500).json({ 
             success: false, 
-            message: error.message 
+            message: error.message || 'ग्रुप्स लोड करने में समस्या हुई।' 
         });
     }
 });
 
-app.post('/api/send-group-message', authRequired, async (req, res) => {
+app.post('/api/send-group-message', authRequired, attachmentBodyParser, async (req, res) => {
     try {
-        const { groupIds, message } = req.body;
+        const { groupIds, message, session, attachment } = req.body;
 
         const { findOrLoadSession } = require('./userSessions');
-        const match = await findOrLoadSession(null, req.user);
+        const match = await findOrLoadSession(session || null, req.user);
         let activeSocket = null;
         let fromNumber = null;
 
-        if (match && match.session?.status === 'connected' && match.session?.socket) {
+        if (match && match.session?.status === 'connected' && match.session?.socket && Boolean(match.session.socket.user?.id)) {
             activeSocket = match.session.socket;
             fromNumber = match.session.connectedNumber || match.userId;
         } else if (req.user.role === 'admin') {
@@ -1324,7 +1364,7 @@ app.post('/api/send-group-message', authRequired, async (req, res) => {
             fromNumber = activeSocket?.user?.id ? String(activeSocket.user.id).split(':')[0].replace(/\D/g, '') : (connectedNumber || 'Admin');
         }
 
-        if (!activeSocket) {
+        if (!activeSocket || !activeSocket.user?.id) {
             return res.status(400).json({ 
                 success: false, 
                 message: 'WhatsApp कनेक्टेड नहीं है। कृपया पहले Dashboard से QR कोड स्कैन करें।' 
@@ -1338,38 +1378,53 @@ app.post('/api/send-group-message', authRequired, async (req, res) => {
             });
         }
 
-        if (req.user.role !== 'admin' && groupIds.length > 10) {
-            return res.status(400).json({
-                success: false,
-                message: 'एक बार में अधिकतम 10 ग्रुप्स पर ही मैसेज भेजा जा सकता है।'
+        if (!message && !attachment) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Message या attachment आवश्यक है।' 
             });
         }
 
-        if (!message || !String(message).trim()) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'Message खाली नहीं हो सकता' 
-            });
+        // Construct message payload
+        let messagePayload = {};
+        if (attachment && attachment.data) {
+            const base64Clean = attachment.data.replace(/^data:.*?;base64,/, '');
+            const buffer = Buffer.from(base64Clean, 'base64');
+            const mimeType = attachment.type || 'application/octet-stream';
+            const fileName = attachment.name || 'file';
+
+            if (mimeType.startsWith('image/')) {
+                messagePayload = { image: buffer, caption: message ? String(message) : undefined, mimetype: mimeType };
+            } else if (mimeType.startsWith('video/')) {
+                messagePayload = { video: buffer, caption: message ? String(message) : undefined, mimetype: mimeType };
+            } else if (mimeType.startsWith('audio/')) {
+                messagePayload = { audio: buffer, mimetype: mimeType, ptt: false };
+            } else {
+                messagePayload = { document: buffer, fileName: fileName, caption: message ? String(message) : undefined, mimetype: mimeType };
+            }
+        } else {
+            messagePayload = { text: String(message || '') };
         }
 
         const results = [];
 
         for (const groupId of groupIds) {
             try {
-                await activeSocket.sendMessage(groupId, { text: String(message) });
+                const sendRes = await activeSocket.sendMessage(groupId, messagePayload);
+                const msgId = sendRes?.key?.id || ('grp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6));
                 results.push({ 
                     groupId, 
                     status: 'sent', 
-                    message: 'Sent successfully', 
+                    messageId: msgId,
                     time: new Date().toISOString() 
                 });
                 appendMessageReport({
-                    id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 6),
+                    id: msgId,
                     date: new Date().toISOString(),
                     ownerUserId: req.user.userId,
                     from: fromNumber || String(req.user.mobile || 'User'),
                     to: groupId,
-                    message: String(message),
+                    message: String(message || '[Attachment]'),
                     status: 'sent',
                     session: fromNumber || 'default'
                 });
@@ -1386,12 +1441,15 @@ app.post('/api/send-group-message', authRequired, async (req, res) => {
                     ownerUserId: req.user.userId,
                     from: fromNumber || String(req.user.mobile || 'User'),
                     to: groupId,
-                    message: String(message),
+                    message: String(message || '[Attachment]'),
                     status: 'failed',
                     session: fromNumber || 'default'
                 });
             }
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            // Anti-spam delay between groups
+            if (groupIds.length > 1) {
+                await new Promise(resolve => setTimeout(resolve, 1200));
+            }
         }
 
         res.json({ 
