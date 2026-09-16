@@ -1997,7 +1997,7 @@ async function handleSendText(req, res) {
             }
 
             if (user || isGlobalAdmin) {
-                apiTokenCache.set(token, { user, isGlobalAdmin, expiresAt: now + 60000 });
+                apiTokenCache.set(token, { user, isGlobalAdmin, expiresAt: now + 30 * 60 * 1000 });
             }
         }
 
@@ -2110,11 +2110,89 @@ async function handleSendText(req, res) {
             return;
         }
 
-        // 3. Normal Synchronous Mode: Send message via WhatsApp socket
-        const sendResult = await activeSocket.sendMessage(jid, { text: messageText });
-        const messageId = sendResult?.key?.id || ('api_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7));
+        // 3. Send message via WhatsApp socket with Fast-Dispatch Protection
+        // External softwares / CRMs often enforce strict 5-second cURL timeouts (cURL error 28).
+        // Sending to WhatsApp groups can take 3.5 - 6s due to multi-recipient key exchange.
+        // We race Baileys socket against a 2200ms timeout.
+        // If Baileys finishes in <= 2200ms: return actual messageId.
+        // If Baileys takes > 2200ms: return immediate HTTP 200 to satisfy client software, while sending finishes in background!
+        const fallbackMsgId = 'api_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
 
-        // 4. Send HTTP Response IMMEDIATELY (Do not wait for disk I/O)
+        function handleBackgroundLogging(finalMsgId) {
+            setImmediate(() => {
+                try {
+                    appendMessageReport({
+                        id: finalMsgId,
+                        date: new Date().toISOString(),
+                        from: fromNumber || activeSession10,
+                        to: normalizedTo,
+                        message: messageText,
+                        status: 'sent',
+                        session: activeSession10 || providedSession || 'default',
+                        ownerUserId: ownerUserId
+                    });
+
+                    const incomingRecord = {
+                        id: finalMsgId,
+                        chatJid: jid,
+                        from: fromNumber || activeSession10,
+                        fromMe: true,
+                        message: messageText,
+                        date: new Date().toISOString(),
+                        timestamp: Date.now(),
+                        isRead: true,
+                        isGroup: isGroup,
+                        ownerUserId: ownerUserId
+                    };
+                    appendIncomingMessage(incomingRecord);
+                    broadcastIncomingEvent('new_message', incomingRecord);
+
+                    if (isGlobalAdmin) {
+                        settings.totalSent = (settings.totalSent || 0) + 1;
+                        settings.lastUsed = new Date().toISOString();
+                        saveApiSettings(settings);
+                    }
+                } catch (postErr) {
+                    console.warn('[API /send-text] Background report logging warning:', postErr.message);
+                }
+            });
+        }
+
+        const sendPromise = activeSocket.sendMessage(jid, { text: messageText });
+        const timeoutPromise = new Promise((resolve) => {
+            setTimeout(() => resolve({ __fastTimeout: true }), 2200);
+        });
+
+        const raceResult = await Promise.race([sendPromise, timeoutPromise]);
+
+        if (raceResult && raceResult.__fastTimeout) {
+            // Reached 2200ms without socket resolving (typical for large groups)
+            // Respond HTTP 200 immediately to prevent client software cURL 5-second timeout!
+            res.status(200).json({
+                status: true,
+                message: isGroup ? "Group message dispatched successfully" : "Message dispatched successfully",
+                data: {
+                    to: normalizedTo,
+                    recipientType: isGroup ? 'group' : 'user',
+                    message: messageText,
+                    session: activeSession10 || providedSession || null,
+                    messageId: fallbackMsgId
+                }
+            });
+
+            // Continue handling sendPromise in background
+            sendPromise.then((sendRes) => {
+                const finalMsgId = sendRes?.key?.id || fallbackMsgId;
+                handleBackgroundLogging(finalMsgId);
+                console.log(`[API /send-text Background] Message delivered to ${normalizedTo} (${isGroup ? 'group' : 'user'}) via session ${activeSession10 || 'default'} (ID: ${finalMsgId})`);
+            }).catch((sendErr) => {
+                console.error('[API /send-text Background Error]:', sendErr.message);
+            });
+            return;
+        }
+
+        // Socket resolved within 2200ms:
+        const actualMessageId = raceResult?.key?.id || fallbackMsgId;
         res.status(200).json({
             status: true,
             message: isGroup ? "Group message sent successfully" : "Message sent successfully",
@@ -2123,50 +2201,12 @@ async function handleSendText(req, res) {
                 recipientType: isGroup ? 'group' : 'user',
                 message: messageText,
                 session: activeSession10 || providedSession || null,
-                messageId: messageId
+                messageId: actualMessageId
             }
         });
 
-        // 5. Asynchronous background logging and notifications
-        setImmediate(() => {
-            try {
-                appendMessageReport({
-                    id: messageId,
-                    date: new Date().toISOString(),
-                    from: fromNumber || activeSession10,
-                    to: normalizedTo,
-                    message: messageText,
-                    status: 'sent',
-                    session: activeSession10 || providedSession || 'default',
-                    ownerUserId: ownerUserId
-                });
-
-                const incomingRecord = {
-                    id: messageId,
-                    chatJid: jid,
-                    from: fromNumber || activeSession10,
-                    fromMe: true,
-                    message: messageText,
-                    date: new Date().toISOString(),
-                    timestamp: Date.now(),
-                    isRead: true,
-                    isGroup: isGroup,
-                    ownerUserId: ownerUserId
-                };
-                appendIncomingMessage(incomingRecord);
-                broadcastIncomingEvent('new_message', incomingRecord);
-
-                if (isGlobalAdmin) {
-                    settings.totalSent = (settings.totalSent || 0) + 1;
-                    settings.lastUsed = new Date().toISOString();
-                    saveApiSettings(settings);
-                }
-            } catch (postErr) {
-                console.warn('[API /send-text] Background report logging warning:', postErr.message);
-            }
-        });
-
-        console.log(`[API /send-text] Message sent successfully to ${normalizedTo} (${isGroup ? 'group' : 'user'}) via session ${activeSession10 || 'default'} (ID: ${messageId})`);
+        handleBackgroundLogging(actualMessageId);
+        console.log(`[API /send-text] Message sent successfully to ${normalizedTo} (${isGroup ? 'group' : 'user'}) via session ${activeSession10 || 'default'} (ID: ${actualMessageId})`);
         return;
     } catch (error) {
         console.error('Error in /send-text API:', error);
