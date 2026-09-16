@@ -846,18 +846,27 @@ router.post('/api/user/send', authRequired, async (req, res) => {
       });
     }
 
-    // Format destination number
-    const cleanDigits = String(to).replace(/\D/g, '');
-    let normalized = cleanDigits;
-    if (cleanDigits.length === 10) normalized = '91' + cleanDigits;
-    else if (cleanDigits.length === 12 && cleanDigits.startsWith('91')) normalized = cleanDigits;
-    else if (cleanDigits.length === 11 && cleanDigits.startsWith('0')) normalized = '91' + cleanDigits.slice(1);
+    // Format destination: Group vs Individual
+    const toClean = String(to).trim();
+    const isGroup = toClean.endsWith('@g.us') || toClean.includes('@g.us') || (toClean.startsWith('120363') && toClean.replace(/\D/g, '').length >= 15);
+    let normalized = '';
+    let jid = '';
 
-    if (normalized.length < 10) {
-      return res.status(400).json({ success: false, message: `अमान्य मोबाइल नंबर: ${to}` });
+    if (isGroup) {
+      jid = toClean.includes('@g.us') ? toClean : `${toClean.replace(/\D/g, '')}@g.us`;
+      normalized = jid;
+    } else {
+      const cleanDigits = toClean.replace(/\D/g, '');
+      normalized = cleanDigits;
+      if (cleanDigits.length === 10) normalized = '91' + cleanDigits;
+      else if (cleanDigits.length === 12 && cleanDigits.startsWith('91')) normalized = cleanDigits;
+      else if (cleanDigits.length === 11 && cleanDigits.startsWith('0')) normalized = '91' + cleanDigits.slice(1);
+
+      if (normalized.length < 10) {
+        return res.status(400).json({ success: false, message: `अमान्य मोबाइल नंबर या ग्रुप ID: ${to}` });
+      }
+      jid = `${normalized}@s.whatsapp.net`;
     }
-
-    const jid = normalized.includes('@') ? normalized : `${normalized}@s.whatsapp.net`;
 
     // Construct message payload
     let messageContent = {};
@@ -943,8 +952,9 @@ router.post('/api/user/send', authRequired, async (req, res) => {
 
     res.json({
       success: true,
-      message: 'मैसेज सफलतापूर्वक भेज दिया गया।',
+      message: isGroup ? 'ग्रुप में मैसेज सफलतापूर्वक भेज दिया गया।' : 'मैसेज सफलतापूर्वक भेज दिया गया।',
       messageId,
+      recipientType: isGroup ? 'group' : 'user',
       to: normalized
     });
   } catch (error) {

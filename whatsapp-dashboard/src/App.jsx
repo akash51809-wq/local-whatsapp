@@ -1335,7 +1335,7 @@ function ApiPage({ notify }) {
               <td style={{padding:8,border:'1px solid #e2e8f0'}}><code>to</code></td>
               <td style={{padding:8,border:'1px solid #e2e8f0'}}>String</td>
               <td style={{padding:8,border:'1px solid #e2e8f0',color:'#16a34a',fontWeight:700}}>Yes</td>
-              <td style={{padding:8,border:'1px solid #e2e8f0'}}>मैसेज प्राप्त करने वाले का 10-digit मोबाइल नंबर (e.g. 9876543210)</td>
+              <td style={{padding:8,border:'1px solid #e2e8f0'}}>10-digit मोबाइल नंबर (e.g. 9876543210) या WhatsApp Group ID (e.g. 120363049565083040@g.us)</td>
             </tr>
             <tr>
               <td style={{padding:8,border:'1px solid #e2e8f0'}}><code>message</code></td>
@@ -1357,13 +1357,13 @@ function ApiPage({ notify }) {
     {/* Live API Tester */}
     <div className="api-card">
       <h3>⚡ Live API Tester (यहाँ से टेस्ट करें)</h3>
-      <p style={{color:'#666',fontSize:13,margin:'4px 0 16px'}}>नीचे नंबर और मैसेज लिखकर सीधे API चलाकर टेस्ट करें:</p>
+      <p style={{color:'#666',fontSize:13,margin:'4px 0 16px'}}>नीचे नंबर/ग्रुप ID और मैसेज लिखकर सीधे API चलाकर टेस्ट करें:</p>
       
       <form onSubmit={runTestApi} style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))',gap:12,alignItems:'end'}}>
         <div>
-          <label style={{display:'block',fontSize:13,fontWeight:700,marginBottom:4}}>To Mobile Number</label>
+          <label style={{display:'block',fontSize:13,fontWeight:700,marginBottom:4}}>Recipient (मोबाइल नंबर या Group ID)</label>
           <input 
-            placeholder="10 अंकों का मोबाइल नंबर (e.g. 9876543210)" 
+            placeholder="मोबाइल नंबर (e.g. 9876543210) या Group ID (@g.us)" 
             value={testTo} 
             onChange={e => setTestTo(e.target.value)} 
             style={{width:'100%',padding:'10px 12px',borderRadius:8,border:'1px solid #cbd5e1'}}

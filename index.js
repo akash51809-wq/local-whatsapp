@@ -1944,13 +1944,27 @@ async function handleSendText(req, res) {
             return res.status(400).json({ status: false, message: "Bad Request: 'message' parameter cannot be empty." });
         }
 
-        // Normalize destination number
-        let normalizedTo = normalizeIndianNumber(to);
-        if (!normalizedTo) {
-            const clean = String(to).replace(/\D/g, '');
-            if (clean.length === 10) normalizedTo = '91' + clean;
-            else if (clean.length >= 11) normalizedTo = clean;
-            else return res.status(400).json({ status: false, message: "Invalid mobile number. Provide a valid 10-digit mobile number." });
+        // Determine recipient type: WhatsApp Group (@g.us) vs User Mobile Number (@s.whatsapp.net)
+        const toClean = String(to).trim();
+        const isGroup = toClean.endsWith('@g.us') || toClean.includes('@g.us') || (toClean.startsWith('120363') && toClean.replace(/\D/g, '').length >= 15);
+        let jid = '';
+        let normalizedTo = '';
+
+        if (isGroup) {
+            jid = toClean.includes('@g.us') ? toClean : `${toClean.replace(/\D/g, '')}@g.us`;
+            normalizedTo = jid;
+        } else {
+            let norm = normalizeIndianNumber(toClean);
+            if (!norm) {
+                const clean = toClean.replace(/\D/g, '');
+                if (clean.length === 10) norm = '91' + clean;
+                else if (clean.length === 12 && clean.startsWith('91')) norm = clean;
+                else if (clean.length === 11 && clean.startsWith('0')) norm = '91' + clean.slice(1);
+                else if (clean.length >= 11) norm = clean;
+                else return res.status(400).json({ status: false, message: "Invalid recipient. Provide a valid 10-digit mobile number or WhatsApp group ID (e.g. 120363049565083040@g.us)." });
+            }
+            normalizedTo = norm;
+            jid = `${normalizedTo}@s.whatsapp.net`;
         }
 
         // 1. Authenticate token (Check in-memory cache first for lightning fast response)
@@ -2039,7 +2053,6 @@ async function handleSendText(req, res) {
             });
         }
 
-        const jid = `${normalizedTo}@s.whatsapp.net`;
         const ownerUserId = isGlobalAdmin ? 'admin' : (user?.userId || null);
 
         // Fast / Async Mode: Instant HTTP response under 15ms
@@ -2047,9 +2060,10 @@ async function handleSendText(req, res) {
             const tempMessageId = 'api_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
             res.status(200).json({
                 status: true,
-                message: "Message queued for immediate delivery",
+                message: isGroup ? "Group message queued for immediate delivery" : "Message queued for immediate delivery",
                 data: {
                     to: normalizedTo,
+                    recipientType: isGroup ? 'group' : 'user',
                     message: messageText,
                     session: activeSession10 || providedSession || null,
                     messageId: tempMessageId
@@ -2079,6 +2093,7 @@ async function handleSendText(req, res) {
                         date: new Date().toISOString(),
                         timestamp: Date.now(),
                         isRead: true,
+                        isGroup: isGroup,
                         ownerUserId: ownerUserId
                     };
                     appendIncomingMessage(incomingRecord);
@@ -2102,9 +2117,10 @@ async function handleSendText(req, res) {
         // 4. Send HTTP Response IMMEDIATELY (Do not wait for disk I/O)
         res.status(200).json({
             status: true,
-            message: "Message sent successfully",
+            message: isGroup ? "Group message sent successfully" : "Message sent successfully",
             data: {
                 to: normalizedTo,
+                recipientType: isGroup ? 'group' : 'user',
                 message: messageText,
                 session: activeSession10 || providedSession || null,
                 messageId: messageId
@@ -2134,6 +2150,7 @@ async function handleSendText(req, res) {
                     date: new Date().toISOString(),
                     timestamp: Date.now(),
                     isRead: true,
+                    isGroup: isGroup,
                     ownerUserId: ownerUserId
                 };
                 appendIncomingMessage(incomingRecord);
@@ -2149,7 +2166,7 @@ async function handleSendText(req, res) {
             }
         });
 
-        console.log(`[API /send-text] Message sent successfully to ${normalizedTo} via session ${activeSession10 || 'default'} (ID: ${messageId})`);
+        console.log(`[API /send-text] Message sent successfully to ${normalizedTo} (${isGroup ? 'group' : 'user'}) via session ${activeSession10 || 'default'} (ID: ${messageId})`);
         return;
     } catch (error) {
         console.error('Error in /send-text API:', error);
