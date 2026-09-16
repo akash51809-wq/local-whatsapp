@@ -282,12 +282,17 @@ async function sendUserMessage(userId, jid, content) {
 
 function getSessionByPhoneOrUserId(param) {
     if (!param) return null;
-    const clean = String(param).replace(/\D/g, '');
+    const strParam = String(param).trim();
+    const strippedUser = strParam.replace(/^user-/i, '');
+    const clean = strParam.replace(/\D/g, '');
     const clean10 = clean.slice(-10);
 
-    // 1. Direct match by userId in sessions map
-    if (sessions.has(param)) {
-        return { userId: param, session: sessions.get(param) };
+    // 1. Direct match by userId in sessions map (with or without user- prefix)
+    if (sessions.has(strParam)) {
+        return { userId: strParam, session: sessions.get(strParam) };
+    }
+    if (sessions.has(strippedUser)) {
+        return { userId: strippedUser, session: sessions.get(strippedUser) };
     }
 
     // 2. Match by connectedNumber in active sessions
@@ -333,7 +338,7 @@ async function findOrLoadSession(sessionParam, caller = null) {
 
     // 2. If Admin explicitly requests or defaults to Admin session
     if (isAdmin && (isTargetingAdmin || !sessionParam)) {
-        if (global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function') {
+        if (global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function' && Boolean(global.__waAdminSocket.user?.id)) {
             return {
                 userId: 'ADMIN',
                 isAdmin: true,
@@ -346,7 +351,7 @@ async function findOrLoadSession(sessionParam, caller = null) {
         }
         // Fallback: check if adminPhone is connected in user sessions
         const match = getSessionByPhoneOrUserId(adminPhone);
-        if (match?.session?.socket && match?.session?.status === 'connected') {
+        if (match?.session?.socket && match?.session?.status === 'connected' && Boolean(match.session.socket.user?.id)) {
             global.__waAdminSocket = match.session.socket;
             return {
                 userId: 'ADMIN',
@@ -354,12 +359,12 @@ async function findOrLoadSession(sessionParam, caller = null) {
                 session: {
                     socket: match.session.socket,
                     status: 'connected',
-                    connectedNumber: adminPhone
+                    connectedNumber: match.session.connectedNumber || adminPhone
                 }
             };
         }
         const userS = sessions.get('USR59396382');
-        if (userS?.socket && userS?.status === 'connected') {
+        if (userS?.socket && userS?.status === 'connected' && Boolean(userS.socket.user?.id)) {
             global.__waAdminSocket = userS.socket;
             return {
                 userId: 'ADMIN',
@@ -367,7 +372,7 @@ async function findOrLoadSession(sessionParam, caller = null) {
                 session: {
                     socket: userS.socket,
                     status: 'connected',
-                    connectedNumber: adminPhone
+                    connectedNumber: userS.connectedNumber || adminPhone
                 }
             };
         }

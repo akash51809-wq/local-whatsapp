@@ -787,6 +787,7 @@ function SendPage({ notify, status, isAdmin, currentUser }) {
 
     let sent = 0;
     let failed = 0;
+    let lastError = '';
 
     for (let i = 0; i < targets.length; i++) {
       if (cancelSendingRef.current) {
@@ -815,6 +816,7 @@ function SendPage({ notify, status, isAdmin, currentUser }) {
         sent++;
       } catch (err) {
         failed++;
+        lastError = err.message || '';
         console.error(`Send to ${num} failed:`, err.message);
       }
 
@@ -839,7 +841,7 @@ function SendPage({ notify, status, isAdmin, currentUser }) {
     if (sent > 0) {
       if (notify) notify(`✓ ${sent} संदेश सफलतापूर्वक भेज दिए गए!`);
     } else if (failed > 0) {
-      if (notify) notify(`मैसेज भेजने में समस्या हुई। कृपया WhatsApp कनेक्शन जांचें।`);
+      if (notify) notify(lastError ? `मैसेज भेजने में समस्या हुई: ${lastError}` : `मैसेज भेजने में समस्या हुई। कृपया WhatsApp कनेक्शन जांचें।`);
     }
   };
 

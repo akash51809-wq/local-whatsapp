@@ -585,22 +585,22 @@ let isSending = false;
 ========================================================= */
 
 function getActiveAdminSocket() {
-    if (global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function') {
+    if (global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function' && Boolean(global.__waAdminSocket.user?.id)) {
         return global.__waAdminSocket;
     }
-    if (sock && connectionStatus === 'connected' && typeof sock.sendMessage === 'function') {
+    if (sock && connectionStatus === 'connected' && typeof sock.sendMessage === 'function' && Boolean(sock.user?.id)) {
         return sock;
     }
     try {
         const { getSessionByPhoneOrUserId, sessions } = require('./userSessions');
         const adminPhone = process.env.ADMIN_PHONE || '8840457632';
         const match = getSessionByPhoneOrUserId(adminPhone);
-        if (match?.session?.socket && match?.session?.status === 'connected') {
+        if (match?.session?.socket && match?.session?.status === 'connected' && Boolean(match.session.socket.user?.id)) {
             global.__waAdminSocket = match.session.socket;
             return match.session.socket;
         }
         const userS = sessions?.get('USR59396382');
-        if (userS?.socket && userS?.status === 'connected') {
+        if (userS?.socket && userS?.status === 'connected' && Boolean(userS.socket.user?.id)) {
             global.__waAdminSocket = userS.socket;
             return userS.socket;
         }
