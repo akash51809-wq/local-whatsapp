@@ -344,6 +344,33 @@ async function findOrLoadSession(sessionParam, caller = null) {
                 }
             };
         }
+        // Fallback: check if adminPhone is connected in user sessions
+        const match = getSessionByPhoneOrUserId(adminPhone);
+        if (match?.session?.socket && match?.session?.status === 'connected') {
+            global.__waAdminSocket = match.session.socket;
+            return {
+                userId: 'ADMIN',
+                isAdmin: true,
+                session: {
+                    socket: match.session.socket,
+                    status: 'connected',
+                    connectedNumber: adminPhone
+                }
+            };
+        }
+        const userS = sessions.get('USR59396382');
+        if (userS?.socket && userS?.status === 'connected') {
+            global.__waAdminSocket = userS.socket;
+            return {
+                userId: 'ADMIN',
+                isAdmin: true,
+                session: {
+                    socket: userS.socket,
+                    status: 'connected',
+                    connectedNumber: adminPhone
+                }
+            };
+        }
         return {
             userId: 'ADMIN',
             isAdmin: true,

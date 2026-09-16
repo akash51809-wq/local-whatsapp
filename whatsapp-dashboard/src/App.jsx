@@ -62,15 +62,23 @@ function App() {
   const loadStatus = useCallback(async () => {
     try {
       if (isAdmin) {
-        setStatus(await api('/api/status'))
+        const s = await api('/api/status')
+        setStatus(s)
+        if (s.status === 'connected' || s.ready) {
+          setQr(null)
+        }
       } else {
         const d = await api('/api/user/whatsapp/status')
-        setStatus({
+        const s = {
           status: d.status || 'waiting',
           number: d.number,
           profileName: d.profileName || 'My WhatsApp',
           ready: d.ready
-        })
+        }
+        setStatus(s)
+        if (s.status === 'connected' || s.ready) {
+          setQr(null)
+        }
       }
       setError('')
     } catch (e) {
@@ -82,12 +90,20 @@ function App() {
     try {
       if (isAdmin) {
         const d = await api('/api/whatsapp/qr')
-        setQr(d.status === 'qr' ? d.qr : null)
-        if (d.status === 'connected') loadStatus()
+        if (d.status === 'connected') {
+          setQr(null)
+          loadStatus()
+        } else {
+          setQr(d.status === 'qr' ? d.qr : null)
+        }
       } else {
         const d = await api('/api/user/whatsapp/qr')
-        setQr(d.status === 'waiting' || d.status === 'qr' ? d.qr : null)
-        if (d.status === 'connected') loadStatus()
+        if (d.status === 'connected') {
+          setQr(null)
+          loadStatus()
+        } else {
+          setQr(d.status === 'waiting' || d.status === 'qr' ? d.qr : null)
+        }
       }
     } catch (e) {
       // Don't show noise error on poll

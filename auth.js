@@ -201,7 +201,24 @@ function getLiveAdminWhatsAppSender() {
   if (typeof global.__waSendAdminText === 'function') {
     return global.__waSendAdminText;
   }
-  const socket = global.__waAdminSocket;
+  let socket = global.__waAdminSocket;
+  if (!socket || typeof socket.sendMessage !== 'function') {
+    try {
+      const { getSessionByPhoneOrUserId, sessions } = require('./userSessions');
+      const adminPhone = process.env.ADMIN_PHONE || '8840457632';
+      const match = getSessionByPhoneOrUserId(adminPhone);
+      if (match?.session?.socket && match?.session?.status === 'connected') {
+        socket = match.session.socket;
+        global.__waAdminSocket = socket;
+      } else {
+        const userS = sessions?.get('USR59396382');
+        if (userS?.socket && userS?.status === 'connected') {
+          socket = userS.socket;
+          global.__waAdminSocket = socket;
+        }
+      }
+    } catch (e) {}
+  }
   if (socket && typeof socket.sendMessage === 'function') {
     return async (number, text) => {
       let digits = String(number || '').replace(/\D/g, '');
@@ -543,16 +560,36 @@ router.get('/api/user/whatsapp/status', authRequired, async (req, res) => {
   try {
     const isRoleAdmin = req.user.role === 'admin' || String(req.user.userId || '').toUpperCase() === 'ADMIN';
     if (isRoleAdmin) {
-      console.log('[AdminSession] Using dedicated sessionId=admin for status check');
-      const isConn = Boolean(global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function');
-      const adminPhone = global.__waAdminSocket?.user?.id
-        ? String(global.__waAdminSocket.user.id).split(':')[0].split('@')[0].replace(/\D/g, '')
+      console.log('[AdminSession] Status check for admin user');
+      let activeSock = global.__waAdminSocket;
+      let isConn = Boolean(activeSock && typeof activeSock.sendMessage === 'function');
+      if (!isConn) {
+        try {
+          const { getSessionByPhoneOrUserId, sessions } = require('./userSessions');
+          const adminPhone = process.env.ADMIN_PHONE || '8840457632';
+          const match = getSessionByPhoneOrUserId(adminPhone);
+          if (match?.session?.socket && match?.session?.status === 'connected') {
+            activeSock = match.session.socket;
+            global.__waAdminSocket = activeSock;
+            isConn = true;
+          } else {
+            const userS = sessions?.get('USR59396382');
+            if (userS?.socket && userS?.status === 'connected') {
+              activeSock = userS.socket;
+              global.__waAdminSocket = activeSock;
+              isConn = true;
+            }
+          }
+        } catch (e) {}
+      }
+      const adminPhone = activeSock?.user?.id
+        ? String(activeSock.user.id).split(':')[0].split('@')[0].replace(/\D/g, '')
         : (process.env.ADMIN_PHONE || '8840457632');
       return res.json({
         success: true,
         status: isConn ? 'connected' : 'waiting',
-        number: isConn && adminPhone ? adminPhone.slice(-10) : null,
-        profileName: global.__waAdminSocket?.user?.name || (adminPhone ? `+${adminPhone}` : 'Admin WhatsApp'),
+        number: isConn && adminPhone ? adminPhone.slice(-10) : (adminPhone ? adminPhone.slice(-10) : null),
+        profileName: activeSock?.user?.name || (adminPhone ? `+${adminPhone}` : 'Admin WhatsApp'),
         ready: isConn,
         lastConnected: null,
       });
@@ -668,7 +705,21 @@ router.get('/api/user/whatsapp/sessions', authRequired, async (req, res) => {
       const adminPhone = global.__waAdminSocket?.user?.id
         ? String(global.__waAdminSocket.user.id).split(':')[0].split('@')[0].replace(/\D/g, '')
         : (dbAdminS?.phone || process.env.ADMIN_PHONE || '8840457632');
-      const isAdminConnected = Boolean(global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function');
+      let isAdminConnected = Boolean(global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function');
+      if (!isAdminConnected) {
+        const { getSessionByPhoneOrUserId } = require('./userSessions');
+        const match = getSessionByPhoneOrUserId(process.env.ADMIN_PHONE || '8840457632');
+        if (match?.session?.socket && match?.session?.status === 'connected') {
+          global.__waAdminSocket = match.session.socket;
+          isAdminConnected = true;
+        } else {
+          const userS = sessions?.get('USR59396382');
+          if (userS?.socket && userS?.status === 'connected') {
+            global.__waAdminSocket = userS.socket;
+            isAdminConnected = true;
+          }
+        }
+      }
       list.push({
         id: 'admin',
         sessionId: 'admin',

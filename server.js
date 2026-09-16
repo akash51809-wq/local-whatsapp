@@ -39,7 +39,24 @@ try {
     let socketWasAvailable = false;
 
     for (let attempt = 1; attempt <= retries; attempt++) {
-      const current = global.__waAdminSocket;
+      let current = global.__waAdminSocket;
+      if (!current || typeof current.sendMessage !== 'function') {
+        try {
+          const { getSessionByPhoneOrUserId, sessions } = require('./userSessions');
+          const adminPhone = process.env.ADMIN_PHONE || '8840457632';
+          const match = getSessionByPhoneOrUserId(adminPhone);
+          if (match?.session?.socket && match?.session?.status === 'connected') {
+            current = match.session.socket;
+            global.__waAdminSocket = current;
+          } else {
+            const userS = sessions?.get('USR59396382');
+            if (userS?.socket && userS?.status === 'connected') {
+              current = userS.socket;
+              global.__waAdminSocket = current;
+            }
+          }
+        } catch (e) {}
+      }
 
       if (current && typeof current.sendMessage === 'function') {
         socketWasAvailable = true;

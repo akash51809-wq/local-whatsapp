@@ -584,36 +584,65 @@ let isSending = false;
    BASIC API
 ========================================================= */
 
+function getActiveAdminSocket() {
+    if (global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function') {
+        return global.__waAdminSocket;
+    }
+    if (sock && connectionStatus === 'connected' && typeof sock.sendMessage === 'function') {
+        return sock;
+    }
+    try {
+        const { getSessionByPhoneOrUserId, sessions } = require('./userSessions');
+        const adminPhone = process.env.ADMIN_PHONE || '8840457632';
+        const match = getSessionByPhoneOrUserId(adminPhone);
+        if (match?.session?.socket && match?.session?.status === 'connected') {
+            global.__waAdminSocket = match.session.socket;
+            return match.session.socket;
+        }
+        const userS = sessions?.get('USR59396382');
+        if (userS?.socket && userS?.status === 'connected') {
+            global.__waAdminSocket = userS.socket;
+            return userS.socket;
+        }
+    } catch (e) {}
+    return null;
+}
+
 app.get('/api/status', authRequired, adminRequired, async (req, res) => {
     let profilePicUrl = null;
     let profileName = null;
-    if (sock && connectionStatus === 'connected' && sock.user) {
-        profileName = sock.user.name || sock.user.notify || null;
+    const activeSock = getActiveAdminSocket();
+    const isConn = Boolean(activeSock && typeof activeSock.sendMessage === 'function');
+
+    if (isConn && activeSock?.user) {
+        profileName = activeSock.user.name || activeSock.user.notify || null;
         try {
-            if (sock.user.id) {
-                profilePicUrl = await sock.profilePictureUrl(sock.user.id, 'image').catch(() => null);
+            if (activeSock.user.id) {
+                profilePicUrl = await activeSock.profilePictureUrl(activeSock.user.id, 'image').catch(() => null);
             }
         } catch {}
     }
-    const cleanNumber = (connectedNumber || (sock?.user?.id ? sock.user.id.split(':')[0].split('@')[0] : '8840457632')).replace(/\D/g, '');
+    const cleanNumber = (connectedNumber || (activeSock?.user?.id ? activeSock.user.id.split(':')[0].split('@')[0] : (process.env.ADMIN_PHONE || '8840457632'))).replace(/\D/g, '');
     const jid = cleanNumber ? `${cleanNumber}@s.whatsapp.net` : null;
 
     res.json({
-        status: connectionStatus,
+        status: isConn ? 'connected' : connectionStatus,
         number: cleanNumber,
-        profileName: profileName || (cleanNumber ? `+${cleanNumber}` : 'WhatsApp Account'),
+        profileName: profileName || (cleanNumber ? `+${cleanNumber}` : 'Admin WhatsApp'),
         profilePicUrl: profilePicUrl,
         jid: jid,
         lastConnected: lastConnectedTime || new Date().toISOString(),
         device: 'Chrome (Windows) / WhatsApp Web',
-        ready: connectionStatus === 'connected'
+        ready: isConn
     });
 });
 
 app.get('/api/qr', authRequired, adminRequired, async (req, res) => {
-    // If admin is connected, return connected
-    if (connectionStatus === 'connected') {
-        return res.json({ status: 'connected', number: connectedNumber || '8840457632' });
+    // If admin is connected (dedicated or bridged active session), return connected
+    const activeSock = getActiveAdminSocket();
+    if (connectionStatus === 'connected' || (activeSock && typeof activeSock.sendMessage === 'function')) {
+        const num = (connectedNumber || (activeSock?.user?.id ? activeSock.user.id.split(':')[0].split('@')[0] : (process.env.ADMIN_PHONE || '8840457632'))).replace(/\D/g, '');
+        return res.json({ status: 'connected', number: num });
     }
     // If admin credentials exist in MongoDB, Admin is paired: NEVER return a QR code!
     let hasAdminCredsInDb = false;
@@ -636,8 +665,10 @@ app.get('/api/qr', authRequired, adminRequired, async (req, res) => {
 });
 
 app.get('/api/whatsapp/qr', authRequired, adminRequired, async (req, res) => {
-    if (connectionStatus === 'connected') {
-        return res.json({ success: true, status: 'connected', number: connectedNumber || '8840457632' });
+    const activeSock = getActiveAdminSocket();
+    if (connectionStatus === 'connected' || (activeSock && typeof activeSock.sendMessage === 'function')) {
+        const num = (connectedNumber || (activeSock?.user?.id ? activeSock.user.id.split(':')[0].split('@')[0] : (process.env.ADMIN_PHONE || '8840457632'))).replace(/\D/g, '');
+        return res.json({ success: true, status: 'connected', number: num });
     }
     // If admin credentials exist in MongoDB, Admin is paired: NEVER return a QR code!
     let hasAdminCredsInDb = false;
@@ -967,12 +998,9 @@ app.post('/api/incoming/reply', authRequired, attachmentBodyParser, async (req, 
         if (sessionMatch && sessionMatch.session?.status === 'connected' && sessionMatch.session?.socket) {
             activeSocket = sessionMatch.session.socket;
             fromNumber = sessionMatch.session.connectedNumber || sessionMatch.userId;
-        } else if (req.user.role === 'admin' && global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function') {
-            activeSocket = global.__waAdminSocket;
-            fromNumber = activeSocket?.user?.id ? String(activeSocket.user.id).split(':')[0].replace(/\D/g, '') : 'Admin';
-        } else if (req.user.role === 'admin' && connectionStatus === 'connected' && sock) {
-            activeSocket = sock;
-            fromNumber = connectedNumber || 'Admin';
+        } else if (req.user.role === 'admin') {
+            activeSocket = getActiveAdminSocket();
+            fromNumber = activeSocket?.user?.id ? String(activeSocket.user.id).split(':')[0].replace(/\D/g, '') : (connectedNumber || 'Admin');
         }
 
         if (!activeSocket) {
@@ -1234,7 +1262,7 @@ app.get('/api/whatsapp/groups', authRequired, async (req, res) => {
         if (match && match.session?.status === 'connected' && match.session?.socket) {
             activeSocket = match.session.socket;
         } else if (req.user.role === 'admin') {
-            activeSocket = global.__waAdminSocket || sock;
+            activeSocket = getActiveAdminSocket();
         }
 
         if (!activeSocket) {
@@ -1292,8 +1320,8 @@ app.post('/api/send-group-message', authRequired, async (req, res) => {
             activeSocket = match.session.socket;
             fromNumber = match.session.connectedNumber || match.userId;
         } else if (req.user.role === 'admin') {
-            activeSocket = global.__waAdminSocket || sock;
-            fromNumber = connectedNumber || 'Admin';
+            activeSocket = getActiveAdminSocket();
+            fromNumber = activeSocket?.user?.id ? String(activeSocket.user.id).split(':')[0].replace(/\D/g, '') : (connectedNumber || 'Admin');
         }
 
         if (!activeSocket) {
@@ -1390,7 +1418,7 @@ app.post('/api/whatsapp/extract-members', authRequired, async (req, res) => {
         if (match && match.session?.status === 'connected' && match.session?.socket) {
             activeSocket = match.session.socket;
         } else if (req.user.role === 'admin') {
-            activeSocket = global.__waAdminSocket || sock;
+            activeSocket = getActiveAdminSocket();
         }
 
         if (!activeSocket) {
@@ -1555,13 +1583,8 @@ app.post('/api/send-message', authRequired, attachmentBodyParser, async (req, re
             activeSocket = sessionMatch.session.socket;
             fromNumber = sessionMatch.session.connectedNumber || sessionMatch.userId;
         } else if (req.user.role === 'admin' && (!whatsappId || whatsappId === 'default' || whatsappId === 'admin')) {
-            if (global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function') {
-                activeSocket = global.__waAdminSocket;
-                fromNumber = activeSocket?.user?.id ? String(activeSocket.user.id).split(':')[0].replace(/\D/g, '') : 'Admin';
-            } else if (connectionStatus === 'connected' && sock) {
-                activeSocket = sock;
-                fromNumber = connectedNumber || 'Admin';
-            }
+            activeSocket = getActiveAdminSocket();
+            fromNumber = activeSocket?.user?.id ? String(activeSocket.user.id).split(':')[0].replace(/\D/g, '') : (connectedNumber || 'Admin');
         }
 
         if (!activeSocket) {
@@ -1940,18 +1963,13 @@ async function handleSendText(req, res) {
         // Admin WhatsApp fallback: ONLY if caller is verified admin!
         const isAdminAuthorized = isGlobalAdmin || user?.role === 'admin';
         if (!activeSocket && isAdminAuthorized) {
-            const adminPhone = global.__waAdminSocket?.user?.id 
-                ? String(global.__waAdminSocket.user.id).split(':')[0].replace(/\D/g, '') 
+            activeSocket = getActiveAdminSocket();
+            const adminPhone = activeSocket?.user?.id 
+                ? String(activeSocket.user.id).split(':')[0].replace(/\D/g, '') 
                 : (connectedNumber || '8840457632');
             const adminPhone10 = String(adminPhone).replace(/\D/g, '').slice(-10);
-
-            if (global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function') {
-                activeSocket = global.__waAdminSocket;
+            if (activeSocket) {
                 fromNumber = adminPhone;
-                activeSession10 = adminPhone10;
-            } else if (connectionStatus === 'connected' && sock) {
-                activeSocket = sock;
-                fromNumber = connectedNumber || adminPhone;
                 activeSession10 = adminPhone10;
             }
         }
@@ -2156,6 +2174,20 @@ async function startBot() {
             const { connection, lastDisconnect, qr } = update;
 
             if (qr) {
+                // Check if admin phone is already active in user sessions, bridge and suppress QR
+                const activeAdmin = getActiveAdminSocket();
+                if (activeAdmin && typeof activeAdmin.sendMessage === 'function') {
+                    console.log('[Admin WhatsApp] Admin phone already connected via active session. Suppressing QR.');
+                    connectionStatus = 'connected';
+                    latestQR = null;
+                    const cleanAdminNum = (activeAdmin.user?.id ? activeAdmin.user.id.split(':')[0].split('@')[0] : (process.env.ADMIN_PHONE || '8840457632')).replace(/\D/g, '');
+                    connectedNumber = cleanAdminNum;
+                    broadcastIncomingEvent('connection_status', { status: 'connected', number: connectedNumber });
+                    const { recordAdminWhatsAppSession } = require('./auth');
+                    recordAdminWhatsAppSession({ status: 'connected', phone: connectedNumber }).catch(() => {});
+                    return;
+                }
+
                 // Defensive guard: check if Admin credentials already exist in MongoDB
                 let hasAdminCredsInDb = false;
                 try {
