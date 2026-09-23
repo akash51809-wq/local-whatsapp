@@ -2604,3 +2604,447 @@ button { cursor: pointer; }
   border: 1px solid #e2e8f0;
   border-radius: 8px;
 }
+
+/* =========================================================
+   ZENDASH OFFICIAL DARK THEME (.dark-mode)
+========================================================= */
+body.dark-mode,
+.dark-mode {
+  --zd-bg: #0d1337;
+  --zd-card-bg: #141b47;
+  --zd-border: rgba(255, 255, 255, 0.08);
+  --zd-border-subtle: rgba(255, 255, 255, 0.04);
+  --zd-sidebar-bg: #0f163e;
+  --zd-sidebar-card: #141b47;
+  --zd-text-main: #edf0f5;
+  --zd-text-muted: #a2a6cb;
+  --zd-text-subtle: #737f9e;
+  --zd-shadow-card: 0 4px 20px 0 rgba(10, 14, 40, 0.4);
+  --zd-shadow-hover: 0 8px 30px 0 rgba(10, 14, 40, 0.6);
+  background-color: #0d1337 !important;
+  color: #edf0f5 !important;
+}
+
+body.dark-mode *::-webkit-scrollbar-thumb, 
+body.dark-mode *:hover::-webkit-scrollbar-thumb {
+  background: #141b47;
+  border-radius: 6px;
+}
+
+body.dark-mode *::-webkit-scrollbar-track {
+  background: #0d1337;
+}
+
+/* Page shell & Content Area */
+.dark-mode.app.page,
+.dark-mode .page-main,
+.dark-mode .app-content,
+.dark-mode .side-app {
+  background-color: #0d1337 !important;
+  color: #edf0f5 !important;
+}
+
+/* Header */
+.dark-mode .app-header.header {
+  background-color: #141b47 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 18px 0 rgba(10, 14, 40, 0.5) !important;
+  color: #edf0f5 !important;
+}
+
+.dark-mode .header-page-title h1 {
+  color: #edf0f5 !important;
+}
+
+.dark-mode .header-page-title p {
+  color: #a2a6cb !important;
+}
+
+.dark-mode .app-sidebar__toggle .header-icon {
+  color: #edf0f5 !important;
+}
+
+/* Sidebar in Dark Mode */
+.dark-mode .app-sidebar {
+  background-color: #0f163e !important;
+  box-shadow: none !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dark-mode .app-sidebar__logo {
+  background-color: #0f163e !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+}
+
+.dark-mode .app-sidebar__user {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+}
+
+.dark-mode .app-sidebar__user-name {
+  color: #8fa0b2 !important;
+}
+
+.dark-mode .side-menu li h3 {
+  color: #6c7899 !important;
+}
+
+.dark-mode .side-menu__item {
+  color: #a2a6cb;
+}
+
+.dark-mode .side-menu__item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+}
+
+.dark-mode .side-menu__item.active {
+  background: #0d1337 !important;
+  color: #aab3f4 !important;
+}
+
+.dark-mode .side-menu__item.active:before {
+  box-shadow: 0 10px 0 0 #0d1337 !important;
+}
+
+.dark-mode .side-menu__item.active:after {
+  box-shadow: 0 -10px 0 0 #0d1337 !important;
+}
+
+.dark-mode .side-menu__item.active .side-menu__icon {
+  color: #aab3f4 !important;
+}
+
+/* Cards & Panels */
+.dark-mode .card,
+.dark-mode .e-panel.card,
+.dark-mode .users-filter-card,
+.dark-mode .groups-header-card,
+.dark-mode .report-card,
+.dark-mode .incoming-card,
+.dark-mode .settings-card,
+.dark-mode .api-card,
+.dark-mode .stat-card,
+.dark-mode .stat,
+.dark-mode .chat-card,
+.dark-mode .send-card,
+.dark-mode .info-card,
+.dark-mode .table-card {
+  background-color: #141b47 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 20px 0 rgba(10, 14, 40, 0.4) !important;
+  color: #edf0f5 !important;
+}
+
+/* Titles and Headings */
+.dark-mode .page-title,
+.dark-mode h1, .dark-mode h2, .dark-mode h3, 
+.dark-mode h4, .dark-mode h5, .dark-mode h6 {
+  color: #edf0f5 !important;
+}
+
+.dark-mode .breadcrumb-item {
+  color: #a2a6cb !important;
+}
+
+.dark-mode .breadcrumb-item.active {
+  color: #8fa0b2 !important;
+}
+
+.dark-mode .text-muted,
+.dark-mode small {
+  color: #a2a6cb !important;
+}
+
+/* Tables */
+.dark-mode .table,
+.dark-mode .table-bordered,
+.dark-mode .report-table,
+.dark-mode .e-table table {
+  background-color: #141b47 !important;
+  color: #edf0f5 !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
+}
+
+.dark-mode .table-bordered th, 
+.dark-mode .table-bordered td,
+.dark-mode .table th, 
+.dark-mode .table td {
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  color: #edf0f5 !important;
+}
+
+.dark-mode .table thead th,
+.dark-mode .table-bordered thead th {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+  color: #c4c9d6 !important;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark-mode .table-bordered tbody tr:hover,
+.dark-mode .table tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Form Controls & Inputs */
+.dark-mode .form-control,
+.dark-mode .filter-select,
+.dark-mode .users-search-box input,
+.dark-mode input[type="text"],
+.dark-mode input[type="password"],
+.dark-mode input[type="number"],
+.dark-mode textarea,
+.dark-mode select {
+  background-color: #0d1337 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #edf0f5 !important;
+}
+
+.dark-mode .form-control::placeholder,
+.dark-mode input::placeholder,
+.dark-mode textarea::placeholder {
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.dark-mode .form-control:focus,
+.dark-mode .filter-select:focus,
+.dark-mode .users-search-box input:focus,
+.dark-mode input:focus,
+.dark-mode textarea:focus,
+.dark-mode select:focus {
+  background-color: #0d1337 !important;
+  border-color: #705ec8 !important;
+  box-shadow: 0 0 0 2px rgba(112, 94, 200, 0.3) !important;
+  color: #ffffff !important;
+}
+
+/* Buttons in Dark Mode */
+.dark-mode .btn-white,
+.dark-mode .btn-action-icon,
+.dark-mode .btn-header-action {
+  background-color: #1e265c !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #edf0f5 !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.dark-mode .btn-white:hover,
+.dark-mode .btn-action-icon:hover,
+.dark-mode .btn-header-action:hover {
+  background-color: #263175 !important;
+  border-color: #705ec8 !important;
+  color: #ffffff !important;
+}
+
+.dark-mode .btn-outline-primary {
+  background-color: transparent !important;
+  border-color: #705ec8 !important;
+  color: #aab3f4 !important;
+}
+
+.dark-mode .btn-outline-primary:hover {
+  background-color: #705ec8 !important;
+  color: #ffffff !important;
+}
+
+.dark-mode .btn-outline-danger {
+  background-color: transparent !important;
+  border-color: #fb1c52 !important;
+  color: #fb1c52 !important;
+}
+
+.dark-mode .btn-outline-danger:hover {
+  background-color: #fb1c52 !important;
+  color: #ffffff !important;
+}
+
+.dark-mode .btn-outline-success {
+  background-color: transparent !important;
+  border-color: #2dce89 !important;
+  color: #2dce89 !important;
+}
+
+.dark-mode .btn-outline-success:hover {
+  background-color: #2dce89 !important;
+  color: #ffffff !important;
+}
+
+/* Badges in Dark Mode */
+.dark-mode .badge-success-light {
+  background-color: rgba(45, 206, 137, 0.2) !important;
+  color: #2dce89 !important;
+}
+
+.dark-mode .badge-danger-light {
+  background-color: rgba(251, 28, 82, 0.2) !important;
+  color: #fb1c52 !important;
+}
+
+.dark-mode .badge-warning-light {
+  background-color: rgba(245, 158, 11, 0.2) !important;
+  color: #f59e0b !important;
+}
+
+.dark-mode .badge-primary-light {
+  background-color: rgba(112, 94, 200, 0.25) !important;
+  color: #aab3f4 !important;
+}
+
+.dark-mode .badge-secondary-light {
+  background-color: rgba(250, 113, 59, 0.2) !important;
+  color: #fa713b !important;
+}
+
+/* Header Connection Pill in Dark Mode */
+.dark-mode .connection-pill {
+  background-color: #1b2253 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #edf0f5 !important;
+}
+
+.dark-mode .connection-pill.is-online {
+  background-color: rgba(45, 206, 137, 0.15) !important;
+  border-color: rgba(45, 206, 137, 0.3) !important;
+  color: #2dce89 !important;
+}
+
+.dark-mode .connection-pill.is-connecting {
+  background-color: rgba(245, 158, 11, 0.15) !important;
+  border-color: rgba(245, 158, 11, 0.3) !important;
+  color: #f59e0b !important;
+}
+
+.dark-mode .connection-pill.is-waiting {
+  background-color: #1b2253 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #a2a6cb !important;
+}
+
+/* Progress bar in Dark Mode */
+.dark-mode .progress.progress-sm {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Modals in Dark Mode */
+.dark-mode .modal-overlay {
+  background-color: rgba(5, 8, 26, 0.78) !important;
+}
+
+.dark-mode .modal-content-card {
+  background-color: #141b47 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6) !important;
+  color: #edf0f5 !important;
+}
+
+.dark-mode .modal-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .modal-header h3,
+.dark-mode .modal-header h5 {
+  color: #edf0f5 !important;
+}
+
+.dark-mode .modal-body label {
+  color: #a2a6cb !important;
+}
+
+.dark-mode .modal-footer {
+  background-color: #0d1337 !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Alert Notification in Dark Mode */
+.dark-mode .alert-success {
+  background-color: rgba(45, 206, 137, 0.15) !important;
+  border-color: rgba(45, 206, 137, 0.3) !important;
+  color: #5eead4 !important;
+}
+
+.dark-mode .alert-success code {
+  background-color: #0d1337 !important;
+  color: #2dd4bf !important;
+  border-color: rgba(45, 206, 137, 0.4) !important;
+}
+
+/* WhatsApp Incoming / Chat Layout in Dark Mode */
+.dark-mode .wa-layout {
+  background-color: #141b47 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .chat-list {
+  background-color: #141b47 !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .list-head {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .search {
+  background-color: #0d1337 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .search input {
+  color: #edf0f5 !important;
+}
+
+.dark-mode .chat-item {
+  background-color: #141b47 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  color: #edf0f5 !important;
+}
+
+.dark-mode .chat-item:hover,
+.dark-mode .chat-item.selected {
+  background-color: rgba(112, 94, 200, 0.15) !important;
+}
+
+.dark-mode .conversation {
+  background-color: #0d1337 !important;
+}
+
+.dark-mode .conversation-head {
+  background-color: #141b47 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #edf0f5 !important;
+}
+
+.dark-mode .messages {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px) !important;
+}
+
+.dark-mode .bubble {
+  background-color: #1b2253 !important;
+  color: #edf0f5 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+}
+
+.dark-mode .mine .bubble {
+  background-color: #14493c !important;
+  color: #edf0f5 !important;
+}
+
+.dark-mode .composer {
+  background-color: #141b47 !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .composer-row input:not([type=file]) {
+  background-color: #0d1337 !important;
+  color: #edf0f5 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark-mode .details {
+  background-color: #141b47 !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #edf0f5 !important;
+}
+
+.dark-mode .group-members-list-container {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  background-color: #0d1337 !important;
+}

@@ -54,6 +54,7 @@ function NavIcon({ name, fallback }) {
 
 function App() {
   const [page, setPage] = useState('dashboard')
+  const [theme, setTheme] = useState(() => localStorage.getItem('wa_theme') || 'dark')
   const [status, setStatus] = useState({ status: 'waiting', number: null, profileName: 'WhatsApp Account' })
   const [qr, setQr] = useState(null)
   const [error, setError] = useState('')
@@ -76,6 +77,14 @@ function App() {
   const fileRef = useRef(null)
 
   const isAdmin = currentUser?.role === 'admin'
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.body.classList.add('dark-mode')
+    } else {
+      document.body.classList.remove('dark-mode')
+    }
+  }, [theme])
 
   const notify = useCallback((msg) => {
     setToast(msg)
@@ -290,7 +299,7 @@ function App() {
   }} />
 
   return (
-    <div className={`app page ${sidebarOpen ? 'sidenav-toggled' : ''}`}>
+    <div className={`app page ${theme === 'dark' ? 'dark-mode' : ''} ${sidebarOpen ? 'sidenav-toggled' : ''}`}>
       <div className="page-main">
         {/* Mobile sidebar overlay */}
         <div 
@@ -476,6 +485,19 @@ function App() {
                   <span className="pill-dot"></span>
                   <span>{status.status === 'connected' ? `Connected (+${status.number || ''})` : status.status === 'connecting' ? 'Connecting...' : 'Waiting for Scan'}</span>
                 </div>
+                <button 
+                  type="button"
+                  className="btn-header-action theme-toggle-btn" 
+                  onClick={() => {
+                    const next = theme === 'dark' ? 'light' : 'dark'
+                    setTheme(next)
+                    localStorage.setItem('wa_theme', next)
+                    notify(next === 'dark' ? 'Dark Mode सक्रिय (Dark Theme Active) 🌙' : 'Light Mode सक्रिय (Light Theme Active) ☀️')
+                  }}
+                  title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+                >
+                  {theme === 'dark' ? '🌙 Dark' : '☀️ Light'}
+                </button>
                 <button 
                   type="button"
                   className="btn-header-action" 
