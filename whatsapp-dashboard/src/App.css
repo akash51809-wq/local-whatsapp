@@ -3048,3 +3048,195 @@ body.dark-mode *::-webkit-scrollbar-track {
   border-color: rgba(255, 255, 255, 0.08) !important;
   background-color: #0d1337 !important;
 }
+
+/* =========================================================
+   PRICING COMPARISON TABLE & PLANS STYLING
+========================================================= */
+
+.pricing-comparison-table-wrapper {
+  background: var(--zd-card-bg, #ffffff);
+  border: 1px solid var(--zd-border, #eef2f6);
+  border-radius: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+}
+
+.pricing-comparison-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.pricing-comparison-table thead th {
+  border-bottom: 2px solid var(--zd-border, #eef2f6);
+}
+
+.pricing-feature-col-head {
+  background: var(--zd-card-bg, #ffffff);
+  vertical-align: bottom;
+}
+
+.plan-header-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.plan-header-card:hover {
+  transform: translateY(-2px);
+}
+
+.price-pill-banner {
+  letter-spacing: 0.02em;
+}
+
+.btn-buy-plan-pill {
+  cursor: pointer;
+  outline: none;
+  font-family: inherit;
+}
+
+.btn-buy-plan-pill:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25) !important;
+}
+
+.btn-buy-plan-pill:active {
+  transform: scale(0.98);
+}
+
+.pricing-spec-row {
+  transition: background-color 0.15s ease;
+}
+
+.pricing-spec-row:nth-child(even) {
+  background-color: rgba(0, 0, 0, 0.015);
+}
+
+.pricing-spec-row:hover {
+  background-color: rgba(79, 117, 242, 0.04);
+}
+
+.pricing-spec-label {
+  color: var(--zd-text-main, #1e293b);
+  font-size: 14px;
+}
+
+/* Reference image check pill: green background, white check in green circle */
+.plan-check-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #e6f9f0;
+  color: #0d8a54;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: 999px;
+  padding: 6px 18px;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.1);
+  transition: transform 0.15s ease;
+}
+
+.plan-check-pill:hover {
+  transform: scale(1.03);
+}
+
+.check-icon-circle {
+  background-color: #10b981;
+  color: #ffffff;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+
+/* Reference image addon pill: orange/yellow pill with + icon */
+.plan-addon-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #fff8e6;
+  color: #b45309;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 999px;
+  padding: 6px 18px;
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: 0 1px 3px rgba(245, 158, 11, 0.1);
+}
+
+.plus-icon-circle {
+  background-color: #f59e0b;
+  color: #ffffff;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+
+/* Disabled/Cross feature pill */
+.plan-cross-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: #f1f5f9;
+  color: #94a3b8;
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+/* DARK MODE OVERRIDES FOR PRICING TABLE */
+.dark-mode .pricing-comparison-table-wrapper {
+  background-color: #141b47 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+}
+
+.dark-mode .pricing-feature-col-head {
+  background-color: #10173d !important;
+  border-right-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .pricing-spec-row td {
+  border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+.dark-mode .pricing-spec-row:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+}
+
+.dark-mode .pricing-spec-row:hover {
+  background-color: rgba(112, 94, 200, 0.12) !important;
+}
+
+.dark-mode .pricing-spec-label {
+  color: #edf0f5 !important;
+}
+
+.dark-mode .plan-check-pill {
+  background-color: rgba(16, 185, 129, 0.15) !important;
+  color: #34d399 !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+
+.dark-mode .plan-addon-pill {
+  background-color: rgba(245, 158, 11, 0.15) !important;
+  color: #fbbf24 !important;
+  border-color: rgba(245, 158, 11, 0.3) !important;
+}
+
+.dark-mode .plan-cross-pill {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  color: #64748b !important;
+}

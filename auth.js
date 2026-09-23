@@ -46,9 +46,54 @@ const WhatsAppSessionSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now },
 });
 
+const PlanSchema = new mongoose.Schema({
+  planId: { type: String, unique: true, index: true },
+  name: { type: String, required: true },
+  price: { type: Number, required: true },
+  currency: { type: String, default: 'INR' },
+  description: { type: String, default: '' },
+  dailyLimit: { type: String, default: '500/Day' },
+  validity: { type: String, default: '30 Days' },
+  validityDays: { type: Number, default: 30 },
+  deviceLimit: { type: String, default: '1 Free + 1 Add-on' },
+  apiAccess: { type: Boolean, default: false },
+  webAccess: { type: Boolean, default: true },
+  bulkMsg: { type: Boolean, default: false },
+  groupOption: { type: Boolean, default: false },
+  scheduleMsg: { type: Boolean, default: false },
+  ipSecurity: { type: Boolean, default: false },
+  headerColor: { type: String, default: '#705ec8' },
+  badgeText: { type: String, default: '' },
+  active: { type: Boolean, default: true },
+  sortOrder: { type: Number, default: 0 },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+});
+
+const PlanPurchaseRequestSchema = new mongoose.Schema({
+  requestId: { type: String, unique: true, index: true },
+  userId: { type: String, required: true, index: true },
+  userName: { type: String, default: '' },
+  userMobile: { type: String, default: '' },
+  planId: { type: String, required: true },
+  planName: { type: String, required: true },
+  amount: { type: Number, required: true },
+  paymentDate: { type: String, default: () => new Date().toISOString().slice(0, 10) },
+  bankDetails: { type: String, required: true },
+  screenshot: { type: String, default: '' },
+  status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending', index: true },
+  adminNotes: { type: String, default: '' },
+  approvedAt: { type: Date },
+  rejectedAt: { type: Date },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+});
+
 const User = mongoose.models.WAUser || mongoose.model('WAUser', UserSchema);
 const Otp = mongoose.models.WAOtp || mongoose.model('WAOtp', OtpSchema);
 const WhatsAppSession = mongoose.models.WAWhatsAppSession || mongoose.model('WAWhatsAppSession', WhatsAppSessionSchema);
+const Plan = mongoose.models.WAPlan || mongoose.model('WAPlan', PlanSchema);
+const PlanPurchaseRequest = mongoose.models.WAPlanPurchaseRequest || mongoose.model('WAPlanPurchaseRequest', PlanPurchaseRequestSchema);
 
 const cleanMobile = (value) => String(value || '').replace(/\D/g, '');
 const randomDigits = (length) => {
@@ -101,6 +146,76 @@ const makePassword = () => {
 const tokenHash = (token) => hashText(token);
 const generateApiToken = () => 'wa_' + crypto.randomBytes(12).toString('hex');
 
+async function ensureDefaultPlans() {
+  if (mongoose.connection.readyState !== 1) return;
+  const count = await Plan.countDocuments();
+  if (count === 0) {
+    await Plan.create([
+      {
+        planId: 'plan_startup',
+        name: 'Startup',
+        price: 99,
+        currency: 'INR',
+        description: 'Send message to contacts only',
+        dailyLimit: '500/Day',
+        validity: '30 Days',
+        validityDays: 30,
+        deviceLimit: '1 Free + 1 Add-on',
+        apiAccess: false,
+        webAccess: true,
+        bulkMsg: false,
+        groupOption: false,
+        scheduleMsg: false,
+        ipSecurity: false,
+        headerColor: '#5398f5',
+        sortOrder: 1,
+        active: true
+      },
+      {
+        planId: 'plan_business',
+        name: 'Business',
+        price: 149,
+        currency: 'INR',
+        description: 'Send message to groups also',
+        dailyLimit: '1000/Day',
+        validity: '30 Days',
+        validityDays: 30,
+        deviceLimit: '1 Free + 2 Add-ons',
+        apiAccess: true,
+        webAccess: true,
+        bulkMsg: true,
+        groupOption: true,
+        scheduleMsg: true,
+        ipSecurity: false,
+        headerColor: '#128c7e',
+        sortOrder: 2,
+        active: true
+      },
+      {
+        planId: 'plan_enterprise',
+        name: 'Enterprise',
+        price: 199,
+        currency: 'INR',
+        description: 'Received message webhook support',
+        dailyLimit: '2000/Day',
+        validity: '30 Days',
+        validityDays: 30,
+        deviceLimit: '1 Free + 4 Add-ons',
+        apiAccess: true,
+        webAccess: true,
+        bulkMsg: true,
+        groupOption: true,
+        scheduleMsg: true,
+        ipSecurity: true,
+        headerColor: '#705ec8',
+        sortOrder: 3,
+        active: true
+      }
+    ]);
+    console.log('[PlanSystem] Default Startup, Business & Enterprise plans created.');
+  }
+}
+
 async function ensureAdminUser() {
   if (mongoose.connection.readyState !== 1) return null;
   const username = process.env.ADMIN_USERNAME || 'admin';
@@ -120,6 +235,7 @@ async function ensureAdminUser() {
     { $setOnInsert: { ownerUserId: admin.userId, role: 'admin', status: 'waiting' } },
     { upsert: true }
   );
+  await ensureDefaultPlans().catch(err => console.error('[PlanSystem] Seeding error:', err.message));
   return admin;
 }
 
@@ -1063,4 +1179,252 @@ async function recordAdminWhatsAppSession(info = {}) {
   }
 }
 
-module.exports = { router, authRequired, adminRequired, ensureAdminUser, recordAdminWhatsAppSession, User, WhatsAppSession };
+// =========================================================
+// PLAN MANAGEMENT & SUBSCRIPTION PURCHASE APIS
+// =========================================================
+
+// 1. Get active plans for user pricing table
+router.get('/api/plans', authRequired, async (req, res) => {
+  try {
+    const plans = await Plan.find({ active: true }).sort({ sortOrder: 1, price: 1 });
+    const userRequests = await PlanPurchaseRequest.find({ userId: req.user.userId }).sort({ createdAt: -1 });
+    res.json({
+      success: true,
+      plans,
+      currentPlan: req.user.plan || 'Standard',
+      myRequests: userRequests
+    });
+  } catch (error) {
+    console.error('Fetch active plans error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 2. Admin: Get all plans (active & inactive)
+router.get('/api/admin/plans', authRequired, adminRequired, async (req, res) => {
+  try {
+    const plans = await Plan.find().sort({ sortOrder: 1, createdAt: 1 });
+    res.json({ success: true, plans });
+  } catch (error) {
+    console.error('Admin fetch plans error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 3. Admin: Create a new plan
+router.post('/api/admin/plans', authRequired, adminRequired, async (req, res) => {
+  try {
+    const {
+      name, price, currency, description, dailyLimit, validity, validityDays,
+      deviceLimit, apiAccess, webAccess, bulkMsg, groupOption, scheduleMsg,
+      ipSecurity, headerColor, badgeText, active, sortOrder
+    } = req.body;
+
+    if (!name || price === undefined || price === null) {
+      return res.status(400).json({ success: false, message: 'Plan Name और Price आवश्यक हैं।' });
+    }
+
+    const planId = 'plan_' + randomDigits(6);
+    const plan = await Plan.create({
+      planId,
+      name: String(name).trim(),
+      price: Number(price),
+      currency: currency || 'INR',
+      description: description || '',
+      dailyLimit: dailyLimit || '500/Day',
+      validity: validity || '30 Days',
+      validityDays: Number(validityDays) || 30,
+      deviceLimit: deviceLimit || '1 Free + 1 Add-on',
+      apiAccess: Boolean(apiAccess),
+      webAccess: webAccess !== undefined ? Boolean(webAccess) : true,
+      bulkMsg: Boolean(bulkMsg),
+      groupOption: Boolean(groupOption),
+      scheduleMsg: Boolean(scheduleMsg),
+      ipSecurity: Boolean(ipSecurity),
+      headerColor: headerColor || '#705ec8',
+      badgeText: badgeText || '',
+      active: active !== undefined ? Boolean(active) : true,
+      sortOrder: Number(sortOrder) || 0,
+    });
+
+    res.json({ success: true, message: 'नया प्लान सफलतापूर्वक बनाया गया!', plan });
+  } catch (error) {
+    console.error('Admin create plan error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 4. Admin: Update an existing plan
+router.put('/api/admin/plans/:planId', authRequired, adminRequired, async (req, res) => {
+  try {
+    const plan = await Plan.findOne({ planId: req.params.planId });
+    if (!plan) return res.status(404).json({ success: false, message: 'Plan नहीं मिला।' });
+
+    const fields = [
+      'name', 'price', 'currency', 'description', 'dailyLimit', 'validity',
+      'validityDays', 'deviceLimit', 'apiAccess', 'webAccess', 'bulkMsg',
+      'groupOption', 'scheduleMsg', 'ipSecurity', 'headerColor', 'badgeText',
+      'active', 'sortOrder'
+    ];
+
+    for (const f of fields) {
+      if (req.body[f] !== undefined) {
+        if (f === 'price' || f === 'validityDays' || f === 'sortOrder') {
+          plan[f] = Number(req.body[f]);
+        } else if (typeof plan[f] === 'boolean') {
+          plan[f] = Boolean(req.body[f]);
+        } else {
+          plan[f] = req.body[f];
+        }
+      }
+    }
+    plan.updatedAt = new Date();
+    await plan.save();
+
+    res.json({ success: true, message: 'Plan सफलतापूर्वक अपडेट किया गया!', plan });
+  } catch (error) {
+    console.error('Admin update plan error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 5. Admin: Delete a plan
+router.delete('/api/admin/plans/:planId', authRequired, adminRequired, async (req, res) => {
+  try {
+    const plan = await Plan.findOneAndDelete({ planId: req.params.planId });
+    if (!plan) return res.status(404).json({ success: false, message: 'Plan नहीं मिला।' });
+    res.json({ success: true, message: 'Plan हटा दिया गया है।' });
+  } catch (error) {
+    console.error('Admin delete plan error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 6. User: Submit plan purchase request
+router.post('/api/plans/purchase', authRequired, async (req, res) => {
+  try {
+    const { planId, amount, paymentDate, bankDetails, screenshot, notes } = req.body;
+    if (!planId || !bankDetails) {
+      return res.status(400).json({ success: false, message: 'Plan और Payment / Bank Details भरना आवश्यक है।' });
+    }
+
+    const plan = await Plan.findOne({ planId });
+    if (!plan) return res.status(404).json({ success: false, message: 'चुना हुआ Plan उपलब्ध नहीं है।' });
+
+    const requestId = 'REQ' + randomDigits(7);
+    const purchaseReq = await PlanPurchaseRequest.create({
+      requestId,
+      userId: req.user.userId,
+      userName: req.user.name || req.user.username || 'User',
+      userMobile: req.user.mobile || req.user.username || '',
+      planId: plan.planId,
+      planName: plan.name,
+      amount: Number(amount) || plan.price,
+      paymentDate: paymentDate || new Date().toISOString().slice(0, 10),
+      bankDetails: String(bankDetails).trim(),
+      screenshot: screenshot || '',
+      adminNotes: notes || '',
+      status: 'pending'
+    });
+
+    res.json({
+      success: true,
+      message: 'आपकी पेमेंट रिक्वेस्ट सफलतापूर्वक सबमिट हो गई है! एडमिन द्वारा अप्रूवल के बाद प्लान एक्टिवेट हो जाएगा।',
+      request: purchaseReq
+    });
+  } catch (error) {
+    console.error('Plan purchase submit error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 7. User: Get my plan purchase requests
+router.get('/api/user/my-plan-requests', authRequired, async (req, res) => {
+  try {
+    const requests = await PlanPurchaseRequest.find({ userId: req.user.userId }).sort({ createdAt: -1 });
+    res.json({
+      success: true,
+      currentPlan: req.user.plan || 'Standard',
+      requests
+    });
+  } catch (error) {
+    console.error('User fetch my plan requests error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 8. Admin: Get all purchase requests
+router.get('/api/admin/plan-requests', authRequired, adminRequired, async (req, res) => {
+  try {
+    const { status } = req.query;
+    const filter = {};
+    if (status && status !== 'all') {
+      filter.status = status;
+    }
+    const requests = await PlanPurchaseRequest.find(filter).sort({ createdAt: -1 });
+    const counts = {
+      total: await PlanPurchaseRequest.countDocuments(),
+      pending: await PlanPurchaseRequest.countDocuments({ status: 'pending' }),
+      approved: await PlanPurchaseRequest.countDocuments({ status: 'approved' }),
+      rejected: await PlanPurchaseRequest.countDocuments({ status: 'rejected' }),
+    };
+
+    res.json({ success: true, requests, counts });
+  } catch (error) {
+    console.error('Admin fetch plan requests error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 9. Admin: Approve purchase request
+router.post('/api/admin/plan-requests/:requestId/approve', authRequired, adminRequired, async (req, res) => {
+  try {
+    const request = await PlanPurchaseRequest.findOne({ requestId: req.params.requestId });
+    if (!request) return res.status(404).json({ success: false, message: 'Request नहीं मिली।' });
+    if (request.status === 'approved') {
+      return res.status(400).json({ success: false, message: 'यह रिक्वेस्ट पहले ही अप्रूव हो चुकी है।' });
+    }
+
+    const user = await User.findOne({ userId: request.userId });
+    if (!user) return res.status(404).json({ success: false, message: 'User नहीं मिला।' });
+
+    // Update user plan
+    user.plan = request.planName;
+    user.updatedAt = new Date();
+    await user.save();
+
+    // Mark request approved
+    request.status = 'approved';
+    request.approvedAt = new Date();
+    if (req.body.notes) request.adminNotes = req.body.notes;
+    await request.save();
+
+    res.json({
+      success: true,
+      message: `User ${user.name || user.userId} (${user.mobile || user.username}) का प्लान '${request.planName}' एक्टिवेट कर दिया गया है!`
+    });
+  } catch (error) {
+    console.error('Admin approve plan request error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 10. Admin: Reject purchase request
+router.post('/api/admin/plan-requests/:requestId/reject', authRequired, adminRequired, async (req, res) => {
+  try {
+    const request = await PlanPurchaseRequest.findOne({ requestId: req.params.requestId });
+    if (!request) return res.status(404).json({ success: false, message: 'Request नहीं मिली।' });
+
+    request.status = 'rejected';
+    request.rejectedAt = new Date();
+    if (req.body.notes) request.adminNotes = req.body.notes;
+    await request.save();
+
+    res.json({ success: true, message: 'रिक्वेस्ट अस्वीकार (Reject) कर दी गई है।' });
+  } catch (error) {
+    console.error('Admin reject plan request error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+module.exports = { router, authRequired, adminRequired, ensureAdminUser, recordAdminWhatsAppSession, User, WhatsAppSession, Plan, PlanPurchaseRequest };

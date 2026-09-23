@@ -47,6 +47,10 @@ function NavIcon({ name, fallback }) {
       return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
     case 'system':
       return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+    case 'plans':
+      return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+    case 'plan-requests':
+      return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
     default:
       return <span>{fallback}</span>
   }
@@ -279,7 +283,13 @@ function App() {
 
   const navList = useMemo(() => [
     ['dashboard', '⌂', 'Dashboard'],
-    ...(isAdmin ? [['users', '👥', 'User Management']] : []),
+    ...(isAdmin ? [
+      ['users', '👥', 'User Management'],
+      ['plans', '🏷️', 'Plan Management'],
+      ['plan-requests', '💳', 'Purchase Requests'],
+    ] : [
+      ['plans', '💎', 'Pricing & Plans'],
+    ]),
     ['send', '➤', 'Send Message'],
     ['groups', '👥', 'Groups'],
     ['incoming', '◉', 'Incoming Messages'],
@@ -398,7 +408,7 @@ function App() {
                 </a>
               </li>
 
-              {isAdmin && (
+              {isAdmin ? (
                 <>
                   <li><h3>ADMINISTRATION</h3></li>
                   <li className="slide">
@@ -410,6 +420,43 @@ function App() {
                       <span className="shape2"></span>
                       <span className="side-menu__icon"><NavIcon name="users" fallback="👥" /></span>
                       <span className="side-menu__label">User Management</span>
+                    </a>
+                  </li>
+                  <li className="slide">
+                    <a 
+                      className={`side-menu__item ${page === 'plans' ? 'active' : ''}`}
+                      onClick={() => { setPage('plans'); setSidebarOpen(false); }}
+                    >
+                      <span className="shape1"></span>
+                      <span className="shape2"></span>
+                      <span className="side-menu__icon"><NavIcon name="plans" fallback="🏷️" /></span>
+                      <span className="side-menu__label">Plan Management</span>
+                    </a>
+                  </li>
+                  <li className="slide">
+                    <a 
+                      className={`side-menu__item ${page === 'plan-requests' ? 'active' : ''}`}
+                      onClick={() => { setPage('plan-requests'); setSidebarOpen(false); }}
+                    >
+                      <span className="shape1"></span>
+                      <span className="shape2"></span>
+                      <span className="side-menu__icon"><NavIcon name="plan-requests" fallback="💳" /></span>
+                      <span className="side-menu__label">Purchase Requests</span>
+                    </a>
+                  </li>
+                </>
+              ) : (
+                <>
+                  <li><h3>SUBSCRIPTION</h3></li>
+                  <li className="slide">
+                    <a 
+                      className={`side-menu__item ${page === 'plans' ? 'active' : ''}`}
+                      onClick={() => { setPage('plans'); setSidebarOpen(false); }}
+                    >
+                      <span className="shape1"></span>
+                      <span className="shape2"></span>
+                      <span className="side-menu__icon"><NavIcon name="plans" fallback="💎" /></span>
+                      <span className="side-menu__label">Pricing &amp; Plans</span>
                     </a>
                   </li>
                 </>
@@ -533,6 +580,14 @@ function App() {
               onRefresh={loadQr}
             />}
             {page === 'users' && <UsersPage notify={notify} />}
+            {page === 'plans' && (
+              isAdmin 
+                ? <AdminPlansPage notify={notify} /> 
+                : <UserPlansPage currentUser={currentUser} notify={notify} />
+            )}
+            {page === 'plan-requests' && isAdmin && (
+              <AdminPlanRequestsPage notify={notify} />
+            )}
             {page === 'send' && <SendPage 
               notify={notify}
               status={status}
@@ -2511,6 +2566,2113 @@ function UsersPage({ notify }) {
                   style={{ borderRadius: 8, padding: '7px 20px', fontSize: 13, fontWeight: 600 }}
                 >
                   {savingEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+/* =========================================================
+   ADMIN PLANS MANAGEMENT PAGE
+========================================================= */
+
+const DEFAULT_PLAN_COLORS = [
+  { name: 'Soft Blue', hex: '#4f75f2' },
+  { name: 'Teal Green', hex: '#00b894' },
+  { name: 'Zendash Purple', hex: '#705ec8' },
+  { name: 'Warm Orange', hex: '#f77f00' },
+  { name: 'Rose Pink', hex: '#e83e8c' },
+  { name: 'Ocean Cyan', hex: '#00a8ff' },
+]
+
+function AdminPlansPage({ notify }) {
+  const [plans, setPlans] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [showModal, setShowModal] = useState(false)
+  const [editingPlan, setEditingPlan] = useState(null)
+  const [previewMode, setPreviewMode] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [actionLoading, setActionLoading] = useState('')
+
+  const emptyForm = {
+    name: '',
+    price: 99,
+    currency: 'INR',
+    description: '',
+    dailyLimit: '500/Day',
+    validity: '30 Days',
+    validityDays: 30,
+    deviceLimit: '1 Free + 1 Add-on',
+    apiAccess: false,
+    webAccess: true,
+    bulkMsg: true,
+    groupOption: false,
+    scheduleMsg: false,
+    ipSecurity: false,
+    headerColor: '#4f75f2',
+    badgeText: '',
+    active: true,
+    sortOrder: 0
+  }
+
+  const [form, setForm] = useState(emptyForm)
+
+  const fetchPlans = useCallback(async () => {
+    setLoading(true)
+    try {
+      const d = await api('/api/admin/plans')
+      if (d.success) {
+        setPlans(d.plans || [])
+      }
+    } catch (e) {
+      notify('प्लान लोड करने में त्रुटि: ' + e.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [notify])
+
+  useEffect(() => {
+    fetchPlans()
+  }, [fetchPlans])
+
+  const openCreateModal = () => {
+    setEditingPlan(null)
+    setForm({
+      ...emptyForm,
+      sortOrder: plans.length + 1
+    })
+    setShowModal(true)
+  }
+
+  const openEditModal = (p) => {
+    setEditingPlan(p)
+    setForm({
+      name: p.name || '',
+      price: p.price ?? 99,
+      currency: p.currency || 'INR',
+      description: p.description || '',
+      dailyLimit: p.dailyLimit || '500/Day',
+      validity: p.validity || '30 Days',
+      validityDays: p.validityDays ?? 30,
+      deviceLimit: p.deviceLimit || '1 Free + 1 Add-on',
+      apiAccess: Boolean(p.apiAccess),
+      webAccess: p.webAccess !== undefined ? Boolean(p.webAccess) : true,
+      bulkMsg: Boolean(p.bulkMsg),
+      groupOption: Boolean(p.groupOption),
+      scheduleMsg: Boolean(p.scheduleMsg),
+      ipSecurity: Boolean(p.ipSecurity),
+      headerColor: p.headerColor || '#4f75f2',
+      badgeText: p.badgeText || '',
+      active: p.active !== undefined ? Boolean(p.active) : true,
+      sortOrder: p.sortOrder ?? 0
+    })
+    setShowModal(true)
+  }
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    if (!form.name.trim()) return notify('कृपया Plan Name भरें।')
+    if (form.price === '' || isNaN(form.price) || Number(form.price) < 0) return notify('कृपया वैध Price भरें।')
+
+    setSaving(true)
+    try {
+      if (editingPlan) {
+        const d = await api(`/api/admin/plans/${editingPlan.planId}`, {
+          method: 'PUT',
+          body: JSON.stringify(form)
+        })
+        if (d.success) {
+          notify(`Plan '${form.name}' सफलतापूर्वक अपडेट किया गया!`)
+          setShowModal(false)
+          fetchPlans()
+        }
+      } else {
+        const d = await api('/api/admin/plans', {
+          method: 'POST',
+          body: JSON.stringify(form)
+        })
+        if (d.success) {
+          notify(`नया Plan '${form.name}' सफलतापूर्वक बनाया गया!`)
+          setShowModal(false)
+          fetchPlans()
+        }
+      }
+    } catch (e) {
+      notify('एरर: ' + e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const togglePlanActive = async (p) => {
+    setActionLoading(p.planId)
+    try {
+      const d = await api(`/api/admin/plans/${p.planId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ active: !p.active })
+      })
+      if (d.success) {
+        notify(`Plan '${p.name}' को ${!p.active ? 'सक्रिय (Active)' : 'निष्क्रिय (Inactive)'} कर दिया गया।`)
+        setPlans(prev => prev.map(item => item.planId === p.planId ? { ...item, active: !p.active } : item))
+      }
+    } catch (e) {
+      notify('Status update error: ' + e.message)
+    } finally {
+      setActionLoading('')
+    }
+  }
+
+  const handleDeletePlan = async (p) => {
+    if (!window.confirm(`क्या आप वाकई Plan '${p.name}' को हटाना चाहते हैं?`)) return
+    setActionLoading(p.planId)
+    try {
+      const d = await api(`/api/admin/plans/${p.planId}`, { method: 'DELETE' })
+      if (d.success) {
+        notify(`Plan '${p.name}' हटा दिया गया है।`)
+        setPlans(prev => prev.filter(item => item.planId !== p.planId))
+      }
+    } catch (e) {
+      notify('Delete error: ' + e.message)
+    } finally {
+      setActionLoading('')
+    }
+  }
+
+  return (
+    <section className="admin-plans-page">
+      {/* Page Header */}
+      <div className="page-header d-flex flex-wrap align-items-center justify-content-between mb-4">
+        <div>
+          <h1 className="page-title mb-1" style={{ fontSize: 24, fontWeight: 700, color: 'inherit' }}>
+            🏷️ Plan Management
+          </h1>
+          <ol className="breadcrumb mb-0" style={{ background: 'transparent', padding: 0, fontSize: 13 }}>
+            <li className="breadcrumb-item text-muted">Admin</li>
+            <li className="breadcrumb-item active text-primary">Plans &amp; Subscriptions</li>
+          </ol>
+        </div>
+        <div className="d-flex align-items-center gap-2 mt-2 mt-md-0" style={{ gap: 10 }}>
+          <button 
+            type="button" 
+            className="btn btn-outline-primary"
+            onClick={() => setPreviewMode(!previewMode)}
+            style={{ borderRadius: 8, padding: '8px 16px', fontWeight: 600, fontSize: 13 }}
+          >
+            {previewMode ? '⚙️ Admin List View' : '👁️ Preview User Pricing Table'}
+          </button>
+          <button 
+            type="button" 
+            className="btn btn-primary"
+            onClick={openCreateModal}
+            style={{ borderRadius: 8, padding: '8px 18px', fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <span>➕</span> Create New Plan
+          </button>
+        </div>
+      </div>
+
+      {previewMode ? (
+        <div className="card shadow-sm mb-4" style={{ borderRadius: 16 }}>
+          <div className="card-header d-flex align-items-center justify-content-between" style={{ padding: '16px 20px' }}>
+            <div>
+              <h5 className="card-title mb-0" style={{ fontSize: 16, fontWeight: 700 }}>
+                👁️ User Pricing Table Live Preview
+              </h5>
+              <small className="text-muted">This is exactly how users see the comparison table on their portal.</small>
+            </div>
+            <button 
+              type="button" 
+              className="btn btn-sm btn-white" 
+              onClick={() => setPreviewMode(false)}
+              style={{ borderRadius: 6, fontSize: 12 }}
+            >
+              Close Preview
+            </button>
+          </div>
+          <div className="card-body p-3">
+            <UserPlansPage currentUser={{ plan: 'Startup' }} notify={notify} isPreview={true} />
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Stats Bar */}
+          <div className="row row-cards mb-4">
+            <div className="col-sm-6 col-lg-3">
+              <div className="card p-3" style={{ borderRadius: 12 }}>
+                <div className="d-flex align-items-center">
+                  <span className="stamp stamp-md bg-primary-transparent text-primary mr-3" style={{ marginRight: 14, fontSize: 20, width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10, background: 'rgba(79, 117, 242, 0.12)' }}>
+                    🏷️
+                  </span>
+                  <div>
+                    <h4 className="m-0 font-weight-bold" style={{ fontSize: 20 }}>{plans.length}</h4>
+                    <small className="text-muted">Total Configured Plans</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="col-sm-6 col-lg-3">
+              <div className="card p-3" style={{ borderRadius: 12 }}>
+                <div className="d-flex align-items-center">
+                  <span className="stamp stamp-md bg-success-transparent text-success mr-3" style={{ marginRight: 14, fontSize: 20, width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10, background: 'rgba(45, 206, 137, 0.12)' }}>
+                    ✓
+                  </span>
+                  <div>
+                    <h4 className="m-0 font-weight-bold" style={{ fontSize: 20 }}>{plans.filter(p => p.active).length}</h4>
+                    <small className="text-muted">Active in User Panel</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="col-sm-6 col-lg-3">
+              <div className="card p-3" style={{ borderRadius: 12 }}>
+                <div className="d-flex align-items-center">
+                  <span className="stamp stamp-md bg-info-transparent text-info mr-3" style={{ marginRight: 14, fontSize: 20, width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10, background: 'rgba(0, 168, 255, 0.12)' }}>
+                    ₹
+                  </span>
+                  <div>
+                    <h4 className="m-0 font-weight-bold" style={{ fontSize: 20 }}>
+                      ₹{plans.length ? Math.min(...plans.map(p => p.price)) : 0}
+                    </h4>
+                    <small className="text-muted">Starting Base Price</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="col-sm-6 col-lg-3">
+              <div className="card p-3" style={{ borderRadius: 12 }}>
+                <div className="d-flex align-items-center">
+                  <span className="stamp stamp-md bg-warning-transparent text-warning mr-3" style={{ marginRight: 14, fontSize: 20, width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10, background: 'rgba(255, 171, 0, 0.12)' }}>
+                    ⚙️
+                  </span>
+                  <div>
+                    <h4 className="m-0 font-weight-bold" style={{ fontSize: 20 }}>11 Fields</h4>
+                    <small className="text-muted">Full Parameter Control</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Plans Table & Cards */}
+          <div className="card shadow-sm" style={{ borderRadius: 16 }}>
+            <div className="card-header d-flex align-items-center justify-content-between" style={{ padding: '16px 20px', borderBottom: '1px solid var(--zd-border, rgba(0,0,0,0.06))' }}>
+              <div>
+                <h5 className="card-title mb-0" style={{ fontSize: 16, fontWeight: 700 }}>All Subscription Plans</h5>
+                <small className="text-muted">Manage plan prices, message limits, validity, and feature toggles.</small>
+              </div>
+              <button 
+                type="button" 
+                className="btn btn-sm btn-outline-secondary" 
+                onClick={fetchPlans}
+                disabled={loading}
+                style={{ borderRadius: 8 }}
+              >
+                ↻ Refresh
+              </button>
+            </div>
+
+            <div className="card-body p-0">
+              {loading ? (
+                <div style={{ textAlign: 'center', padding: '60px 20px', color: '#6b7280' }}>
+                  <div className="spinner-border text-primary mb-2" role="status"></div>
+                  <div>योजनाएं लोड हो रही हैं (Loading plans)...</div>
+                </div>
+              ) : plans.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+                  <div style={{ fontSize: 36, marginBottom: 12 }}>🏷️</div>
+                  <h4 style={{ fontWeight: 700 }}>अभी कोई प्लान नहीं बना है</h4>
+                  <p className="text-muted mb-3">Create your first subscription plan with limits and features.</p>
+                  <button type="button" className="btn btn-primary" onClick={openCreateModal}>
+                    ➕ Create First Plan
+                  </button>
+                </div>
+              ) : (
+                <div className="table-responsive">
+                  <table className="table card-table table-vcenter text-nowrap mb-0" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+                    <thead>
+                      <tr style={{ background: 'var(--zd-card-bg, #f8fafc)', borderBottom: '1px solid var(--zd-border, #eef2f6)' }}>
+                        <th style={{ width: 40, textAlign: 'center', fontWeight: 700 }}>#</th>
+                        <th style={{ fontWeight: 700 }}>Plan Name &amp; Banner</th>
+                        <th style={{ fontWeight: 700 }}>Price &amp; Validity</th>
+                        <th style={{ fontWeight: 700 }}>Limits</th>
+                        <th style={{ fontWeight: 700 }}>Key Capabilities</th>
+                        <th style={{ fontWeight: 700, textAlign: 'center' }}>Status</th>
+                        <th style={{ fontWeight: 700, textAlign: 'right', paddingRight: 24 }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {plans.map((p, idx) => (
+                        <tr key={p.planId || idx}>
+                          <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--zd-text-muted, #64748b)' }}>
+                            {idx + 1}
+                          </td>
+                          <td>
+                            <div className="d-flex align-items-center" style={{ gap: 12 }}>
+                              <span 
+                                style={{ 
+                                  width: 14, 
+                                  height: 38, 
+                                  borderRadius: 4, 
+                                  background: p.headerColor || '#4f75f2',
+                                  display: 'inline-block',
+                                  flexShrink: 0
+                                }} 
+                              />
+                              <div>
+                                <div className="d-flex align-items-center" style={{ gap: 8 }}>
+                                  <strong style={{ fontSize: 15, color: 'inherit' }}>{p.name}</strong>
+                                  {p.badgeText && (
+                                    <span className="badge badge-warning" style={{ fontSize: 10, padding: '2px 6px', fontWeight: 700 }}>
+                                      {p.badgeText}
+                                    </span>
+                                  )}
+                                </div>
+                                <small className="text-muted" style={{ display: 'block', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {p.description || 'No description'}
+                                </small>
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <div>
+                              <span style={{ fontSize: 16, fontWeight: 700, color: '#10b981' }}>
+                                ₹{p.price}
+                              </span>
+                              <span className="text-muted" style={{ fontSize: 12, marginLeft: 4 }}>
+                                / {p.validity || `${p.validityDays} Days`}
+                              </span>
+                            </div>
+                            <small className="text-muted" style={{ fontSize: 11 }}>
+                              Currency: {p.currency || 'INR'}
+                            </small>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: 12, lineHeight: 1.6 }}>
+                              <div><strong>Daily:</strong> <span className="badge badge-primary-light" style={{ padding: '2px 6px' }}>{p.dailyLimit}</span></div>
+                              <div><strong>Devices:</strong> <span className="badge badge-info-light" style={{ padding: '2px 6px' }}>{p.deviceLimit}</span></div>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="d-flex flex-wrap gap-1" style={{ gap: 4, maxWidth: 260 }}>
+                              <span className={`badge ${p.apiAccess ? 'badge-success-light' : 'badge-light text-muted'}`} style={{ fontSize: 10 }}>
+                                {p.apiAccess ? '✓ API' : '✕ API'}
+                              </span>
+                              <span className={`badge ${p.webAccess ? 'badge-success-light' : 'badge-light text-muted'}`} style={{ fontSize: 10 }}>
+                                {p.webAccess ? '✓ Web' : '✕ Web'}
+                              </span>
+                              <span className={`badge ${p.bulkMsg ? 'badge-success-light' : 'badge-light text-muted'}`} style={{ fontSize: 10 }}>
+                                {p.bulkMsg ? '✓ Bulk' : '✕ Bulk'}
+                              </span>
+                              <span className={`badge ${p.groupOption ? 'badge-success-light' : 'badge-light text-muted'}`} style={{ fontSize: 10 }}>
+                                {p.groupOption ? '✓ Group' : '✕ Group'}
+                              </span>
+                              <span className={`badge ${p.scheduleMsg ? 'badge-success-light' : 'badge-light text-muted'}`} style={{ fontSize: 10 }}>
+                                {p.scheduleMsg ? '✓ Schedule' : '✕ Schedule'}
+                              </span>
+                              <span className={`badge ${p.ipSecurity ? 'badge-success-light' : 'badge-light text-muted'}`} style={{ fontSize: 10 }}>
+                                {p.ipSecurity ? '✓ IP Sec' : '✕ IP Sec'}
+                              </span>
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              className={`btn btn-sm ${p.active ? 'btn-success-light' : 'btn-outline-secondary'}`}
+                              onClick={() => togglePlanActive(p)}
+                              disabled={actionLoading === p.planId}
+                              style={{ borderRadius: 20, padding: '3px 12px', fontSize: 11, fontWeight: 700 }}
+                              title="Click to toggle status"
+                            >
+                              {p.active ? '✓ Active' : '✕ Inactive'}
+                            </button>
+                          </td>
+                          <td style={{ textAlign: 'right', paddingRight: 20 }}>
+                            <div className="d-inline-flex gap-1" style={{ gap: 6 }}>
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-primary"
+                                onClick={() => openEditModal(p)}
+                                style={{ borderRadius: 6, padding: '4px 10px', fontSize: 12 }}
+                              >
+                                ✏️ Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-danger"
+                                onClick={() => handleDeletePlan(p)}
+                                disabled={actionLoading === p.planId}
+                                style={{ borderRadius: 6, padding: '4px 10px', fontSize: 12 }}
+                              >
+                                🗑️ Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* CREATE / EDIT PLAN MODAL */}
+      {showModal && (
+        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+          <div 
+            className="modal-content-card" 
+            onClick={e => e.stopPropagation()} 
+            style={{ maxWidth: 680, width: '92%', borderRadius: 16, maxHeight: '90vh', overflowY: 'auto' }}
+          >
+            <div className="modal-header d-flex align-items-center justify-content-between" style={{ padding: '16px 24px', borderBottom: '1px solid var(--zd-border, #eef2f6)' }}>
+              <div>
+                <h5 className="modal-title font-weight-bold m-0" style={{ fontSize: 17, color: 'inherit' }}>
+                  {editingPlan ? `✏️ Edit Plan: ${editingPlan.name}` : '➕ Create New Subscription Plan'}
+                </h5>
+                <small className="text-muted">Configure all 11 plan parameters, pricing, and visual styling.</small>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setShowModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#8a98ac', lineHeight: 1 }}
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleSave}>
+              <div className="modal-body" style={{ padding: '22px 24px' }}>
+                {/* 1 & 2: Plan Name and Price */}
+                <div className="row g-3 mb-3">
+                  <div className="col-md-7">
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                      Plan Name (प्लान का नाम) *
+                    </label>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      value={form.name}
+                      onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                      placeholder="e.g. Startup, Business, Enterprise, Pro"
+                      required
+                      style={{ height: 42, borderRadius: 8 }}
+                    />
+                  </div>
+                  <div className="col-md-5">
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                      Price (कीमत INR में) *
+                    </label>
+                    <div className="input-group">
+                      <span className="input-group-text" style={{ borderRadius: '8px 0 0 8px', fontWeight: 700 }}>₹</span>
+                      <input 
+                        type="number" 
+                        className="form-control" 
+                        value={form.price}
+                        onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
+                        placeholder="e.g. 99"
+                        min="0"
+                        required
+                        style={{ height: 42, borderRadius: '0 8px 8px 0' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3 & 4: Daily Msg Limit and Validity */}
+                <div className="row g-3 mb-3">
+                  <div className="col-md-6">
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                      Daily Message Limit (प्रतिदिन संदेश सीमा) *
+                    </label>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      value={form.dailyLimit}
+                      onChange={e => setForm(f => ({ ...f, dailyLimit: e.target.value }))}
+                      placeholder="e.g. 500/Day, 1000/Day, Unlimited"
+                      required
+                      style={{ height: 42, borderRadius: 8 }}
+                    />
+                  </div>
+                  <div className="col-md-6">
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                      Validity Display (वैधता) *
+                    </label>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      value={form.validity}
+                      onChange={e => setForm(f => ({ ...f, validity: e.target.value }))}
+                      placeholder="e.g. 30 Days, 365 Days, Lifetime"
+                      required
+                      style={{ height: 42, borderRadius: 8 }}
+                    />
+                  </div>
+                </div>
+
+                {/* 5: Device Limit & Validity in Days */}
+                <div className="row g-3 mb-3">
+                  <div className="col-md-6">
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                      Device Limit (डिवाइस सीमा) *
+                    </label>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      value={form.deviceLimit}
+                      onChange={e => setForm(f => ({ ...f, deviceLimit: e.target.value }))}
+                      placeholder="e.g. 1 Free + 1 Add-on, 1 Device"
+                      required
+                      style={{ height: 42, borderRadius: 8 }}
+                    />
+                  </div>
+                  <div className="col-md-6">
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                      Validity in Days (सिस्टम गणना हेतु दिन)
+                    </label>
+                    <input 
+                      type="number" 
+                      className="form-control" 
+                      value={form.validityDays}
+                      onChange={e => setForm(f => ({ ...f, validityDays: Number(e.target.value) || 30 }))}
+                      placeholder="30"
+                      min="1"
+                      style={{ height: 42, borderRadius: 8 }}
+                    />
+                  </div>
+                </div>
+
+                {/* Tagline / Description */}
+                <div className="form-group mb-3">
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                    Description / Subtitle (योजना का विवरण/टैगलाइन)
+                  </label>
+                  <input 
+                    type="text" 
+                    className="form-control" 
+                    value={form.description}
+                    onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                    placeholder="e.g. Send message to contacts only / Received message webhook support"
+                    style={{ height: 42, borderRadius: 8 }}
+                  />
+                </div>
+
+                {/* Color and Badge */}
+                <div className="row g-3 mb-4">
+                  <div className="col-md-7">
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                      Header Banner Theme Color (कलर थीम)
+                    </label>
+                    <div className="d-flex align-items-center gap-2" style={{ gap: 8 }}>
+                      <input 
+                        type="color" 
+                        value={form.headerColor} 
+                        onChange={e => setForm(f => ({ ...f, headerColor: e.target.value }))}
+                        style={{ width: 44, height: 42, padding: 2, border: '1px solid #d0d7de', borderRadius: 8, cursor: 'pointer' }}
+                      />
+                      <div className="d-flex flex-wrap gap-1" style={{ gap: 6 }}>
+                        {DEFAULT_PLAN_COLORS.map(c => (
+                          <button
+                            key={c.hex}
+                            type="button"
+                            onClick={() => setForm(f => ({ ...f, headerColor: c.hex }))}
+                            style={{
+                              width: 26,
+                              height: 26,
+                              borderRadius: '50%',
+                              background: c.hex,
+                              border: form.headerColor === c.hex ? '2px solid #000' : '1px solid rgba(0,0,0,0.15)',
+                              cursor: 'pointer',
+                              padding: 0
+                            }}
+                            title={c.name}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-5">
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                      Badge Text (बैज जैसे POPULAR, BEST)
+                    </label>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      value={form.badgeText}
+                      onChange={e => setForm(f => ({ ...f, badgeText: e.target.value }))}
+                      placeholder="e.g. POPULAR, RECOMMENDED"
+                      style={{ height: 42, borderRadius: 8 }}
+                    />
+                  </div>
+                </div>
+
+                {/* 6 to 11: Feature Toggles */}
+                <div className="card p-3 mb-3" style={{ borderRadius: 12, background: 'var(--zd-border-subtle, rgba(0,0,0,0.02))', border: '1px solid var(--zd-border, #eef2f6)' }}>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 700, marginBottom: 12, color: 'inherit' }}>
+                    ⚡ Feature Access &amp; Capabilities (सुविधाएं चालू / बंद करें)
+                  </label>
+                  <div className="row g-3">
+                    <div className="col-sm-6">
+                      <label className="custom-control custom-checkbox d-flex align-items-center" style={{ gap: 8, cursor: 'pointer', margin: 0 }}>
+                        <input 
+                          type="checkbox" 
+                          checked={form.apiAccess}
+                          onChange={e => setForm(f => ({ ...f, apiAccess: e.target.checked }))}
+                        />
+                        <span style={{ fontSize: 13, fontWeight: 600 }}>6. API Access</span>
+                      </label>
+                      <small className="text-muted d-block" style={{ marginLeft: 22, fontSize: 11 }}>REST API &amp; Webhook support</small>
+                    </div>
+
+                    <div className="col-sm-6">
+                      <label className="custom-control custom-checkbox d-flex align-items-center" style={{ gap: 8, cursor: 'pointer', margin: 0 }}>
+                        <input 
+                          type="checkbox" 
+                          checked={form.webAccess}
+                          onChange={e => setForm(f => ({ ...f, webAccess: e.target.checked }))}
+                        />
+                        <span style={{ fontSize: 13, fontWeight: 600 }}>7. Web Access for Send Msg</span>
+                      </label>
+                      <small className="text-muted d-block" style={{ marginLeft: 22, fontSize: 11 }}>Web UI direct message portal</small>
+                    </div>
+
+                    <div className="col-sm-6">
+                      <label className="custom-control custom-checkbox d-flex align-items-center" style={{ gap: 8, cursor: 'pointer', margin: 0 }}>
+                        <input 
+                          type="checkbox" 
+                          checked={form.bulkMsg}
+                          onChange={e => setForm(f => ({ ...f, bulkMsg: e.target.checked }))}
+                        />
+                        <span style={{ fontSize: 13, fontWeight: 600 }}>8. Send Bulk Msg</span>
+                      </label>
+                      <small className="text-muted d-block" style={{ marginLeft: 22, fontSize: 11 }}>Excel upload and bulk campaigns</small>
+                    </div>
+
+                    <div className="col-sm-6">
+                      <label className="custom-control custom-checkbox d-flex align-items-center" style={{ gap: 8, cursor: 'pointer', margin: 0 }}>
+                        <input 
+                          type="checkbox" 
+                          checked={form.groupOption}
+                          onChange={e => setForm(f => ({ ...f, groupOption: e.target.checked }))}
+                        />
+                        <span style={{ fontSize: 13, fontWeight: 600 }}>9. Group Option</span>
+                      </label>
+                      <small className="text-muted d-block" style={{ marginLeft: 22, fontSize: 11 }}>Send message to WhatsApp groups</small>
+                    </div>
+
+                    <div className="col-sm-6">
+                      <label className="custom-control custom-checkbox d-flex align-items-center" style={{ gap: 8, cursor: 'pointer', margin: 0 }}>
+                        <input 
+                          type="checkbox" 
+                          checked={form.scheduleMsg}
+                          onChange={e => setForm(f => ({ ...f, scheduleMsg: e.target.checked }))}
+                        />
+                        <span style={{ fontSize: 13, fontWeight: 600 }}>10. Send Schedule Msg</span>
+                      </label>
+                      <small className="text-muted d-block" style={{ marginLeft: 22, fontSize: 11 }}>Scheduled broadcast queues</small>
+                    </div>
+
+                    <div className="col-sm-6">
+                      <label className="custom-control custom-checkbox d-flex align-items-center" style={{ gap: 8, cursor: 'pointer', margin: 0 }}>
+                        <input 
+                          type="checkbox" 
+                          checked={form.ipSecurity}
+                          onChange={e => setForm(f => ({ ...f, ipSecurity: e.target.checked }))}
+                        />
+                        <span style={{ fontSize: 13, fontWeight: 600 }}>11. IP Security</span>
+                      </label>
+                      <small className="text-muted d-block" style={{ marginLeft: 22, fontSize: 11 }}>IP Whitelisting &amp; rate protection</small>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status & Sort Order */}
+                <div className="row g-3">
+                  <div className="col-6">
+                    <label className="custom-control custom-checkbox d-flex align-items-center" style={{ gap: 8, cursor: 'pointer', marginTop: 8 }}>
+                      <input 
+                        type="checkbox" 
+                        checked={form.active}
+                        onChange={e => setForm(f => ({ ...f, active: e.target.checked }))}
+                      />
+                      <span style={{ fontSize: 13, fontWeight: 700 }}>Plan Active (सक्रिय रखें)</span>
+                    </label>
+                  </div>
+                  <div className="col-6">
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
+                      Display Sort Order
+                    </label>
+                    <input 
+                      type="number" 
+                      className="form-control" 
+                      value={form.sortOrder}
+                      onChange={e => setForm(f => ({ ...f, sortOrder: Number(e.target.value) || 0 }))}
+                      style={{ height: 38, borderRadius: 8 }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-footer d-flex justify-content-end gap-2" style={{ padding: '14px 24px', borderTop: '1px solid var(--zd-border, #eef2f6)', gap: 10 }}>
+                <button 
+                  type="button" 
+                  className="btn btn-outline-secondary" 
+                  onClick={() => setShowModal(false)}
+                  style={{ borderRadius: 8, padding: '8px 16px', fontWeight: 600 }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn btn-primary"
+                  disabled={saving}
+                  style={{ borderRadius: 8, padding: '8px 22px', fontWeight: 700 }}
+                >
+                  {saving ? '⏳ Saving Plan...' : (editingPlan ? '💾 Update Plan' : '➕ Create Plan')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+/* =========================================================
+   USER PLANS & COMPARISON TABLE (Matches Reference Image)
+========================================================= */
+
+function UserPlansPage({ currentUser, notify, isPreview = false }) {
+  const [plans, setPlans] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [currentPlan, setCurrentPlan] = useState(currentUser?.plan || 'Standard')
+  const [myRequests, setMyRequests] = useState([])
+  const [activeTab, setActiveTab] = useState('plans')
+  const [selectedPlan, setSelectedPlan] = useState(null)
+
+  const fetchPlansData = useCallback(async () => {
+    setLoading(true)
+    try {
+      const d = await api('/api/plans')
+      if (d.success) {
+        setPlans(d.plans || [])
+        if (d.currentPlan) setCurrentPlan(d.currentPlan)
+        if (d.myRequests) setMyRequests(d.myRequests)
+      }
+    } catch (e) {
+      notify('Plans लोड करने में त्रुटि: ' + e.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [notify])
+
+  useEffect(() => {
+    fetchPlansData()
+  }, [fetchPlansData])
+
+  const pendingCount = myRequests.filter(r => r.status === 'pending').length
+
+  const handleOpenPurchase = (plan) => {
+    setSelectedPlan(plan)
+  }
+
+  const handlePurchaseSuccess = () => {
+    setSelectedPlan(null)
+    fetchPlansData()
+    setActiveTab('requests')
+  }
+
+  return (
+    <section className="user-plans-page">
+      {!isPreview && (
+        <>
+          {/* Header & Breadcrumb */}
+          <div className="page-header d-flex flex-wrap align-items-center justify-content-between mb-4">
+            <div>
+              <h1 className="page-title mb-1" style={{ fontSize: 24, fontWeight: 700, color: 'inherit' }}>
+                💎 Subscription Plans &amp; Pricing
+              </h1>
+              <ol className="breadcrumb mb-0" style={{ background: 'transparent', padding: 0, fontSize: 13 }}>
+                <li className="breadcrumb-item text-muted">Portal</li>
+                <li className="breadcrumb-item active text-primary">Pricing Comparison</li>
+              </ol>
+            </div>
+            <div className="d-flex align-items-center gap-2 mt-2 mt-md-0" style={{ gap: 10 }}>
+              <button 
+                type="button" 
+                className={`btn ${activeTab === 'plans' ? 'btn-primary' : 'btn-outline-primary'}`}
+                onClick={() => setActiveTab('plans')}
+                style={{ borderRadius: 8, padding: '8px 16px', fontWeight: 600, fontSize: 13 }}
+              >
+                🏷️ Pricing Table
+              </button>
+              <button 
+                type="button" 
+                className={`btn ${activeTab === 'requests' ? 'btn-primary' : 'btn-outline-primary'}`}
+                onClick={() => setActiveTab('requests')}
+                style={{ borderRadius: 8, padding: '8px 16px', fontWeight: 600, fontSize: 13, position: 'relative' }}
+              >
+                📋 My Purchase Requests
+                {pendingCount > 0 && (
+                  <span className="badge badge-warning" style={{ marginLeft: 6, fontSize: 10, padding: '2px 6px' }}>
+                    {pendingCount}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Current Active Plan Alert Banner */}
+          <div className="card mb-4" style={{ borderRadius: 16, background: 'linear-gradient(135deg, rgba(79,117,242,0.12) 0%, rgba(112,94,200,0.12) 100%)', border: '1px solid rgba(112,94,200,0.2)' }}>
+            <div className="card-body p-3 p-md-4 d-flex flex-wrap align-items-center justify-content-between" style={{ gap: 14 }}>
+              <div className="d-flex align-items-center" style={{ gap: 14 }}>
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: '#705ec8', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>
+                  🌟
+                </div>
+                <div>
+                  <h4 className="mb-1 font-weight-bold" style={{ color: 'inherit' }}>
+                    Your Current Active Plan: <span style={{ color: '#705ec8' }}>{currentPlan}</span>
+                  </h4>
+                  <p className="text-muted mb-0" style={{ fontSize: 13 }}>
+                    Choose any higher plan below to increase daily messaging capacity, add devices, and unlock group &amp; webhook access!
+                  </p>
+                </div>
+              </div>
+              <div>
+                <button 
+                  type="button" 
+                  className="btn btn-outline-primary"
+                  onClick={fetchPlansData}
+                  style={{ borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 600 }}
+                >
+                  ↻ Refresh Status
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '60px 20px', color: '#6b7280' }}>
+          <div className="spinner-border text-primary mb-2" role="status"></div>
+          <div>प्लान लोड हो रहे हैं (Loading pricing table)...</div>
+        </div>
+      ) : activeTab === 'plans' ? (
+        plans.length === 0 ? (
+          <div className="card p-5 text-center" style={{ borderRadius: 16 }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>🏷️</div>
+            <h3>कोई सक्रिय प्लान उपलब्ध नहीं है</h3>
+            <p className="text-muted">No active subscription plans available at the moment. Please contact the administrator.</p>
+          </div>
+        ) : (
+          /* PRICING COMPARISON TABLE - EXACT LAYOUT AS MEDIA SAMPLE */
+          <div className="pricing-comparison-table-wrapper card shadow-sm" style={{ borderRadius: 20, overflow: 'hidden' }}>
+            <div className="table-responsive">
+              <table className="pricing-comparison-table mb-0 w-100">
+                <thead>
+                  <tr>
+                    {/* Left corner empty / title cell */}
+                    <th className="pricing-feature-col-head" style={{ width: '22%', minWidth: 200, padding: '24px 20px', verticalAlign: 'bottom', borderRight: '1px solid var(--zd-border, #eef2f6)' }}>
+                      <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--zd-text-muted, #8a98ac)', fontWeight: 700 }}>
+                        Features &amp; Specs
+                      </span>
+                      <h3 style={{ margin: '6px 0 0', fontSize: 18, fontWeight: 800, color: 'inherit' }}>
+                        Compare All Plans
+                      </h3>
+                    </th>
+
+                    {/* Dynamic Plan Header Columns */}
+                    {plans.map((p, idx) => {
+                      // Palette shades
+                      const isCurrent = currentPlan?.toLowerCase() === p.name?.toLowerCase()
+                      const headerBg = p.headerColor || (idx === 0 ? '#9bc5ff' : idx === 1 ? '#8fe3c9' : '#d2b4ff')
+                      const isDarkHeader = ['#10b981', '#3b82f6', '#705ec8', '#f77f00', '#4f75f2'].includes(p.headerColor)
+
+                      return (
+                        <th 
+                          key={p.planId || idx} 
+                          className="pricing-plan-header-col" 
+                          style={{ 
+                            width: `${78 / plans.length}%`, 
+                            minWidth: 200, 
+                            padding: 0, 
+                            verticalAlign: 'top',
+                            borderRight: idx < plans.length - 1 ? '1px solid var(--zd-border, #eef2f6)' : 'none'
+                          }}
+                        >
+                          <div 
+                            className="plan-header-card text-center"
+                            style={{
+                              backgroundColor: headerBg,
+                              color: isDarkHeader ? '#ffffff' : '#141b47',
+                              padding: '24px 16px 20px',
+                              position: 'relative'
+                            }}
+                          >
+                            {p.badgeText && (
+                              <span 
+                                style={{
+                                  position: 'absolute',
+                                  top: 8,
+                                  right: 12,
+                                  background: 'rgba(0,0,0,0.25)',
+                                  color: '#fff',
+                                  fontSize: 10,
+                                  fontWeight: 800,
+                                  padding: '2px 8px',
+                                  borderRadius: 999
+                                }}
+                              >
+                                {p.badgeText}
+                              </span>
+                            )}
+
+                            <h2 style={{ fontSize: 24, fontWeight: 900, margin: '0 0 6px', letterSpacing: '-0.02em', color: 'inherit' }}>
+                              {p.name}
+                            </h2>
+
+                            <p style={{ fontSize: 12, margin: '0 0 14px', minHeight: 34, opacity: 0.9, lineHeight: 1.3, color: 'inherit' }}>
+                              {p.description || 'WhatsApp Automation Plan'}
+                            </p>
+
+                            {/* Price Pill */}
+                            <div className="d-flex justify-content-center mb-3">
+                              <span 
+                                className="price-pill-banner"
+                                style={{
+                                  background: isDarkHeader ? 'rgba(0,0,0,0.3)' : '#1e3a8a',
+                                  color: '#ffffff',
+                                  fontSize: 17,
+                                  fontWeight: 800,
+                                  padding: '6px 22px',
+                                  borderRadius: 999,
+                                  display: 'inline-block',
+                                  boxShadow: '0 2px 8px rgba(0,0,0,0.18)'
+                                }}
+                              >
+                                INR {p.price}
+                              </span>
+                            </div>
+
+                            {/* Buy Now Button in Header */}
+                            <div>
+                              {isCurrent ? (
+                                <button 
+                                  type="button" 
+                                  className="btn btn-sm"
+                                  disabled
+                                  style={{
+                                    background: 'rgba(255,255,255,0.7)',
+                                    color: '#0f172a',
+                                    fontWeight: 800,
+                                    borderRadius: 999,
+                                    padding: '7px 24px',
+                                    border: 'none',
+                                    fontSize: 13
+                                  }}
+                                >
+                                  ✓ Current Plan
+                                </button>
+                              ) : (
+                                <button 
+                                  type="button" 
+                                  className="btn-buy-plan-pill"
+                                  onClick={() => handleOpenPurchase(p)}
+                                  style={{
+                                    background: isDarkHeader ? '#ffffff' : '#1e3a8a',
+                                    color: isDarkHeader ? '#141b47' : '#ffffff',
+                                    fontWeight: 800,
+                                    borderRadius: 999,
+                                    padding: '8px 26px',
+                                    border: 'none',
+                                    fontSize: 14,
+                                    cursor: 'pointer',
+                                    boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
+                                    transition: 'all 0.2s ease'
+                                  }}
+                                >
+                                  Buy Now
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </th>
+                      )
+                    })}
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {/* Row 1: Daily msg limit */}
+                  <tr className="pricing-spec-row">
+                    <td className="pricing-spec-label font-weight-bold" style={{ padding: '16px 20px', borderRight: '1px solid var(--zd-border, #eef2f6)' }}>
+                      1. Daily Message Limit
+                    </td>
+                    {plans.map((p, idx) => (
+                      <td key={p.planId || idx} className="text-center" style={{ padding: '14px 12px', borderRight: idx < plans.length - 1 ? '1px solid var(--zd-border, #eef2f6)' : 'none' }}>
+                        <span className="plan-check-pill">
+                          <span className="check-icon-circle">✓</span> {p.dailyLimit}
+                        </span>
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Row 2: Validity */}
+                  <tr className="pricing-spec-row">
+                    <td className="pricing-spec-label font-weight-bold" style={{ padding: '16px 20px', borderRight: '1px solid var(--zd-border, #eef2f6)' }}>
+                      2. Validity
+                    </td>
+                    {plans.map((p, idx) => (
+                      <td key={p.planId || idx} className="text-center" style={{ padding: '14px 12px', borderRight: idx < plans.length - 1 ? '1px solid var(--zd-border, #eef2f6)' : 'none' }}>
+                        <span className="plan-check-pill">
+                          <span className="check-icon-circle">✓</span> {p.validity}
+                        </span>
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Row 3: Device limit */}
+                  <tr className="pricing-spec-row">
+                    <td className="pricing-spec-label font-weight-bold" style={{ padding: '16px 20px', borderRight: '1px solid var(--zd-border, #eef2f6)' }}>
+                      3. Device Limit
+                    </td>
+                    {plans.map((p, idx) => (
+                      <td key={p.planId || idx} className="text-center" style={{ padding: '14px 12px', borderRight: idx < plans.length - 1 ? '1px solid var(--zd-border, #eef2f6)' : 'none' }}>
+                        <span className="plan-check-pill">
+                          <span className="check-icon-circle">✓</span> {p.deviceLimit}
+                        </span>
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Row 4: Device Add-on Price (Matching sample image: + ₹49 / device) */}
+                  <tr className="pricing-spec-row">
+                    <td className="pricing-spec-label font-weight-bold" style={{ padding: '16px 20px', borderRight: '1px solid var(--zd-border, #eef2f6)' }}>
+                      4. Extra Device Add-on
+                    </td>
+                    {plans.map((p, idx) => (
+                      <td key={p.planId || idx} className="text-center" style={{ padding: '14px 12px', borderRight: idx < plans.length - 1 ? '1px solid var(--zd-border, #eef2f6)' : 'none' }}>
+                        <span className="plan-addon-pill">
+                          <span className="plus-icon-circle">+</span> ₹49 / device
+                        </span>
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Row 5: API Access */}
+                  <tr className="pricing-spec-row">
+                    <td className="pricing-spec-label font-weight-bold" style={{ padding: '16px 20px', borderRight: '1px solid var(--zd-border, #eef2f6)' }}>
+                      5. API Access
+                    </td>
+                    {plans.map((p, idx) => (
+                      <td key={p.planId || idx} className="text-center" style={{ padding: '14px 12px', borderRight: idx < plans.length - 1 ? '1px solid var(--zd-border, #eef2f6)' : 'none' }}>
+                        {p.apiAccess ? (
+                          <span className="plan-check-pill">
+                            <span className="check-icon-circle">✓</span> Included
+                          </span>
+                        ) : (
+                          <span className="plan-cross-pill">✕ Not Included</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Row 6: Web access for send msg */}
+                  <tr className="pricing-spec-row">
+                    <td className="pricing-spec-label font-weight-bold" style={{ padding: '16px 20px', borderRight: '1px solid var(--zd-border, #eef2f6)' }}>
+                      6. Web Access for Send Msg
+                    </td>
+                    {plans.map((p, idx) => (
+                      <td key={p.planId || idx} className="text-center" style={{ padding: '14px 12px', borderRight: idx < plans.length - 1 ? '1px solid var(--zd-border, #eef2f6)' : 'none' }}>
+                        {p.webAccess ? (
+                          <span className="plan-check-pill">
+                            <span className="check-icon-circle">✓</span> Included
+                          </span>
+                        ) : (
+                          <span className="plan-cross-pill">✕ Not Included</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Row 7: Send bulk msg */}
+                  <tr className="pricing-spec-row">
+                    <td className="pricing-spec-label font-weight-bold" style={{ padding: '16px 20px', borderRight: '1px solid var(--zd-border, #eef2f6)' }}>
+                      7. Send Bulk Msg
+                    </td>
+                    {plans.map((p, idx) => (
+                      <td key={p.planId || idx} className="text-center" style={{ padding: '14px 12px', borderRight: idx < plans.length - 1 ? '1px solid var(--zd-border, #eef2f6)' : 'none' }}>
+                        {p.bulkMsg ? (
+                          <span className="plan-check-pill">
+                            <span className="check-icon-circle">✓</span> Included
+                          </span>
+                        ) : (
+                          <span className="plan-cross-pill">✕ Not Included</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Row 8: Group option */}
+                  <tr className="pricing-spec-row">
+                    <td className="pricing-spec-label font-weight-bold" style={{ padding: '16px 20px', borderRight: '1px solid var(--zd-border, #eef2f6)' }}>
+                      8. Group Option
+                    </td>
+                    {plans.map((p, idx) => (
+                      <td key={p.planId || idx} className="text-center" style={{ padding: '14px 12px', borderRight: idx < plans.length - 1 ? '1px solid var(--zd-border, #eef2f6)' : 'none' }}>
+                        {p.groupOption ? (
+                          <span className="plan-check-pill">
+                            <span className="check-icon-circle">✓</span> Included
+                          </span>
+                        ) : (
+                          <span className="plan-cross-pill">✕ Not Included</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Row 9: Send schedule msg */}
+                  <tr className="pricing-spec-row">
+                    <td className="pricing-spec-label font-weight-bold" style={{ padding: '16px 20px', borderRight: '1px solid var(--zd-border, #eef2f6)' }}>
+                      9. Send Schedule Msg
+                    </td>
+                    {plans.map((p, idx) => (
+                      <td key={p.planId || idx} className="text-center" style={{ padding: '14px 12px', borderRight: idx < plans.length - 1 ? '1px solid var(--zd-border, #eef2f6)' : 'none' }}>
+                        {p.scheduleMsg ? (
+                          <span className="plan-check-pill">
+                            <span className="check-icon-circle">✓</span> Included
+                          </span>
+                        ) : (
+                          <span className="plan-cross-pill">✕ Not Included</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Row 10: IP security */}
+                  <tr className="pricing-spec-row">
+                    <td className="pricing-spec-label font-weight-bold" style={{ padding: '16px 20px', borderRight: '1px solid var(--zd-border, #eef2f6)' }}>
+                      10. IP Security
+                    </td>
+                    {plans.map((p, idx) => (
+                      <td key={p.planId || idx} className="text-center" style={{ padding: '14px 12px', borderRight: idx < plans.length - 1 ? '1px solid var(--zd-border, #eef2f6)' : 'none' }}>
+                        {p.ipSecurity ? (
+                          <span className="plan-check-pill">
+                            <span className="check-icon-circle">✓</span> Included
+                          </span>
+                        ) : (
+                          <span className="plan-cross-pill">✕ Not Included</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Bottom Action Row with duplicate Buy Now buttons */}
+                  <tr className="pricing-spec-row" style={{ background: 'var(--zd-border-subtle, rgba(0,0,0,0.02))' }}>
+                    <td className="pricing-spec-label font-weight-bold" style={{ padding: '20px', borderRight: '1px solid var(--zd-border, #eef2f6)' }}>
+                      Ready to get started?
+                    </td>
+                    {plans.map((p, idx) => {
+                      const isCurrent = currentPlan?.toLowerCase() === p.name?.toLowerCase()
+                      return (
+                        <td key={p.planId || idx} className="text-center" style={{ padding: '20px 12px', borderRight: idx < plans.length - 1 ? '1px solid var(--zd-border, #eef2f6)' : 'none' }}>
+                          {isCurrent ? (
+                            <span className="badge badge-success-light" style={{ padding: '8px 18px', fontSize: 13, borderRadius: 20 }}>
+                              ✓ Active Plan
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              onClick={() => handleOpenPurchase(p)}
+                              style={{ borderRadius: 999, padding: '7px 22px', fontSize: 13, fontWeight: 700 }}
+                            >
+                              Buy {p.name}
+                            </button>
+                          )}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
+      ) : (
+        /* MY PURCHASE REQUESTS TAB */
+        <div className="card shadow-sm" style={{ borderRadius: 16 }}>
+          <div className="card-header d-flex align-items-center justify-content-between" style={{ padding: '16px 20px', borderBottom: '1px solid var(--zd-border, rgba(0,0,0,0.06))' }}>
+            <div>
+              <h5 className="card-title mb-0" style={{ fontSize: 16, fontWeight: 700 }}>
+                📋 My Subscription Purchase History
+              </h5>
+              <small className="text-muted">Track all your submitted plan purchase payments and activation statuses.</small>
+            </div>
+            <button 
+              type="button" 
+              className="btn btn-sm btn-outline-primary"
+              onClick={fetchPlansData}
+              style={{ borderRadius: 8 }}
+            >
+              ↻ Refresh
+            </button>
+          </div>
+
+          <div className="card-body p-0">
+            {myRequests.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+                <div style={{ fontSize: 36, marginBottom: 12 }}>💳</div>
+                <h4>आपने अभी तक कोई पेमेंट रिक्वेस्ट नहीं भेजी है</h4>
+                <p className="text-muted mb-3">You haven't submitted any plan purchase requests yet.</p>
+                <button type="button" className="btn btn-primary" onClick={() => setActiveTab('plans')}>
+                  Browse Plans &amp; Pricing
+                </button>
+              </div>
+            ) : (
+              <div className="table-responsive">
+                <table className="table card-table table-vcenter text-nowrap mb-0">
+                  <thead>
+                    <tr style={{ background: 'var(--zd-card-bg, #f8fafc)', borderBottom: '1px solid var(--zd-border, #eef2f6)' }}>
+                      <th style={{ fontWeight: 700 }}>Request ID</th>
+                      <th style={{ fontWeight: 700 }}>Plan Name</th>
+                      <th style={{ fontWeight: 700 }}>Amount</th>
+                      <th style={{ fontWeight: 700 }}>Payment Date</th>
+                      <th style={{ fontWeight: 700 }}>Bank / Txn Details</th>
+                      <th style={{ fontWeight: 700 }}>Status</th>
+                      <th style={{ fontWeight: 700 }}>Submitted On</th>
+                      <th style={{ fontWeight: 700 }}>Notes / Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {myRequests.map((req) => (
+                      <tr key={req.requestId}>
+                        <td>
+                          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12, color: 'var(--zd-text-muted, #64748b)' }}>
+                            {req.requestId}
+                          </span>
+                        </td>
+                        <td>
+                          <strong style={{ fontSize: 14 }}>{req.planName}</strong>
+                        </td>
+                        <td>
+                          <span style={{ fontSize: 15, fontWeight: 700, color: '#10b981' }}>
+                            ₹{req.amount}
+                          </span>
+                        </td>
+                        <td>
+                          <span style={{ fontSize: 13 }}>{req.paymentDate}</span>
+                        </td>
+                        <td>
+                          <div style={{ fontSize: 12, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }} title={req.bankDetails}>
+                            {req.bankDetails}
+                          </div>
+                        </td>
+                        <td>
+                          {req.status === 'pending' && (
+                            <span className="badge badge-warning" style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999 }}>
+                              ⏳ Pending Review
+                            </span>
+                          )}
+                          {req.status === 'approved' && (
+                            <span className="badge badge-success" style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999 }}>
+                              ✓ Activated / Approved
+                            </span>
+                          )}
+                          {req.status === 'rejected' && (
+                            <span className="badge badge-danger" style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999 }}>
+                              ✕ Rejected
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <span style={{ fontSize: 12, color: 'var(--zd-text-muted, #8a98ac)' }}>
+                            {req.createdAt ? new Date(req.createdAt).toLocaleDateString() : '-'}
+                          </span>
+                        </td>
+                        <td>
+                          <span style={{ fontSize: 12, color: 'var(--zd-text-muted, #8a98ac)' }}>
+                            {req.adminNotes || '-'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* PAYMENT DETAILS POPUP MODAL (When user clicks Buy Now) */}
+      {selectedPlan && (
+        <PaymentDetailsModal 
+          plan={selectedPlan}
+          onClose={() => setSelectedPlan(null)}
+          onSuccess={handlePurchaseSuccess}
+          notify={notify}
+        />
+      )}
+    </section>
+  )
+}
+
+/* =========================================================
+   USER PAYMENT DETAILS POPUP MODAL
+========================================================= */
+
+function PaymentDetailsModal({ plan, onClose, onSuccess, notify }) {
+  const [amount, setAmount] = useState(plan.price)
+  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [bankDetails, setBankDetails] = useState('')
+  const [notes, setNotes] = useState('')
+  const [screenshot, setScreenshot] = useState('')
+  const [screenshotPreview, setScreenshotPreview] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const fileInputRef = useRef(null)
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 5 * 1024 * 1024) {
+      return notify('फाइल का आकार 5MB से कम होना चाहिए।')
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      setScreenshot(reader.result)
+      setScreenshotPreview(reader.result)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const removeScreenshot = () => {
+    setScreenshot('')
+    setScreenshotPreview('')
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!bankDetails.trim()) {
+      return notify('कृपया Payment / Bank / UTR Details अवश्य भरें।')
+    }
+
+    setSubmitting(true)
+    try {
+      const d = await api('/api/plans/purchase', {
+        method: 'POST',
+        body: JSON.stringify({
+          planId: plan.planId,
+          amount: Number(amount) || plan.price,
+          paymentDate,
+          bankDetails: bankDetails.trim(),
+          screenshot,
+          notes: notes.trim()
+        })
+      })
+
+      if (d.success) {
+        notify('आपकी पेमेंट रिक्वेस्ट सफलतापूर्वक सबमिट हो गई है! एडमिन द्वारा अप्रूवल के बाद प्लान एक्टिवेट हो जाएगा।')
+        onSuccess()
+      }
+    } catch (e) {
+      notify('रिक्वेस्ट सबमिट करने में त्रुटि: ' + e.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div 
+        className="modal-content-card" 
+        onClick={e => e.stopPropagation()} 
+        style={{ maxWidth: 580, width: '92%', borderRadius: 18, maxHeight: '92vh', overflowY: 'auto' }}
+      >
+        {/* Modal Header */}
+        <div className="modal-header d-flex align-items-center justify-content-between" style={{ padding: '18px 24px', borderBottom: '1px solid var(--zd-border, #eef2f6)' }}>
+          <div>
+            <h5 className="modal-title font-weight-bold m-0" style={{ fontSize: 18, color: 'inherit' }}>
+              💳 Complete Your Purchase
+            </h5>
+            <small className="text-muted">Enter your payment transaction details to activate {plan.name} plan.</small>
+          </div>
+          <button 
+            type="button" 
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#8a98ac', lineHeight: 1 }}
+          >
+            ×
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body" style={{ padding: '22px 24px' }}>
+            {/* Selected Plan Summary Card */}
+            <div className="card p-3 mb-4" style={{ borderRadius: 12, background: 'var(--zd-border-subtle, rgba(0,0,0,0.02))', border: '1px solid var(--zd-border, #eef2f6)' }}>
+              <div className="d-flex align-items-center justify-content-between mb-2">
+                <div>
+                  <span className="badge badge-primary-light" style={{ fontSize: 11, padding: '3px 8px', marginBottom: 4, display: 'inline-block' }}>
+                    Selected Plan
+                  </span>
+                  <h4 className="m-0 font-weight-bold" style={{ fontSize: 18, color: 'inherit' }}>{plan.name}</h4>
+                </div>
+                <div className="text-right">
+                  <span style={{ fontSize: 22, fontWeight: 900, color: '#10b981' }}>₹{plan.price}</span>
+                  <small className="text-muted d-block" style={{ fontSize: 11 }}>/ {plan.validity}</small>
+                </div>
+              </div>
+              <div className="d-flex flex-wrap gap-2 text-muted" style={{ gap: 12, fontSize: 12, borderTop: '1px solid var(--zd-border, rgba(0,0,0,0.05))', paddingTop: 8 }}>
+                <div>✓ <strong>Daily:</strong> {plan.dailyLimit}</div>
+                <div>✓ <strong>Devices:</strong> {plan.deviceLimit}</div>
+                {plan.apiAccess && <div>✓ <strong>API Access</strong></div>}
+                {plan.groupOption && <div>✓ <strong>Group Sending</strong></div>}
+              </div>
+            </div>
+
+            {/* Admin Bank & UPI Instructions Box */}
+            <div className="alert alert-info mb-4" style={{ borderRadius: 12, padding: '12px 16px', fontSize: 12, lineHeight: 1.5 }}>
+              <strong style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>🏦 Payment Instructions:</strong>
+              1. Pay the plan amount (<strong>₹{plan.price}</strong>) via Google Pay / PhonePe / Paytm / UPI to our payment address: 
+              <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, background: 'rgba(0,0,0,0.06)', padding: '4px 8px', borderRadius: 6, margin: '6px 0', display: 'inline-block' }}>
+                upi-id: whatsapppay@upi / Bank Transfer
+              </div>
+              <div>2. Note the Transaction ID / UTR reference number and fill the form below.</div>
+            </div>
+
+            {/* Form Fields: Amount & Payment Date */}
+            <div className="row g-3 mb-3">
+              <div className="col-sm-6">
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                  Payment Amount (राशि ₹) *
+                </label>
+                <div className="input-group">
+                  <span className="input-group-text" style={{ borderRadius: '8px 0 0 8px', fontWeight: 700 }}>₹</span>
+                  <input 
+                    type="number" 
+                    className="form-control" 
+                    value={amount}
+                    onChange={e => setAmount(e.target.value)}
+                    min="1"
+                    required
+                    style={{ height: 42, borderRadius: '0 8px 8px 0' }}
+                  />
+                </div>
+              </div>
+              <div className="col-sm-6">
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                  Payment Date (भुगतान की तारीख) *
+                </label>
+                <input 
+                  type="date" 
+                  className="form-control" 
+                  value={paymentDate}
+                  onChange={e => setPaymentDate(e.target.value)}
+                  required
+                  style={{ height: 42, borderRadius: 8 }}
+                />
+              </div>
+            </div>
+
+            {/* Bank Details & UTR */}
+            <div className="form-group mb-3">
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                Bank / UPI / UTR Transaction ID (बैंक या UTR नंबर) *
+              </label>
+              <textarea 
+                className="form-control" 
+                rows="2"
+                value={bankDetails}
+                onChange={e => setBankDetails(e.target.value)}
+                placeholder="e.g. Paid via Google Pay. UPI Ref / UTR No: 328491823901, Sender Bank: HDFC Bank"
+                required
+                style={{ borderRadius: 8, padding: '10px 12px' }}
+              />
+              <small className="text-muted">Enter UTR, Transaction Ref No, or Bank account from which payment was made.</small>
+            </div>
+
+            {/* Screenshot Upload (Optional) */}
+            <div className="form-group mb-3">
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                Payment Screenshot / Receipt (स्क्रीनशॉट - वैकल्पिक)
+              </label>
+              <input 
+                type="file" 
+                ref={fileInputRef}
+                accept="image/*"
+                onChange={handleFileChange}
+                className="form-control"
+                style={{ height: 42, borderRadius: 8, padding: '7px 12px' }}
+              />
+              <small className="text-muted">Upload screenshot of your payment slip (PNG, JPG, max 5MB).</small>
+
+              {screenshotPreview && (
+                <div className="mt-2 position-relative d-inline-block">
+                  <img 
+                    src={screenshotPreview} 
+                    alt="Payment Slip Preview" 
+                    style={{ maxHeight: 110, borderRadius: 8, border: '1px solid #d0d7de', display: 'block' }}
+                  />
+                  <button 
+                    type="button" 
+                    onClick={removeScreenshot}
+                    className="btn btn-sm btn-danger"
+                    style={{ position: 'absolute', top: 4, right: 4, borderRadius: '50%', width: 22, height: 22, padding: 0, lineHeight: 1 }}
+                    title="Remove Image"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Notes */}
+            <div className="form-group mb-0">
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                Additional Notes (अतिरिक्त टिप्पणी - वैकल्पिक)
+              </label>
+              <input 
+                type="text" 
+                className="form-control" 
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Any special remarks for admin"
+                style={{ height: 40, borderRadius: 8 }}
+              />
+            </div>
+          </div>
+
+          <div className="modal-footer d-flex justify-content-end gap-2" style={{ padding: '14px 24px', borderTop: '1px solid var(--zd-border, #eef2f6)', gap: 10 }}>
+            <button 
+              type="button" 
+              className="btn btn-outline-secondary" 
+              onClick={onClose}
+              disabled={submitting}
+              style={{ borderRadius: 8, padding: '8px 16px', fontWeight: 600 }}
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit" 
+              className="btn btn-primary"
+              disabled={submitting}
+              style={{ borderRadius: 8, padding: '8px 24px', fontWeight: 700 }}
+            >
+              {submitting ? '⏳ Submitting Request...' : '✓ Submit Payment Details'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+/* =========================================================
+   ADMIN PURCHASE REQUESTS MANAGEMENT PAGE
+========================================================= */
+
+function AdminPlanRequestsPage({ notify }) {
+  const [requests, setRequests] = useState([])
+  const [counts, setCounts] = useState({ total: 0, pending: 0, approved: 0, rejected: 0 })
+  const [loading, setLoading] = useState(false)
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [search, setSearch] = useState('')
+  const [actionLoading, setActionLoading] = useState('')
+  const [previewImage, setPreviewImage] = useState(null)
+  const [rejectingRequest, setRejectingRequest] = useState(null)
+  const [rejectNote, setRejectNote] = useState('')
+
+  const fetchRequests = useCallback(async () => {
+    setLoading(true)
+    try {
+      const qs = statusFilter !== 'all' ? `?status=${statusFilter}` : ''
+      const d = await api(`/api/admin/plan-requests${qs}`)
+      if (d.success) {
+        setRequests(d.requests || [])
+        if (d.counts) setCounts(d.counts)
+      }
+    } catch (e) {
+      notify('अनुरोध लोड करने में त्रुटि: ' + e.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [statusFilter, notify])
+
+  useEffect(() => {
+    fetchRequests()
+  }, [fetchRequests])
+
+  const handleApprove = async (req) => {
+    const confirmMsg = `क्या आप User ${req.userName} (${req.userMobile || req.userId}) का प्लान '${req.planName}' तुरंत एक्टिवेट करना चाहते हैं?`
+    if (!window.confirm(confirmMsg)) return
+
+    setActionLoading(req.requestId)
+    try {
+      const d = await api(`/api/admin/plan-requests/${req.requestId}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({ notes: 'Approved by admin' })
+      })
+      if (d.success) {
+        notify(d.message || 'प्लान सफलतापूर्वक एक्टिवेट कर दिया गया!')
+        fetchRequests()
+      }
+    } catch (e) {
+      notify('Approve Error: ' + e.message)
+    } finally {
+      setActionLoading('')
+    }
+  }
+
+  const openRejectModal = (req) => {
+    setRejectingRequest(req)
+    setRejectNote('')
+  }
+
+  const handleConfirmReject = async (e) => {
+    e.preventDefault()
+    if (!rejectingRequest) return
+
+    setActionLoading(rejectingRequest.requestId)
+    try {
+      const d = await api(`/api/admin/plan-requests/${rejectingRequest.requestId}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ notes: rejectNote.trim() || 'Payment details could not be verified' })
+      })
+      if (d.success) {
+        notify('रिक्वेस्ट अस्वीकार (Reject) कर दी गई है।')
+        setRejectingRequest(null)
+        fetchRequests()
+      }
+    } catch (e) {
+      notify('Reject Error: ' + e.message)
+    } finally {
+      setActionLoading('')
+    }
+  }
+
+  const filteredRequests = useMemo(() => {
+    if (!search.trim()) return requests
+    const q = search.toLowerCase()
+    return requests.filter(r => 
+      (r.userName && r.userName.toLowerCase().includes(q)) ||
+      (r.userMobile && r.userMobile.includes(q)) ||
+      (r.userId && r.userId.toLowerCase().includes(q)) ||
+      (r.requestId && r.requestId.toLowerCase().includes(q)) ||
+      (r.planName && r.planName.toLowerCase().includes(q)) ||
+      (r.bankDetails && r.bankDetails.toLowerCase().includes(q))
+    )
+  }, [requests, search])
+
+  return (
+    <section className="admin-plan-requests-page">
+      {/* Page Header */}
+      <div className="page-header d-flex flex-wrap align-items-center justify-content-between mb-4">
+        <div>
+          <h1 className="page-title mb-1" style={{ fontSize: 24, fontWeight: 700, color: 'inherit' }}>
+            💳 Plan Purchase Requests
+          </h1>
+          <ol className="breadcrumb mb-0" style={{ background: 'transparent', padding: 0, fontSize: 13 }}>
+            <li className="breadcrumb-item text-muted">Admin</li>
+            <li className="breadcrumb-item active text-primary">Purchase Requests &amp; Approvals</li>
+          </ol>
+        </div>
+        <div className="d-flex align-items-center gap-2 mt-2 mt-md-0">
+          <button 
+            type="button" 
+            className="btn btn-outline-primary"
+            onClick={fetchRequests}
+            disabled={loading}
+            style={{ borderRadius: 8, padding: '8px 16px', fontWeight: 600, fontSize: 13 }}
+          >
+            ↻ Refresh Requests
+          </button>
+        </div>
+      </div>
+
+      {/* Metric Counters */}
+      <div className="row row-cards mb-4">
+        <div className="col-sm-6 col-lg-3">
+          <div 
+            className="card p-3 cursor-pointer" 
+            style={{ borderRadius: 12, border: statusFilter === 'all' ? '2px solid #4f75f2' : undefined }}
+            onClick={() => setStatusFilter('all')}
+          >
+            <div className="d-flex align-items-center">
+              <span className="stamp stamp-md mr-3" style={{ marginRight: 14, fontSize: 20, width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10, background: 'rgba(79, 117, 242, 0.12)', color: '#4f75f2' }}>
+                📋
+              </span>
+              <div>
+                <h4 className="m-0 font-weight-bold" style={{ fontSize: 20 }}>{counts.total}</h4>
+                <small className="text-muted">Total Requests</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-sm-6 col-lg-3">
+          <div 
+            className="card p-3 cursor-pointer" 
+            style={{ borderRadius: 12, border: statusFilter === 'pending' ? '2px solid #ffab00' : undefined }}
+            onClick={() => setStatusFilter('pending')}
+          >
+            <div className="d-flex align-items-center">
+              <span className="stamp stamp-md mr-3" style={{ marginRight: 14, fontSize: 20, width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10, background: 'rgba(255, 171, 0, 0.14)', color: '#ffab00' }}>
+                ⏳
+              </span>
+              <div>
+                <h4 className="m-0 font-weight-bold" style={{ fontSize: 20, color: counts.pending > 0 ? '#ffab00' : 'inherit' }}>
+                  {counts.pending}
+                </h4>
+                <small className="text-muted">Pending Approvals</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-sm-6 col-lg-3">
+          <div 
+            className="card p-3 cursor-pointer" 
+            style={{ borderRadius: 12, border: statusFilter === 'approved' ? '2px solid #2dce89' : undefined }}
+            onClick={() => setStatusFilter('approved')}
+          >
+            <div className="d-flex align-items-center">
+              <span className="stamp stamp-md mr-3" style={{ marginRight: 14, fontSize: 20, width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10, background: 'rgba(45, 206, 137, 0.12)', color: '#2dce89' }}>
+                ✓
+              </span>
+              <div>
+                <h4 className="m-0 font-weight-bold" style={{ fontSize: 20 }}>{counts.approved}</h4>
+                <small className="text-muted">Approved &amp; Active</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-sm-6 col-lg-3">
+          <div 
+            className="card p-3 cursor-pointer" 
+            style={{ borderRadius: 12, border: statusFilter === 'rejected' ? '2px solid #f5365c' : undefined }}
+            onClick={() => setStatusFilter('rejected')}
+          >
+            <div className="d-flex align-items-center">
+              <span className="stamp stamp-md mr-3" style={{ marginRight: 14, fontSize: 20, width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10, background: 'rgba(245, 54, 92, 0.12)', color: '#f5365c' }}>
+                ✕
+              </span>
+              <div>
+                <h4 className="m-0 font-weight-bold" style={{ fontSize: 20 }}>{counts.rejected}</h4>
+                <small className="text-muted">Rejected Requests</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Table Card */}
+      <div className="card shadow-sm" style={{ borderRadius: 16 }}>
+        {/* Filters Header */}
+        <div className="card-header d-flex flex-wrap align-items-center justify-content-between p-3" style={{ borderBottom: '1px solid var(--zd-border, rgba(0,0,0,0.06))', gap: 12 }}>
+          {/* Status Tabs */}
+          <div className="btn-group" role="group">
+            <button 
+              type="button" 
+              className={`btn btn-sm ${statusFilter === 'all' ? 'btn-primary' : 'btn-outline-secondary'}`}
+              onClick={() => setStatusFilter('all')}
+              style={{ borderRadius: '6px 0 0 6px', fontWeight: 600 }}
+            >
+              All ({counts.total})
+            </button>
+            <button 
+              type="button" 
+              className={`btn btn-sm ${statusFilter === 'pending' ? 'btn-primary' : 'btn-outline-secondary'}`}
+              onClick={() => setStatusFilter('pending')}
+              style={{ fontWeight: 600 }}
+            >
+              Pending ({counts.pending})
+            </button>
+            <button 
+              type="button" 
+              className={`btn btn-sm ${statusFilter === 'approved' ? 'btn-primary' : 'btn-outline-secondary'}`}
+              onClick={() => setStatusFilter('approved')}
+              style={{ fontWeight: 600 }}
+            >
+              Approved ({counts.approved})
+            </button>
+            <button 
+              type="button" 
+              className={`btn btn-sm ${statusFilter === 'rejected' ? 'btn-primary' : 'btn-outline-secondary'}`}
+              onClick={() => setStatusFilter('rejected')}
+              style={{ borderRadius: '0 6px 6px 0', fontWeight: 600 }}
+            >
+              Rejected ({counts.rejected})
+            </button>
+          </div>
+
+          {/* Search Box */}
+          <div style={{ maxWidth: 280, width: '100%' }}>
+            <input 
+              type="text" 
+              className="form-control form-control-sm"
+              placeholder="Search user, mobile, ID, UTR..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ borderRadius: 8, height: 36 }}
+            />
+          </div>
+        </div>
+
+        {/* Requests Table Body */}
+        <div className="card-body p-0">
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '60px 20px', color: '#6b7280' }}>
+              <div className="spinner-border text-primary mb-2" role="status"></div>
+              <div>अनुरोध लोड हो रहे हैं (Loading purchase requests)...</div>
+            </div>
+          ) : filteredRequests.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+              <div style={{ fontSize: 36, marginBottom: 12 }}>🔍</div>
+              <h4>कोई अनुरोध नहीं मिला</h4>
+              <p className="text-muted">No purchase requests matching your criteria.</p>
+            </div>
+          ) : (
+            <div className="table-responsive">
+              <table className="table card-table table-vcenter text-nowrap mb-0">
+                <thead>
+                  <tr style={{ background: 'var(--zd-card-bg, #f8fafc)', borderBottom: '1px solid var(--zd-border, #eef2f6)' }}>
+                    <th style={{ fontWeight: 700 }}>Request ID</th>
+                    <th style={{ fontWeight: 700 }}>User Details</th>
+                    <th style={{ fontWeight: 700 }}>Requested Plan</th>
+                    <th style={{ fontWeight: 700 }}>Amount</th>
+                    <th style={{ fontWeight: 700 }}>Payment Info</th>
+                    <th style={{ fontWeight: 700, textAlign: 'center' }}>Screenshot Proof</th>
+                    <th style={{ fontWeight: 700, textAlign: 'center' }}>Status</th>
+                    <th style={{ fontWeight: 700, textAlign: 'right', paddingRight: 24 }}>Actions / Approvals</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRequests.map((req) => (
+                    <tr key={req.requestId}>
+                      <td>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12, color: 'var(--zd-text-muted, #64748b)' }}>
+                          {req.requestId}
+                        </span>
+                        <div style={{ fontSize: 11, color: 'var(--zd-text-muted, #8a98ac)' }}>
+                          {req.createdAt ? new Date(req.createdAt).toLocaleDateString() : ''}
+                        </div>
+                      </td>
+                      <td>
+                        <div>
+                          <strong style={{ fontSize: 14, color: 'inherit' }}>{req.userName || 'User'}</strong>
+                          <div style={{ fontSize: 12, color: 'var(--zd-text-muted, #64748b)' }}>
+                            📱 {req.userMobile || 'No Phone'}
+                          </div>
+                          <small className="text-muted" style={{ fontFamily: 'monospace', fontSize: 11 }}>
+                            ID: {req.userId}
+                          </small>
+                        </div>
+                      </td>
+                      <td>
+                        <span className="badge badge-primary-light" style={{ fontSize: 12, padding: '4px 10px', fontWeight: 700 }}>
+                          {req.planName}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontSize: 16, fontWeight: 800, color: '#10b981' }}>
+                          ₹{req.amount}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ maxWidth: 220, fontSize: 12 }}>
+                          <div><strong>Date:</strong> {req.paymentDate}</div>
+                          <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={req.bankDetails}>
+                            <strong>Txn:</strong> {req.bankDetails}
+                          </div>
+                          {req.adminNotes && (
+                            <small className="text-muted d-block mt-1">
+                              <em>Note: {req.adminNotes}</em>
+                            </small>
+                          )}
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        {req.screenshot ? (
+                          <div 
+                            style={{ cursor: 'pointer', display: 'inline-block' }}
+                            onClick={() => setPreviewImage(req.screenshot)}
+                            title="Click to view full screenshot"
+                          >
+                            <img 
+                              src={req.screenshot} 
+                              alt="Receipt" 
+                              style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 8, border: '1px solid #d0d7de' }}
+                            />
+                            <small className="d-block text-primary" style={{ fontSize: 10, fontWeight: 700 }}>View 🔍</small>
+                          </div>
+                        ) : (
+                          <span className="text-muted" style={{ fontSize: 12 }}>No Slip</span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        {req.status === 'pending' && (
+                          <span className="badge badge-warning" style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999 }}>
+                            ⏳ Pending
+                          </span>
+                        )}
+                        {req.status === 'approved' && (
+                          <span className="badge badge-success" style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999 }}>
+                            ✓ Approved
+                          </span>
+                        )}
+                        {req.status === 'rejected' && (
+                          <span className="badge badge-danger" style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999 }}>
+                            ✕ Rejected
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'right', paddingRight: 20 }}>
+                        {req.status === 'pending' ? (
+                          <div className="d-inline-flex gap-1" style={{ gap: 6 }}>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-success"
+                              onClick={() => handleApprove(req)}
+                              disabled={actionLoading === req.requestId}
+                              style={{ borderRadius: 6, padding: '5px 12px', fontSize: 12, fontWeight: 700 }}
+                            >
+                              {actionLoading === req.requestId ? '⏳' : '✓ Approve Plan'}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-danger"
+                              onClick={() => openRejectModal(req)}
+                              disabled={actionLoading === req.requestId}
+                              style={{ borderRadius: 6, padding: '5px 10px', fontSize: 12, fontWeight: 600 }}
+                            >
+                              ✕ Reject
+                            </button>
+                          </div>
+                        ) : req.status === 'approved' ? (
+                          <span className="text-success" style={{ fontSize: 12, fontWeight: 600 }}>
+                            Plan Activated ✓
+                          </span>
+                        ) : (
+                          <span className="text-danger" style={{ fontSize: 12 }}>
+                            Rejected
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* SCREENSHOT LIGHTBOX MODAL */}
+      {previewImage && (
+        <div className="modal-overlay" onClick={() => setPreviewImage(null)}>
+          <div 
+            className="modal-content-card" 
+            onClick={e => e.stopPropagation()} 
+            style={{ maxWidth: 650, width: '92%', borderRadius: 16, textAlign: 'center', padding: 20 }}
+          >
+            <div className="d-flex align-items-center justify-content-between mb-3">
+              <h5 className="m-0 font-weight-bold" style={{ color: 'inherit' }}>Payment Screenshot / Receipt</h5>
+              <button 
+                type="button" 
+                onClick={() => setPreviewImage(null)}
+                style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#8a98ac', lineHeight: 1 }}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ maxHeight: '75vh', overflow: 'auto', borderRadius: 8 }}>
+              <img 
+                src={previewImage} 
+                alt="Full Payment Slip" 
+                style={{ maxWidth: '100%', height: 'auto', display: 'inline-block', borderRadius: 8 }}
+              />
+            </div>
+            <div className="mt-3">
+              <button 
+                type="button" 
+                className="btn btn-sm btn-secondary" 
+                onClick={() => setPreviewImage(null)}
+                style={{ borderRadius: 8, padding: '6px 18px' }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* REJECT REQUEST MODAL */}
+      {rejectingRequest && (
+        <div className="modal-overlay" onClick={() => setRejectingRequest(null)}>
+          <div 
+            className="modal-content-card" 
+            onClick={e => e.stopPropagation()} 
+            style={{ maxWidth: 480, width: '90%', borderRadius: 16 }}
+          >
+            <div className="modal-header d-flex align-items-center justify-content-between" style={{ padding: '16px 20px', borderBottom: '1px solid var(--zd-border, #eef2f6)' }}>
+              <h5 className="modal-title font-weight-bold m-0" style={{ fontSize: 16, color: '#dc2626' }}>
+                ✕ Reject Purchase Request
+              </h5>
+              <button 
+                type="button" 
+                onClick={() => setRejectingRequest(null)}
+                style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#8a98ac', lineHeight: 1 }}
+              >
+                ×
+              </button>
+            </div>
+            <form onSubmit={handleConfirmReject}>
+              <div className="modal-body" style={{ padding: 20 }}>
+                <p style={{ fontSize: 13, color: 'inherit' }}>
+                  User <strong>{rejectingRequest.userName}</strong> ({rejectingRequest.userMobile}) की 
+                  <strong> {rejectingRequest.planName} (₹{rejectingRequest.amount})</strong> रिक्वेस्ट को अस्वीकार करने का कारण लिखें:
+                </p>
+                <div className="form-group mb-0">
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                    Rejection Reason / Note (अस्वीकृति का कारण)
+                  </label>
+                  <textarea 
+                    className="form-control" 
+                    rows="3"
+                    value={rejectNote}
+                    onChange={e => setRejectNote(e.target.value)}
+                    placeholder="e.g. UTR number not matched with bank account, or incorrect amount paid."
+                    style={{ borderRadius: 8 }}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer d-flex justify-content-end gap-2" style={{ padding: '12px 20px', borderTop: '1px solid var(--zd-border, #eef2f6)', gap: 10 }}>
+                <button 
+                  type="button" 
+                  className="btn btn-outline-secondary" 
+                  onClick={() => setRejectingRequest(null)}
+                  style={{ borderRadius: 8, padding: '7px 14px' }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn btn-danger"
+                  style={{ borderRadius: 8, padding: '7px 18px', fontWeight: 700 }}
+                >
+                  Confirm Reject
                 </button>
               </div>
             </form>
