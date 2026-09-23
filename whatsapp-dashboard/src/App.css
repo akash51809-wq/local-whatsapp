@@ -1736,8 +1736,314 @@ button { cursor: pointer; }
 }
 
 /* =========================================================
-   USER MANAGEMENT PAGE
+   USER MANAGEMENT PAGE (ZENDASH users-list-1.html STYLE)
 ========================================================= */
+.page-user-management {
+  padding: 24px 28px;
+  max-width: 1440px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .page-user-management {
+    padding: 16px 12px;
+  }
+}
+
+.page-header {
+  margin-bottom: 1.5rem;
+}
+
+.page-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #282f53;
+  margin: 0;
+}
+
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 0;
+  margin-bottom: 0;
+  list-style: none;
+  background: transparent;
+  font-size: 0.82rem;
+}
+
+.breadcrumb-item + .breadcrumb-item::before {
+  display: inline-block;
+  padding-right: 0.5rem;
+  padding-left: 0.5rem;
+  color: #a8afb7;
+  content: "/";
+}
+
+/* Zendash Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: middle;
+  user-select: none;
+  border: 1px solid transparent;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  border-radius: 8px;
+  transition: all 0.15s ease-in-out;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn-sm {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  border-radius: 6px;
+}
+
+.btn-primary {
+  background-color: #705ec8 !important;
+  border-color: #705ec8 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(112, 94, 200, 0.25);
+}
+
+.btn-primary:hover {
+  background-color: #5d4cb5 !important;
+  border-color: #5d4cb5 !important;
+  color: #ffffff !important;
+}
+
+.btn-primary:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-outline-primary {
+  color: #705ec8 !important;
+  border-color: #705ec8 !important;
+  background-color: #ffffff;
+}
+
+.btn-outline-primary:hover {
+  background-color: #705ec8 !important;
+  color: #ffffff !important;
+}
+
+.btn-white {
+  color: #282f53 !important;
+  background-color: #ffffff !important;
+  border-color: #e1e7ee !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.btn-white:hover {
+  background-color: #f7f8fd !important;
+  border-color: #705ec8 !important;
+  color: #705ec8 !important;
+}
+
+.btn-outline-danger {
+  color: #fb1c52 !important;
+  border-color: #fb1c52 !important;
+  background: #ffffff;
+}
+
+.btn-outline-danger:hover {
+  background-color: #fb1c52 !important;
+  color: #ffffff !important;
+}
+
+.btn-outline-success {
+  color: #2dce89 !important;
+  border-color: #2dce89 !important;
+  background: #ffffff;
+}
+
+.btn-outline-success:hover {
+  background-color: #2dce89 !important;
+  color: #ffffff !important;
+}
+
+/* Zendash Table & Card */
+.e-panel.card {
+  border: 1px solid #ebecf1;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 4px 20px 0 rgba(160, 175, 208, 0.12);
+  overflow: hidden;
+}
+
+.e-table .table-responsive {
+  overflow-x: auto;
+}
+
+.table-bordered {
+  border: 1px solid #eff0f6;
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+}
+
+.table-bordered th, .table-bordered td {
+  border: 1px solid #eff0f6;
+  padding: 0.85rem 1rem;
+  vertical-align: middle;
+}
+
+.table-bordered thead th {
+  background-color: #f8fafc;
+  color: #505d69;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.table-bordered tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.table-bordered tbody tr:hover {
+  background-color: #fbfcfe;
+}
+
+/* Zendash Avatars */
+.avatar {
+  position: relative;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  user-select: none;
+}
+
+.avatar.avatar-md {
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 1rem;
+}
+
+.avatar.brround {
+  border-radius: 50%;
+}
+
+/* Zendash Badges */
+.badge {
+  display: inline-block;
+  padding: 0.35em 0.65em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: baseline;
+  border-radius: 0.25rem;
+}
+
+.badge-success-light {
+  background-color: rgba(45, 206, 137, 0.15) !important;
+  color: #16a34a !important;
+  font-weight: 600;
+  border-radius: 6px;
+}
+
+.badge-danger-light {
+  background-color: rgba(251, 28, 82, 0.15) !important;
+  color: #dc2626 !important;
+  font-weight: 600;
+  border-radius: 6px;
+}
+
+.badge-warning-light {
+  background-color: rgba(245, 158, 11, 0.15) !important;
+  color: #d97706 !important;
+  font-weight: 600;
+  border-radius: 6px;
+}
+
+.badge-primary-light {
+  background-color: rgba(112, 94, 200, 0.15) !important;
+  color: #705ec8 !important;
+  font-weight: 600;
+  border-radius: 6px;
+}
+
+.badge-secondary-light {
+  background-color: rgba(250, 113, 59, 0.15) !important;
+  color: #e0531c !important;
+  font-weight: 600;
+  border-radius: 6px;
+}
+
+/* Status Dot Labels */
+.dot-label {
+  width: 7px;
+  height: 7px;
+  display: inline-block;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+.dot-label.bg-success {
+  background-color: #22c55e;
+}
+
+.dot-label.bg-warning {
+  background-color: #f59e0b;
+}
+
+.dot-label.bg-danger {
+  background-color: #ef4444;
+}
+
+/* Zendash Progress Bar */
+.progress.progress-sm {
+  height: 6px;
+  border-radius: 10px;
+  background-color: #f0f2f7;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  transition: width 0.4s ease;
+}
+
+/* Button Group */
+.btn-group.align-top {
+  display: inline-flex;
+  vertical-align: top;
+  gap: 4px;
+}
+
+/* Spin animation for refresh button */
+@keyframes spinIcon {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin-icon {
+  animation: spinIcon 1s linear infinite;
+  display: inline-block;
+}
+
 .users-filter-card {
   background: #fff;
   border: 1px solid #e1e7ee;
@@ -1769,17 +2075,8 @@ button { cursor: pointer; }
 }
 
 .users-search-box input:focus {
-  border-color: #18b98e;
+  border-color: #705ec8;
   background: #fff;
-}
-
-.users-search-box span {
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: #8fa0b2;
-  font-size: 14px;
 }
 
 .filter-select {
@@ -1791,6 +2088,10 @@ button { cursor: pointer; }
   color: #2b3948;
   outline: none;
   cursor: pointer;
+}
+
+.filter-select:focus {
+  border-color: #705ec8;
 }
 
 .user-role-badge {
