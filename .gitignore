@@ -33,3 +33,7 @@ yarn-debug.log*
 yarn-error.log*
 .DS_Store
 Thumbs.db
+
+# Raw UI template assets & archives
+ADMIN UI/
+*.zip

@@ -29,6 +29,28 @@ const defaultNav = [
   ['system', '⚙', 'System & Settings'],
 ]
 
+function NavIcon({ name, fallback }) {
+  switch (name) {
+    case 'dashboard':
+      return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+    case 'users':
+      return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+    case 'send':
+      return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+    case 'groups':
+      return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><rect x="14" y="3" width="7" height="7" rx="1.5"></rect></svg>
+    case 'incoming':
+      return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+    case 'reports':
+      return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+    case 'api':
+      return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+    case 'system':
+      return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+    default:
+      return <span>{fallback}</span>
+  }
+}
 
 function App() {
   const [page, setPage] = useState('dashboard')
@@ -269,20 +291,49 @@ function App() {
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand">
-        <div className="brand-mark">W</div>
-        <div><strong>WA Control</strong><small>{isAdmin ? 'Admin Portal' : 'User Portal'}</small></div>
-      </div>
-      <div className="account-mini">
-        <span className={`dot ${status.status === 'connected' ? 'online' : ''}`}></span>
+        <div className="brand-mark">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+        </div>
         <div>
-          <b>{status.profileName || (currentUser?.username ? `User: ${currentUser.username}` : 'WhatsApp Account')}</b>
-          <small>{status.number ? `+${status.number}` : (status.status === 'connected' ? 'Connected' : 'Not connected')}</small>
+          <strong>WA Control</strong>
+          <small>{isAdmin ? 'Admin Portal' : 'User Portal'}</small>
         </div>
       </div>
-      <nav>{navList.map(([id, icon, label]) => <button key={id} className={page === id ? 'active' : ''} onClick={() => setPage(id)}><span>{icon}</span>{label}</button>)}</nav>
+
+      <div className="account-mini">
+        <div className="account-avatar">
+          {(currentUser?.username || status.profileName || 'W')[0].toUpperCase()}
+        </div>
+        <div>
+          <b>{status.profileName || (currentUser?.username ? `User: ${currentUser.username}` : 'WhatsApp Account')}</b>
+          <small>
+            <span className={`dot ${status.status === 'connected' ? 'online' : ''}`}></span>
+            {status.number ? `+${status.number}` : (status.status === 'connected' ? 'Connected' : 'Not connected')}
+          </small>
+        </div>
+      </div>
+
+      <div className="sidebar-section-title">NAVIGATION</div>
+      <nav>
+        {navList.map(([id, icon, label]) => (
+          <button 
+            key={id} 
+            className={`nav-btn ${page === id ? 'active' : ''}`} 
+            onClick={() => setPage(id)}
+          >
+            <span className="nav-icon-box"><NavIcon name={id} fallback={icon} /></span>
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
+
       <div className="sidebar-bottom">
-        <button onClick={() => { loadStatus(); loadQr(); notify('Status refreshed') }}>↻ Refresh status</button>
-        <button onClick={logout}>⇥ Logout</button>
+        <button className="btn-sidebar-secondary" onClick={() => { loadStatus(); loadQr(); notify('Status refreshed') }}>
+          <span>↻</span> Refresh status
+        </button>
+        <button className="btn-sidebar-logout" onClick={logout}>
+          <span>⇥</span> Logout
+        </button>
       </div>
     </aside>
 
@@ -292,9 +343,9 @@ function App() {
           <h1>{navList.find(n => n[0] === page)?.[2]}</h1>
           <p>{isAdmin ? 'System Admin Control Center' : `Logged in as: ${currentUser?.username || currentUser?.mobile || 'User'}`}</p>
         </div>
-        <div className={`connection ${status.status === 'connected' ? 'connected' : ''}`}>
-          <span className="dot"></span>
-          {status.status === 'connected' ? `Connected (+${status.number || ''})` : status.status === 'connecting' ? 'Connecting...' : 'Waiting for Scan'}
+        <div className={`connection-pill ${status.status === 'connected' ? 'is-online' : status.status === 'connecting' ? 'is-connecting' : 'is-waiting'}`}>
+          <span className="pill-dot"></span>
+          <span>{status.status === 'connected' ? `Connected (+${status.number || ''})` : status.status === 'connecting' ? 'Connecting...' : 'Waiting for Scan'}</span>
         </div>
       </header>
 
@@ -377,90 +428,209 @@ function Login({ onLogin }) {
     }
   }
 
-  return <div className="login-page">
-    <form className="login-card" onSubmit={submit}>
-      <div className="login-logo">W</div>
-      <h1>WA Control Center</h1>
-      <p>Login ID (Mobile Number) और Password दर्ज करें</p>
-      <label>Login ID / Mobile Number
-        <input placeholder="10 अंकों का मोबाइल नंबर या admin" value={u} onChange={e => setU(e.target.value)} />
-      </label>
-      <label>Password
-        <input type="password" placeholder="Password (WhatsApp पर प्राप्त)" value={p} onChange={e => setP(e.target.value)} />
-      </label>
-      {err && <div className="form-error">{err}</div>}
-      <button className="primary full" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</button>
-      <div style={{marginTop:16,textAlign:'center',fontSize:13}}>
-        नया अकाउंट बनाना है? <a href="/signup.html" style={{color:'#128c7e',fontWeight:700,textDecoration:'none'}}>यहाँ Sign Up करें</a>
+  return (
+    <div className="login-page">
+      <div className="login-card-wrapper">
+        <form className="login-card" onSubmit={submit}>
+          <div className="login-header-zone">
+            <div className="login-logo-mark">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+            </div>
+            <h2>WA Control Center</h2>
+            <p>Admin &amp; User Portal Login</p>
+          </div>
+
+          <div className="login-form-body">
+            <div className="login-field-group">
+              <label>Login ID / Mobile Number</label>
+              <div className="login-input-wrap">
+                <span className="login-input-icon">👤</span>
+                <input 
+                  type="text"
+                  placeholder="10 अंकों का मोबाइल नंबर या admin" 
+                  value={u} 
+                  onChange={e => setU(e.target.value)} 
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="login-field-group">
+              <label>Password</label>
+              <div className="login-input-wrap">
+                <span className="login-input-icon">🔒</span>
+                <input 
+                  type="password" 
+                  placeholder="Password (WhatsApp पर प्राप्त)" 
+                  value={p} 
+                  onChange={e => setP(e.target.value)} 
+                />
+              </div>
+            </div>
+
+            {err && (
+              <div className="login-error-alert">
+                <span>⚠</span> {err}
+              </div>
+            )}
+
+            <button type="submit" className="login-submit-btn" disabled={loading}>
+              {loading ? 'प्रमाणित किया जा रहा है...' : 'Login करें →'}
+            </button>
+
+            <div className="login-footer-links">
+              <span>नया अकाउंट बनाना है?</span>
+              <a href="/signup.html" className="login-signup-link">यहाँ Sign Up करें</a>
+            </div>
+          </div>
+        </form>
       </div>
-    </form>
-  </div>
+    </div>
+  )
 }
 
 function Dashboard({ status, qr, stats, chats, isAdmin, connecting, onConnect, onDisconnect, onChat, onRefresh }) {
   return <section className="page-content">
     <div className="hero-card">
-      <div>
-        <span className="eyebrow">{isAdmin ? 'ADMIN WHATSAPP SESSION' : 'YOUR PERSONAL WHATSAPP SESSION'}</span>
+      <div className="hero-text-content">
+        <span className="hero-eyebrow-badge">{isAdmin ? 'ADMIN WHATSAPP SESSION' : 'YOUR PERSONAL WHATSAPP SESSION'}</span>
         <h2>{status.status === 'connected' ? 'WhatsApp Connected ✓' : 'अपना WhatsApp जोड़ें'}</h2>
         <p>
           {status.status === 'connected' 
             ? `आपका WhatsApp (+${status.number || ''}) कनेक्टेड है। अब आप इस नंबर से सीधे मैसेज भेज सकते हैं।` 
             : 'QR कोड स्कैन करने के लिए नीचे बटन दबाएं और अपने फ़ोन के WhatsApp से स्कैन करें।'}
         </p>
-        <div style={{display:'flex',gap:10,marginTop:12}}>
+        <div className="hero-btn-group">
           {status.status === 'connected' ? (
             <>
-              <button className="primary" onClick={onRefresh}>↻ Refresh Status</button>
-              {onDisconnect && <button className="secondary" onClick={onDisconnect} style={{background:'#ffebee',color:'#c62828',border:'none'}}>⏏ Disconnect</button>}
+              <button className="btn-hero-primary" onClick={onRefresh}>↻ Refresh Status</button>
+              {onDisconnect && <button className="btn-hero-danger" onClick={onDisconnect}>⏏ Disconnect</button>}
             </>
           ) : (
-            <button className="primary" onClick={onConnect} disabled={connecting}>
-              {connecting ? 'शुरू हो रहा है...' : '📱 Connect / Get QR Code'}
+            <button className="btn-hero-primary" onClick={onConnect} disabled={connecting}>
+              {connecting ? '⏳ शुरू हो रहा है...' : '📱 Connect / Get QR Code'}
             </button>
           )}
         </div>
       </div>
-      {qr ? (
-        <div style={{textAlign:'center'}}>
-          <img className="qr" src={qr} alt="WhatsApp QR" style={{background:'#fff',padding:8,borderRadius:10}} />
-          <small style={{display:'block',color:'#666',marginTop:4}}>WhatsApp Linked Devices से scan करें</small>
-        </div>
-      ) : (
-        <div className={`status-art ${status.status === 'connected' ? 'ok' : ''}`}>
-          {status.status === 'connected' ? '✓' : '📱'}
-        </div>
-      )}
+
+      <div className="hero-visual-content">
+        {qr ? (
+          <div className="hero-qr-box">
+            <img className="qr-image" src={qr} alt="WhatsApp QR" />
+            <div className="qr-caption">WhatsApp &gt; Linked Devices से scan करें</div>
+          </div>
+        ) : (
+          <div className={`hero-status-circle ${status.status === 'connected' ? 'is-connected' : ''}`}>
+            {status.status === 'connected' ? (
+              <div className="hero-connected-badge">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Online</span>
+              </div>
+            ) : (
+              <div className="hero-disconnected-badge">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                <span>Scan Needed</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
 
     <div className="stat-grid">
-      <Stat icon="◉" value={stats.chats} label="Active chats" />
-      <Stat icon="!" value={stats.unread} label="Unread" />
-      <Stat icon="▣" value={stats.groups} label="Groups" />
-      <Stat icon="✓" value={status.status === 'connected' ? 'Online' : 'Offline'} label="Status" />
+      <Stat 
+        variant="teal"
+        icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>} 
+        value={stats.chats} 
+        label="Active chats" 
+        sub="Live conversations"
+      />
+      <Stat 
+        variant="coral"
+        icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>} 
+        value={stats.unread} 
+        label="Unread" 
+        sub="Requires attention"
+      />
+      <Stat 
+        variant="purple"
+        icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><rect x="14" y="3" width="7" height="7" rx="1.5"></rect></svg>} 
+        value={stats.groups} 
+        label="Groups" 
+        sub="WhatsApp groups"
+      />
+      <Stat 
+        variant={status.status === 'connected' ? 'success' : 'amber'}
+        icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>} 
+        value={status.status === 'connected' ? 'Online' : 'Offline'} 
+        label="Status" 
+        sub={status.number ? `+${status.number}` : 'Not connected'}
+      />
     </div>
 
-    <div className="section-head">
-      <div>
-        <h2>Recent Conversations</h2>
-        <p>हाल के मैसेजेस और चैट्स</p>
+    <div className="zendash-card">
+      <div className="zendash-card-header">
+        <div>
+          <h3 className="zendash-card-title">Recent Conversations</h3>
+          <p className="zendash-card-subtitle">हाल के मैसेजेस और चैट्स</p>
+        </div>
+        {chats.length > 0 && <span className="badge-zendash-count">{chats.length} Total</span>}
       </div>
-    </div>
-    <div className="chat-grid">
-      {chats.slice(0, 8).map(c => (
-        <button className="chat-card" key={c.chatJid} onClick={() => onChat(c)}>
-          <div className="avatar">{(c.name || '?')[0].toUpperCase()}</div>
-          <div><b>{c.name}</b><p>{c.lastMessage || 'Media message'}</p></div>
-          {c.unreadCount ? <span className="badge">{c.unreadCount}</span> : null}
-        </button>
-      ))}
-      {!chats.length && <Empty text="अभी कोई बातचीत उपलब्ध नहीं है" />}
+      <div className="zendash-card-body">
+        <div className="chat-grid">
+          {chats.slice(0, 8).map(c => (
+            <button className="chat-card" key={c.chatJid} onClick={() => onChat(c)}>
+              <div className="avatar">{(c.name || '?')[0].toUpperCase()}</div>
+              <div className="chat-info">
+                <b>{c.name}</b>
+                <p>{c.lastMessage || 'Media message'}</p>
+              </div>
+              {c.unreadCount ? <span className="badge">{c.unreadCount}</span> : null}
+              <span className="chat-action-arrow">›</span>
+            </button>
+          ))}
+          {!chats.length && <Empty text="अभी कोई बातचीत उपलब्ध नहीं है" />}
+        </div>
+      </div>
     </div>
   </section>
 }
 
-function Stat({ icon, value, label }) { return <div className="stat"><span>{icon}</span><div><strong>{value}</strong><small>{label}</small></div></div> }
-function Empty({ text }) { return <div className="empty">{text}</div> }
+function Stat({ icon, value, label, variant, sub }) { 
+  let computedVariant = variant
+  if (!computedVariant) {
+    const l = String(label || '').toLowerCase()
+    if (l.includes('chat') || l.includes('total')) computedVariant = 'teal'
+    else if (l.includes('unread') || l.includes('fail')) computedVariant = 'coral'
+    else if (l.includes('group') || l.includes('pending')) computedVariant = 'purple'
+    else if (l.includes('status') || l.includes('sent') || l.includes('online')) computedVariant = 'success'
+    else computedVariant = 'amber'
+  }
+
+  return (
+    <div className={`stat-card stat-${computedVariant}`}>
+      <div className="stat-icon-wrap">
+        <span>{icon}</span>
+      </div>
+      <div className="stat-content">
+        <span className="stat-label">{label}</span>
+        <strong className="stat-value">{value}</strong>
+        {sub && <span className="stat-sub">{sub}</span>}
+      </div>
+    </div>
+  )
+}
+
+function Empty({ text }) { 
+  return (
+    <div className="empty">
+      <div style={{ fontSize: 24, marginBottom: 6, opacity: 0.6 }}>💬</div>
+      <div>{text}</div>
+    </div>
+  )
+}
+
 
 function IncomingPage({ chats, selected, setSelected, messages, search, setSearch, filter, setFilter, text, setText, attachment, setAttachment, fileRef, onFile, onSend, sending }) {
   return <section className="wa-layout">
