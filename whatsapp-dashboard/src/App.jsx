@@ -72,6 +72,7 @@ function App() {
   const [login, setLogin] = useState(() => localStorage.getItem('wa_login') || '')
   const [currentUser, setCurrentUser] = useState(getSavedUser)
   const [connecting, setConnecting] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const fileRef = useRef(null)
 
   const isAdmin = currentUser?.role === 'admin'
@@ -288,119 +289,267 @@ function App() {
     }, 50)
   }} />
 
-  return <div className="app-shell">
-    <aside className="sidebar">
-      <div className="brand">
-        <div className="brand-mark">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-        </div>
-        <div>
-          <strong>WA Control</strong>
-          <small>{isAdmin ? 'Admin Portal' : 'User Portal'}</small>
+  return (
+    <div className={`app page ${sidebarOpen ? 'sidenav-toggled' : ''}`}>
+      <div className="page-main">
+        {/* Mobile sidebar overlay */}
+        <div 
+          className="app-sidebar__overlay" 
+          onClick={() => setSidebarOpen(false)}
+        />
+
+        {/* Zendash App Sidebar */}
+        <aside className="app-sidebar">
+          <div className="app-sidebar__logo">
+            <a className="header-brand" href="#dashboard" onClick={(e) => { e.preventDefault(); setPage('dashboard'); }}>
+              <img src="/assets/images/brand/logo.png" className="header-brand-img desktop-lgo" alt="Zendash logo" />
+              <img src="/assets/images/brand/favicon.png" className="header-brand-img mobile-logo" alt="Zendash logo" />
+            </a>
+          </div>
+
+          <div className="app-sidebar3">
+            <div className="app-sidebar__user">
+              <div className="dropdown user-pro-body text-center">
+                <div className="user-pic">
+                  <div className="avatar-xl rounded-circle mb-1 user-avatar-circle">
+                    {(currentUser?.username || status.profileName || 'W')[0].toUpperCase()}
+                  </div>
+                </div>
+                <div className="user-info">
+                  <h5 className="mb-0 font-weight-normal">{status.profileName || (currentUser?.username ? currentUser.username : 'WhatsApp Account')}</h5>
+                  <span className="text-muted app-sidebar__user-name text-sm">
+                    {isAdmin ? 'System Administrator' : 'User Portal'}
+                  </span>
+                  <div className="sidebar-status-line">
+                    <span className={`dot ${status.status === 'connected' ? 'online' : ''}`}></span>
+                    <small>{status.number ? `+${status.number}` : (status.status === 'connected' ? 'Connected' : 'Not connected')}</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <ul className="side-menu">
+              <li><h3>MAIN</h3></li>
+              <li className="slide">
+                <a 
+                  className={`side-menu__item ${page === 'dashboard' ? 'active' : ''}`}
+                  onClick={() => { setPage('dashboard'); setSidebarOpen(false); }}
+                >
+                  <span className="shape1"></span>
+                  <span className="shape2"></span>
+                  <span className="side-menu__icon"><NavIcon name="dashboard" fallback="⌂" /></span>
+                  <span className="side-menu__label">Dashboard</span>
+                </a>
+              </li>
+
+              <li><h3>WHATSAPP ACTIONS</h3></li>
+              <li className="slide">
+                <a 
+                  className={`side-menu__item ${page === 'send' ? 'active' : ''}`}
+                  onClick={() => { setPage('send'); setSidebarOpen(false); }}
+                >
+                  <span className="shape1"></span>
+                  <span className="shape2"></span>
+                  <span className="side-menu__icon"><NavIcon name="send" fallback="➤" /></span>
+                  <span className="side-menu__label">Send Message</span>
+                </a>
+              </li>
+              <li className="slide">
+                <a 
+                  className={`side-menu__item ${page === 'groups' ? 'active' : ''}`}
+                  onClick={() => { setPage('groups'); setSidebarOpen(false); }}
+                >
+                  <span className="shape1"></span>
+                  <span className="shape2"></span>
+                  <span className="side-menu__icon"><NavIcon name="groups" fallback="👥" /></span>
+                  <span className="side-menu__label">Groups</span>
+                </a>
+              </li>
+              <li className="slide">
+                <a 
+                  className={`side-menu__item ${page === 'incoming' ? 'active' : ''}`}
+                  onClick={() => { setPage('incoming'); setSidebarOpen(false); }}
+                >
+                  <span className="shape1"></span>
+                  <span className="shape2"></span>
+                  <span className="side-menu__icon"><NavIcon name="incoming" fallback="◉" /></span>
+                  <span className="side-menu__label">Incoming Messages</span>
+                  {stats.unread > 0 && <span className="side-badge">{stats.unread}</span>}
+                </a>
+              </li>
+              <li className="slide">
+                <a 
+                  className={`side-menu__item ${page === 'reports' ? 'active' : ''}`}
+                  onClick={() => { setPage('reports'); setSidebarOpen(false); }}
+                >
+                  <span className="shape1"></span>
+                  <span className="shape2"></span>
+                  <span className="side-menu__icon"><NavIcon name="reports" fallback="▤" /></span>
+                  <span className="side-menu__label">Message Reports</span>
+                </a>
+              </li>
+
+              {isAdmin && (
+                <>
+                  <li><h3>ADMINISTRATION</h3></li>
+                  <li className="slide">
+                    <a 
+                      className={`side-menu__item ${page === 'users' ? 'active' : ''}`}
+                      onClick={() => { setPage('users'); setSidebarOpen(false); }}
+                    >
+                      <span className="shape1"></span>
+                      <span className="shape2"></span>
+                      <span className="side-menu__icon"><NavIcon name="users" fallback="👥" /></span>
+                      <span className="side-menu__label">User Management</span>
+                    </a>
+                  </li>
+                </>
+              )}
+
+              <li><h3>SYSTEM</h3></li>
+              <li className="slide">
+                <a 
+                  className={`side-menu__item ${page === 'api' ? 'active' : ''}`}
+                  onClick={() => { setPage('api'); setSidebarOpen(false); }}
+                >
+                  <span className="shape1"></span>
+                  <span className="shape2"></span>
+                  <span className="side-menu__icon"><NavIcon name="api" fallback="{}" /></span>
+                  <span className="side-menu__label">API &amp; Webhook</span>
+                </a>
+              </li>
+              <li className="slide">
+                <a 
+                  className={`side-menu__item ${page === 'system' ? 'active' : ''}`}
+                  onClick={() => { setPage('system'); setSidebarOpen(false); }}
+                >
+                  <span className="shape1"></span>
+                  <span className="shape2"></span>
+                  <span className="side-menu__icon"><NavIcon name="system" fallback="⚙" /></span>
+                  <span className="side-menu__label">System &amp; Settings</span>
+                </a>
+              </li>
+            </ul>
+
+            <div className="app-sidebar-footer">
+              <button 
+                type="button"
+                className="btn-sidebar-footer refresh" 
+                onClick={() => { loadStatus(); loadQr(); notify('Status refreshed') }}
+              >
+                <span>↻</span> Refresh
+              </button>
+              <button 
+                type="button"
+                className="btn-sidebar-footer logout" 
+                onClick={logout}
+              >
+                <span>⇥</span> Logout
+              </button>
+            </div>
+          </div>
+        </aside>
+
+        {/* Zendash App Content */}
+        <div className="app-content">
+          <div className="side-app">
+            {/* Zendash App Header */}
+            <header className="app-header header">
+              <div className="header-left">
+                <div className="app-sidebar__toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
+                  <a className="open-toggle" href="#toggle" onClick={e => e.preventDefault()}>
+                    <svg className="header-icon" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="3" y1="12" x2="21" y2="12"></line>
+                      <line x1="3" y1="6" x2="21" y2="6"></line>
+                      <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                  </a>
+                </div>
+                <div className="header-page-title">
+                  <h1>{navList.find(n => n[0] === page)?.[2]}</h1>
+                  <p>{isAdmin ? 'System Admin Control Center' : `Logged in as: ${currentUser?.username || currentUser?.mobile || 'User'}`}</p>
+                </div>
+              </div>
+
+              <div className="header-right">
+                <div className={`connection-pill ${status.status === 'connected' ? 'is-online' : status.status === 'connecting' ? 'is-connecting' : 'is-waiting'}`}>
+                  <span className="pill-dot"></span>
+                  <span>{status.status === 'connected' ? `Connected (+${status.number || ''})` : status.status === 'connecting' ? 'Connecting...' : 'Waiting for Scan'}</span>
+                </div>
+                <button 
+                  type="button"
+                  className="btn-header-action" 
+                  onClick={() => { loadStatus(); loadQr(); notify('Status refreshed') }}
+                  title="Refresh Status"
+                >
+                  ↻ Refresh
+                </button>
+                <button 
+                  type="button"
+                  className="btn-header-action logout" 
+                  onClick={logout}
+                  title="Logout"
+                >
+                  ⇥ Logout
+                </button>
+              </div>
+            </header>
+
+            {error && <div className="alert">⚠ {error}<button onClick={() => setError('')}>×</button></div>}
+            {toast && <div className="toast">✓ {toast}</div>}
+
+            {page === 'dashboard' && <Dashboard 
+              status={status} 
+              qr={qr} 
+              stats={stats} 
+              chats={chats} 
+              isAdmin={isAdmin}
+              connecting={connecting}
+              onConnect={isAdmin ? loadQr : connectUserWhatsApp} 
+              onDisconnect={isAdmin ? null : disconnectUserWhatsApp}
+              onChat={chooseChat} 
+              onRefresh={loadQr}
+            />}
+            {page === 'users' && <UsersPage notify={notify} />}
+            {page === 'send' && <SendPage 
+              notify={notify}
+              status={status}
+              isAdmin={isAdmin}
+              currentUser={currentUser}
+              chats={chats}
+            />}
+            {page === 'groups' && <GroupsPage 
+              notify={notify}
+              status={status}
+              isAdmin={isAdmin}
+              currentUser={currentUser}
+            />}
+            {page === 'incoming' && <IncomingPage 
+              chats={chats} 
+              selected={selected} 
+              setSelected={setSelected} 
+              messages={messages} 
+              search={search} 
+              setSearch={setSearch} 
+              filter={chatFilter} 
+              setFilter={setChatFilter} 
+              text={text} 
+              setText={setText} 
+              attachment={attachment} 
+              setAttachment={setAttachment} 
+              fileRef={fileRef} 
+              onFile={onFile} 
+              onSend={sendReply} 
+              sending={sending} 
+            />}
+            {page === 'reports' && <ReportsPage reports={reports} stats={reportStats} refresh={loadReports} />}
+            {page === 'api' && <ApiPage notify={notify} />}
+            {page === 'system' && <SystemPage status={status} currentUser={currentUser} notify={notify} />}
+          </div>
         </div>
       </div>
-
-      <div className="account-mini">
-        <div className="account-avatar">
-          {(currentUser?.username || status.profileName || 'W')[0].toUpperCase()}
-        </div>
-        <div>
-          <b>{status.profileName || (currentUser?.username ? `User: ${currentUser.username}` : 'WhatsApp Account')}</b>
-          <small>
-            <span className={`dot ${status.status === 'connected' ? 'online' : ''}`}></span>
-            {status.number ? `+${status.number}` : (status.status === 'connected' ? 'Connected' : 'Not connected')}
-          </small>
-        </div>
-      </div>
-
-      <div className="sidebar-section-title">NAVIGATION</div>
-      <nav>
-        {navList.map(([id, icon, label]) => (
-          <button 
-            key={id} 
-            className={`nav-btn ${page === id ? 'active' : ''}`} 
-            onClick={() => setPage(id)}
-          >
-            <span className="nav-icon-box"><NavIcon name={id} fallback={icon} /></span>
-            <span>{label}</span>
-          </button>
-        ))}
-      </nav>
-
-      <div className="sidebar-bottom">
-        <button className="btn-sidebar-secondary" onClick={() => { loadStatus(); loadQr(); notify('Status refreshed') }}>
-          <span>↻</span> Refresh status
-        </button>
-        <button className="btn-sidebar-logout" onClick={logout}>
-          <span>⇥</span> Logout
-        </button>
-      </div>
-    </aside>
-
-    <main className="main">
-      <header className="topbar">
-        <div>
-          <h1>{navList.find(n => n[0] === page)?.[2]}</h1>
-          <p>{isAdmin ? 'System Admin Control Center' : `Logged in as: ${currentUser?.username || currentUser?.mobile || 'User'}`}</p>
-        </div>
-        <div className={`connection-pill ${status.status === 'connected' ? 'is-online' : status.status === 'connecting' ? 'is-connecting' : 'is-waiting'}`}>
-          <span className="pill-dot"></span>
-          <span>{status.status === 'connected' ? `Connected (+${status.number || ''})` : status.status === 'connecting' ? 'Connecting...' : 'Waiting for Scan'}</span>
-        </div>
-      </header>
-
-      {error && <div className="alert">⚠ {error}<button onClick={() => setError('')}>×</button></div>}
-      {toast && <div className="toast">✓ {toast}</div>}
-
-      {page === 'dashboard' && <Dashboard 
-        status={status} 
-        qr={qr} 
-        stats={stats} 
-        chats={chats} 
-        isAdmin={isAdmin}
-        connecting={connecting}
-        onConnect={isAdmin ? loadQr : connectUserWhatsApp} 
-        onDisconnect={isAdmin ? null : disconnectUserWhatsApp}
-        onChat={chooseChat} 
-        onRefresh={loadQr}
-      />}
-      {page === 'users' && <UsersPage notify={notify} />}
-      {page === 'send' && <SendPage 
-        notify={notify}
-        status={status}
-        isAdmin={isAdmin}
-        currentUser={currentUser}
-        chats={chats}
-      />}
-      {page === 'groups' && <GroupsPage 
-        notify={notify}
-        status={status}
-        isAdmin={isAdmin}
-        currentUser={currentUser}
-      />}
-      {page === 'incoming' && <IncomingPage 
-        chats={chats} 
-        selected={selected} 
-        setSelected={setSelected} 
-        messages={messages} 
-        search={search} 
-        setSearch={setSearch} 
-        filter={chatFilter} 
-        setFilter={setChatFilter} 
-        text={text} 
-        setText={setText} 
-        attachment={attachment} 
-        setAttachment={setAttachment} 
-        fileRef={fileRef} 
-        onFile={onFile} 
-        onSend={sendReply} 
-        sending={sending} 
-      />}
-      {page === 'reports' && <ReportsPage reports={reports} stats={reportStats} refresh={loadReports} />}
-      {page === 'api' && <ApiPage notify={notify} />}
-      {page === 'system' && <SystemPage status={status} currentUser={currentUser} notify={notify} />}
-    </main>
-  </div>
+    </div>
+  )
 }
 
 function Login({ onLogin }) {
