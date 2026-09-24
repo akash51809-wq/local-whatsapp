@@ -2639,7 +2639,8 @@ body.dark-mode *::-webkit-scrollbar-track {
 .dark-mode.app.page,
 .dark-mode .page-main,
 .dark-mode .app-content,
-.dark-mode .side-app {
+.dark-mode .side-app,
+.dark-mode .page-content {
   background-color: #0d1337 !important;
   color: #edf0f5 !important;
 }
@@ -2719,6 +2720,12 @@ body.dark-mode *::-webkit-scrollbar-track {
 .dark-mode .e-panel.card,
 .dark-mode .users-filter-card,
 .dark-mode .groups-header-card,
+.dark-mode .groups-table-card,
+.dark-mode .groups-composer-card,
+.dark-mode .group-stat-card,
+.dark-mode .send-main-card,
+.dark-mode .how-to-guide-card,
+.dark-mode .zendash-card,
 .dark-mode .report-card,
 .dark-mode .incoming-card,
 .dark-mode .settings-card,
@@ -3038,15 +3045,571 @@ body.dark-mode *::-webkit-scrollbar-track {
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
+/* =========================================================
+   USER PANEL RIGHT SECTION - ZENDASH OFFICIAL DARK THEME
+========================================================= */
+
+/* 1. CHAT DETAILS (Incoming Page Right Section) */
 .dark-mode .details {
   background-color: #141b47 !important;
   border-left: 1px solid rgba(255, 255, 255, 0.08) !important;
   color: #edf0f5 !important;
 }
 
+.dark-mode .details h2,
+.dark-mode .details h3 {
+  color: #edf0f5 !important;
+}
+
+.dark-mode .details p,
+.dark-mode .details .muted {
+  color: #a2a6cb !important;
+}
+
+.dark-mode .profile-big {
+  background: linear-gradient(135deg, #705ec8 0%, #29327f 100%) !important;
+  color: #ffffff !important;
+  border: 2px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3) !important;
+}
+
+.dark-mode .detail-box {
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #a2a6cb !important;
+}
+
+.dark-mode .detail-box b {
+  color: #edf0f5 !important;
+}
+
+.dark-mode .conversation-empty {
+  color: #a2a6cb !important;
+}
+
+.dark-mode .conversation-empty h2 {
+  color: #edf0f5 !important;
+}
+
+.dark-mode .conversation-empty p {
+  color: #8fa0b2 !important;
+}
+
+/* 2. SEND PAGE (Right Section: How to Guide Card & Left Section: Send Main Card) */
+.dark-mode .how-to-guide-card {
+  background: #141b47 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 20px 0 rgba(10, 14, 40, 0.4) !important;
+  color: #edf0f5 !important;
+}
+
+.dark-mode .how-to-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .how-to-header h3 {
+  color: #edf0f5 !important;
+}
+
+.dark-mode .how-to-header small {
+  color: #a2a6cb !important;
+}
+
+.dark-mode .step-num-badge {
+  background: #705ec8 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(112, 94, 200, 0.4);
+}
+
+.dark-mode .step-content {
+  color: #a2a6cb !important;
+}
+
+.dark-mode .step-content strong {
+  color: #edf0f5 !important;
+}
+
+.dark-mode .step-content b {
+  color: #aab3f4 !important;
+}
+
+.dark-mode .guide-tip-box {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border: 1px solid rgba(16, 185, 129, 0.25) !important;
+  color: #34d399 !important;
+}
+
+.dark-mode .send-main-card {
+  background: #141b47 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 20px 0 rgba(10, 14, 40, 0.4) !important;
+  color: #edf0f5 !important;
+}
+
+.dark-mode .field-label {
+  color: #edf0f5 !important;
+}
+
+.dark-mode .field-label small {
+  color: #a2a6cb !important;
+}
+
+.dark-mode .field-select,
+.dark-mode .field-textarea,
+.dark-mode .field-input {
+  background-color: #0d1337 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #edf0f5 !important;
+}
+
+.dark-mode .field-select:focus,
+.dark-mode .field-textarea:focus,
+.dark-mode .field-input:focus {
+  border-color: #705ec8 !important;
+  box-shadow: 0 0 0 2px rgba(112, 94, 200, 0.3) !important;
+}
+
+.dark-mode .tool-btn {
+  background: #1b2253 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #edf0f5 !important;
+}
+
+.dark-mode .tool-btn:hover {
+  background: #252e6c !important;
+  border-color: rgba(112, 94, 200, 0.4) !important;
+}
+
+.dark-mode .tool-btn.primary-tool {
+  background: rgba(16, 185, 129, 0.15) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  color: #34d399 !important;
+}
+
+.dark-mode .tool-btn.primary-tool:hover {
+  background: rgba(16, 185, 129, 0.25) !important;
+  color: #6ee7b7 !important;
+}
+
+.dark-mode .tool-btn.danger-tool {
+  background: rgba(239, 68, 68, 0.15) !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+  color: #f87171 !important;
+}
+
+.dark-mode .tool-btn.danger-tool:hover {
+  background: rgba(239, 68, 68, 0.25) !important;
+}
+
+.dark-mode .numbers-stat-badge {
+  background: #0d1337 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #a2a6cb !important;
+}
+
+.dark-mode .message-box-wrap {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  background: #0d1337 !important;
+}
+
+.dark-mode .message-box-wrap:focus-within {
+  border-color: #705ec8 !important;
+  box-shadow: 0 0 0 3px rgba(112, 94, 200, 0.25) !important;
+}
+
+.dark-mode .main-msg-textarea {
+  background: #0d1337 !important;
+  color: #edf0f5 !important;
+}
+
+.dark-mode .main-msg-textarea::placeholder {
+  color: rgba(255, 255, 255, 0.35) !important;
+}
+
+.dark-mode .msg-action-bar {
+  background: #10173d !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .tool-icon-btn {
+  background: #1b2253 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #edf0f5 !important;
+}
+
+.dark-mode .tool-icon-btn:hover {
+  background: #252e6c !important;
+  border-color: #705ec8 !important;
+}
+
+.dark-mode .emoji-popover-box {
+  background: #141b47 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.6) !important;
+}
+
+.dark-mode .single-emoji-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark-mode .attachment-tag {
+  background: rgba(16, 185, 129, 0.15) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  color: #34d399 !important;
+}
+
+.dark-mode .attachment-tag button {
+  color: #34d399 !important;
+}
+
+.dark-mode .sending-progress-container {
+  background: #0d1337 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark-mode .progress-header-row {
+  color: #34d399 !important;
+}
+
+.dark-mode .btn-stop-sending {
+  background: #1e1b2e !important;
+  border-color: rgba(239, 68, 68, 0.4) !important;
+  color: #f87171 !important;
+}
+
+.dark-mode .btn-stop-sending:hover {
+  background: #ef4444 !important;
+  color: #ffffff !important;
+}
+
+.dark-mode .progress-bar-track {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* 3. GROUPS PAGE (Right Section: Groups Composer Card & Left Section: Groups Table Card) */
+.dark-mode .groups-composer-card {
+  background: #141b47 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 20px 0 rgba(10, 14, 40, 0.4) !important;
+}
+
+.dark-mode .composer-header {
+  background: #10173d !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .composer-header h3 {
+  color: #edf0f5 !important;
+}
+
+.dark-mode .empty-selection-note {
+  background: #0d1337 !important;
+  border: 1px dashed rgba(255, 255, 255, 0.15) !important;
+  color: #a2a6cb !important;
+}
+
+.dark-mode .selected-groups-chips {
+  background: #0d1337 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .group-chip {
+  background: #1e295c !important;
+  color: #aab3f4 !important;
+  border: 1px solid rgba(112, 94, 200, 0.3) !important;
+}
+
+.dark-mode .group-chip button {
+  color: #aab3f4 !important;
+}
+
+.dark-mode .btn-toggle-emojis {
+  color: #aab3f4 !important;
+}
+
+.dark-mode .quick-emoji-grid {
+  background: #0d1337 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .emoji-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark-mode .groups-header-card {
+  background: #141b47 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 20px 0 rgba(10, 14, 40, 0.4) !important;
+}
+
+.dark-mode .groups-title-area {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .groups-title-area h2 {
+  color: #edf0f5 !important;
+}
+
+.dark-mode .groups-title-area p {
+  color: #a2a6cb !important;
+}
+
+.dark-mode .group-stat-card {
+  background: #0d1337 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .group-stat-card .stat-label {
+  color: #a2a6cb !important;
+}
+
+.dark-mode .group-stat-card .stat-value {
+  color: #edf0f5 !important;
+}
+
+.dark-mode .group-stat-card.highlight {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+
+.dark-mode .group-stat-card.highlight .stat-value {
+  color: #34d399 !important;
+}
+
+.dark-mode .groups-table-card {
+  background: #141b47 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 20px 0 rgba(10, 14, 40, 0.4) !important;
+}
+
+.dark-mode .groups-table-toolbar {
+  background: #10173d !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .groups-table th {
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: #c4c9d6 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .groups-table td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  color: #edf0f5 !important;
+}
+
+.dark-mode .groups-table tr:hover {
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+.dark-mode .groups-table tr.row-selected {
+  background: rgba(112, 94, 200, 0.15) !important;
+}
+
+.dark-mode .group-avatar-wrapper {
+  background: #1b2253 !important;
+}
+
+.dark-mode .btn-copy-mini:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
+.dark-mode .groups-table td span[style*="color: #172433"],
+.dark-mode .groups-table td span[style*="color:#172433"] {
+  color: #edf0f5 !important;
+}
+
+.dark-mode .composer-body span[style*="color: #475569"],
+.dark-mode .composer-body span[style*="color:#475569"] {
+  color: #a2a6cb !important;
+}
+
+.dark-mode .composer-body div[style*="background: #f1f5f9"],
+.dark-mode .composer-body div[style*="background:#f1f5f9"] {
+  background: #0d1337 !important;
+  color: #a2a6cb !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .btn-action-icon[style*="background: #eef2f6"],
+.dark-mode .btn-action-icon[style*="background:#eef2f6"] {
+  background: #1b2253 !important;
+  color: #edf0f5 !important;
+}
+
 .dark-mode .group-members-list-container {
   border-color: rgba(255, 255, 255, 0.08) !important;
   background-color: #0d1337 !important;
+}
+
+/* 4. DASHBOARD PAGE (Right Hero Visual QR Box & Zendash Card) */
+.dark-mode .hero-card {
+  background: linear-gradient(135deg, #141b47 0%, #1a225a 55%, #182855 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 10px 30px rgba(10, 14, 40, 0.5) !important;
+}
+
+.dark-mode .hero-card h2 {
+  color: #ffffff !important;
+}
+
+.dark-mode .hero-card p {
+  color: #cbd5e1 !important;
+}
+
+.dark-mode .hero-qr-box {
+  background: #10173d !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+}
+
+.dark-mode .qr-image,
+.dark-mode .qr {
+  background: #ffffff !important;
+  border-radius: 8px;
+  padding: 6px;
+}
+
+.dark-mode .qr-caption {
+  color: #a2a6cb !important;
+}
+
+.dark-mode .hero-status-circle {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+.dark-mode .zendash-card {
+  background: #141b47 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 20px 0 rgba(10, 14, 40, 0.4) !important;
+}
+
+.dark-mode .zendash-card-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .zendash-card-title {
+  color: #edf0f5 !important;
+}
+
+.dark-mode .zendash-card-subtitle {
+  color: #a2a6cb !important;
+}
+
+.dark-mode .badge-zendash-count {
+  background: #0d1337 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #a2a6cb !important;
+}
+
+.dark-mode .chat-card {
+  background: #10173d !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #edf0f5 !important;
+}
+
+.dark-mode .chat-card:hover {
+  background: #1b2253 !important;
+  border-color: rgba(112, 94, 200, 0.35) !important;
+}
+
+.dark-mode .chat-card .avatar {
+  background: linear-gradient(135deg, #705ec8 0%, #29327f 100%) !important;
+  color: #ffffff !important;
+}
+
+.dark-mode .chat-card .chat-info b {
+  color: #edf0f5 !important;
+}
+
+.dark-mode .chat-card .chat-info p {
+  color: #a2a6cb !important;
+}
+
+.dark-mode .chat-action-arrow {
+  color: #705ec8 !important;
+}
+
+.dark-mode .stat-card {
+  background: #141b47 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 20px 0 rgba(10, 14, 40, 0.4) !important;
+}
+
+.dark-mode .stat-card:hover {
+  box-shadow: 0 8px 30px 0 rgba(10, 14, 40, 0.6) !important;
+}
+
+.dark-mode .stat-value {
+  color: #edf0f5 !important;
+}
+
+.dark-mode .stat-label {
+  color: #a2a6cb !important;
+}
+
+.dark-mode .stat-sub {
+  color: #737f9e !important;
+}
+
+/* 5. SYSTEM, API & SETTINGS PAGES */
+.dark-mode .section-head {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .section-head h2 {
+  color: #edf0f5 !important;
+}
+
+.dark-mode .section-head p {
+  color: #a2a6cb !important;
+}
+
+.dark-mode .info-card {
+  background: #141b47 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .info-card small {
+  color: #a2a6cb !important;
+}
+
+.dark-mode .info-card strong {
+  color: #edf0f5 !important;
+}
+
+.dark-mode .modal-card {
+  background: #141b47 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7) !important;
+  color: #edf0f5 !important;
+}
+
+.dark-mode .api-card div[style*="background: #f8fafc"],
+.dark-mode .api-card div[style*="background:#f8fafc"],
+.dark-mode .api-card div[style*="background: rgb(248, 250, 252)"] {
+  background: #0d1337 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .api-card code,
+.dark-mode .api-card span[style*="background: #fff"],
+.dark-mode .api-card span[style*="background:#fff"] {
+  background: #10173d !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #edf0f5 !important;
+}
+
+.dark-mode .api-card table th,
+.dark-mode .api-card table td {
+  border-color: rgba(255, 255, 255, 0.07) !important;
+  color: #edf0f5 !important;
+}
+
+.dark-mode .api-card table thead tr,
+.dark-mode .api-card table thead th {
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: #c4c9d6 !important;
 }
 
 /* =========================================================
