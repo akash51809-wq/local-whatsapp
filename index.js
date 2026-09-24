@@ -2377,7 +2377,7 @@ async function startBot() {
             auth: state,
             printQRInTerminal: false,
             browser: ["Chrome (Windows)", "Desktop", "10.0"],
-            syncFullHistory: false,
+            syncFullHistory: true,
             keepAliveIntervalMs: 30000,
             getMessage: async (key) => {
                 const all = getIncomingMessages();
@@ -2794,8 +2794,12 @@ module.exports = {
     startBot,
     appendMessageReport,
     appendIncomingMessage,
+    appendIncomingMessagesBatch,
     broadcastIncomingEvent,
     getMessageReports,
     normalizeIndianNumber,
-    handleIncomingMessageFromSocket
+    handleIncomingMessageFromSocket,
+    unwrapMessage,
+    extractMessageText,
+    saveContact
 };

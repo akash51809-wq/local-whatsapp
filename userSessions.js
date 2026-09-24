@@ -57,7 +57,7 @@ async function startUserSession(userId) {
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 60000,
         markOnlineOnConnect: true,
-        syncFullHistory: false
+        syncFullHistory: true
     });
 
     const sessionData = {
@@ -191,6 +191,87 @@ async function startUserSession(userId) {
     });
 
     socket.ev.on('creds.update', saveCreds);
+
+    // ── History sync (fires on first connect when syncFullHistory:true) ──
+    socket.ev.on('messaging-history.set', async ({ messages: histMsgs, contacts }) => {
+        try {
+            const indexModule = require('./index');
+            if (!indexModule) return;
+
+            // Save contacts
+            if (Array.isArray(contacts) && contacts.length > 0 && typeof indexModule.saveContact === 'function') {
+                for (const c of contacts) indexModule.saveContact(c);
+            }
+
+            if (!Array.isArray(histMsgs) || histMsgs.length === 0) return;
+            console.log(`[UserSession ${userId}] History sync: ${histMsgs.length} messages received`);
+
+            if (typeof indexModule.appendIncomingMessagesBatch !== 'function') return;
+
+            const batch = [];
+            for (const rawMsg of histMsgs) {
+                if (!rawMsg || !rawMsg.message) continue;
+                const rawRemoteJid = rawMsg.key?.remoteJid || '';
+                if (!rawRemoteJid || rawRemoteJid === 'status@broadcast') continue;
+
+                // Use unwrapMessage / extractMessageText if available
+                let text = '';
+                let hasMedia = false;
+                if (typeof indexModule.unwrapMessage === 'function') {
+                    const unwrapped = indexModule.unwrapMessage(rawMsg.message);
+                    if (!unwrapped) continue;
+                    text = typeof indexModule.extractMessageText === 'function'
+                        ? indexModule.extractMessageText(unwrapped)
+                        : '';
+                    hasMedia = Boolean(
+                        unwrapped.imageMessage || unwrapped.videoMessage ||
+                        unwrapped.audioMessage || unwrapped.documentMessage ||
+                        unwrapped.stickerMessage
+                    );
+                } else {
+                    // Fallback: extract text directly
+                    const msg = rawMsg.message;
+                    text = msg.conversation || msg.extendedTextMessage?.text || '';
+                    hasMedia = Boolean(msg.imageMessage || msg.videoMessage || msg.audioMessage || msg.documentMessage);
+                }
+                if (!text && !hasMedia) continue;
+
+                const isFromMe = Boolean(rawMsg.key?.fromMe);
+                const isGroup = rawRemoteJid.endsWith('@g.us');
+                const phoneNum = sessionData.connectedNumber || '';
+
+                let fromNumber = isFromMe
+                    ? (phoneNum || 'me')
+                    : (rawMsg.key?.participant || rawRemoteJid).split('@')[0].replace(/\D/g, '');
+
+                batch.push({
+                    id: rawMsg.key?.id || ('hist_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7)),
+                    date: new Date(rawMsg.messageTimestamp ? (rawMsg.messageTimestamp * 1000) : Date.now()).toISOString(),
+                    from: fromNumber,
+                    fromMe: isFromMe,
+                    pushName: rawMsg.pushName || null,
+                    chatJid: rawRemoteJid,
+                    isGroup,
+                    groupName: isGroup ? 'WhatsApp Group' : null,
+                    message: text || (hasMedia ? 'Media' : ''),
+                    mediaType: null,
+                    mediaUrl: null,
+                    isRead: isFromMe ? true : false,
+                    ownerUserId: userId
+                });
+            }
+
+            if (batch.length > 0) {
+                const added = indexModule.appendIncomingMessagesBatch(batch);
+                console.log(`[UserSession ${userId}] History sync: saved ${added} new messages`);
+                if (typeof indexModule.broadcastIncomingEvent === 'function') {
+                    indexModule.broadcastIncomingEvent('refresh', { count: added });
+                }
+            }
+        } catch (err) {
+            console.warn(`[UserSession ${userId}] messaging-history.set error:`, err.message);
+        }
+    });
 
     socket.ev.on('messages.upsert', async (m) => {
         try {
