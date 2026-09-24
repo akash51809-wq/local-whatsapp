@@ -1,6 +1,8 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 const router = express.Router();
 
@@ -94,6 +96,35 @@ const Otp = mongoose.models.WAOtp || mongoose.model('WAOtp', OtpSchema);
 const WhatsAppSession = mongoose.models.WAWhatsAppSession || mongoose.model('WAWhatsAppSession', WhatsAppSessionSchema);
 const Plan = mongoose.models.WAPlan || mongoose.model('WAPlan', PlanSchema);
 const PlanPurchaseRequest = mongoose.models.WAPlanPurchaseRequest || mongoose.model('WAPlanPurchaseRequest', PlanPurchaseRequestSchema);
+const CompanySettingsSchema = new mongoose.Schema({
+  key: { type: String, default: 'company', unique: true },
+  companyName: { type: String, default: '' },
+  faviconUrl: { type: String, default: '' },
+  logoUrl: { type: String, default: '' },
+  updatedAt: { type: Date, default: Date.now },
+});
+const CompanySettings = mongoose.models.WACompanySettings || mongoose.model('WACompanySettings', CompanySettingsSchema);
+const COMPANY_SETTINGS_FILE = path.join(__dirname, 'company_settings.json');
+
+function getCompanySettingsFile() {
+  try {
+    if (fs.existsSync(COMPANY_SETTINGS_FILE)) {
+      const data = fs.readFileSync(COMPANY_SETTINGS_FILE, 'utf-8');
+      return JSON.parse(data || '{}');
+    }
+  } catch (e) {
+    console.error('Error reading company_settings.json:', e);
+  }
+  return {};
+}
+
+function saveCompanySettingsFile(settings) {
+  try {
+    fs.writeFileSync(COMPANY_SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('Error saving company_settings.json:', e);
+  }
+}
 
 const cleanMobile = (value) => String(value || '').replace(/\D/g, '');
 const randomDigits = (length) => {
@@ -1427,4 +1458,71 @@ router.post('/api/admin/plan-requests/:requestId/reject', authRequired, adminReq
   }
 });
 
-module.exports = { router, authRequired, adminRequired, ensureAdminUser, recordAdminWhatsAppSession, User, WhatsAppSession, Plan, PlanPurchaseRequest };
+// 11. Public: Get company branding settings (Company Name, Favicon, Logo)
+router.get('/api/settings/company', async (req, res) => {
+  try {
+    let settings = { companyName: '', faviconUrl: '', logoUrl: '' };
+    if (mongoose.connection.readyState === 1) {
+      const doc = await CompanySettings.findOne({ key: 'company' });
+      if (doc) {
+        settings.companyName = doc.companyName || '';
+        settings.faviconUrl = doc.faviconUrl || '';
+        settings.logoUrl = doc.logoUrl || '';
+      }
+    }
+    const fileSettings = getCompanySettingsFile();
+    settings = {
+      companyName: settings.companyName || fileSettings.companyName || '',
+      faviconUrl: settings.faviconUrl || fileSettings.faviconUrl || '',
+      logoUrl: settings.logoUrl || fileSettings.logoUrl || ''
+    };
+    res.json({ success: true, settings });
+  } catch (error) {
+    console.error('Get company settings error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 12. Admin: Update company branding settings (Company Name, Favicon, Logo)
+router.post('/api/settings/company', express.json({ limit: '15mb' }), authRequired, adminRequired, async (req, res) => {
+  try {
+    const { companyName, faviconUrl, logoUrl } = req.body || {};
+    const updated = {
+      companyName: companyName !== undefined ? String(companyName).trim() : '',
+      faviconUrl: faviconUrl !== undefined ? String(faviconUrl).trim() : '',
+      logoUrl: logoUrl !== undefined ? String(logoUrl).trim() : '',
+      updatedAt: new Date()
+    };
+
+    if (mongoose.connection.readyState === 1) {
+      await CompanySettings.findOneAndUpdate(
+        { key: 'company' },
+        { $set: updated },
+        { upsert: true, new: true }
+      );
+    }
+    saveCompanySettingsFile(updated);
+
+    res.json({
+      success: true,
+      settings: updated,
+      message: 'Company settings saved successfully!'
+    });
+  } catch (error) {
+    console.error('Save company settings error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+module.exports = { 
+  router, 
+  authRequired, 
+  adminRequired, 
+  ensureAdminUser, 
+  recordAdminWhatsAppSession, 
+  User, 
+  WhatsAppSession, 
+  Plan, 
+  PlanPurchaseRequest,
+  CompanySettings 
+};

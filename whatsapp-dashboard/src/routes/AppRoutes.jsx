@@ -16,6 +16,7 @@ import AdminPlanRequestsPage from '../pages/admin/AdminPlanRequestsPage'
 import UserPlansPage from '../pages/subscription/UserPlansPage'
 import ApiPage from '../pages/api/ApiPage'
 import SystemPage from '../pages/system/SystemPage'
+import SettingsPage from '../pages/admin/SettingsPage'
 
 function ProtectedRoute({ children }) {
   const { login } = useAuth()
@@ -118,9 +119,11 @@ export default function AppRoutes() {
         <Route path="admin/plan-requests" element={<Navigate to="/payment/daybook" replace />} />
         <Route path="admin/purchases" element={<Navigate to="/payment/daybook" replace />} />
 
-        {/* API & System */}
+        {/* API & System & Settings */}
         <Route path="api" element={<ApiPage />} />
-        <Route path="system" element={<SystemPage />} />
+        <Route path="system" element={<SettingsPage defaultTab="system" />} />
+        <Route path="settings" element={<SettingsPage defaultTab="company" />} />
+        <Route path="admin/settings" element={<Navigate to="/settings" replace />} />
 
         {/* Default fallback inside layout */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

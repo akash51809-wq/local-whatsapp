@@ -22,7 +22,9 @@ const pageTitles = {
   '/plans': 'Pricing & Plans',
   '/subscription': 'Pricing & Plans',
   '/api': 'API & Webhook',
-  '/system': 'System & Settings'
+  '/system': 'System & Settings',
+  '/settings': 'System Settings',
+  '/admin/settings': 'System Settings'
 }
 
 export function Navbar() {

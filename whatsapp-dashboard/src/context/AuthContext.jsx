@@ -25,6 +25,50 @@ export function AuthProvider({ children }) {
 
   const isAdmin = currentUser?.role === 'admin'
 
+  // Company Branding Settings (Favicon, Company Name, Logo)
+  const [companySettings, setCompanySettings] = useState({
+    companyName: '',
+    faviconUrl: '',
+    logoUrl: ''
+  })
+
+  const applyBranding = useCallback((settings) => {
+    if (!settings) return
+    if (settings.faviconUrl) {
+      let link = document.querySelector("link[rel*='icon']")
+      if (!link) {
+        link = document.createElement('link')
+        link.rel = 'icon'
+        document.head.appendChild(link)
+      }
+      link.href = settings.faviconUrl
+    }
+    if (settings.companyName) {
+      document.title = `${settings.companyName} - WhatsApp Automation`
+    }
+  }, [])
+
+  const loadCompanySettings = useCallback(async () => {
+    try {
+      const res = await api('/api/settings/company')
+      if (res && res.success && res.settings) {
+        setCompanySettings(res.settings)
+        applyBranding(res.settings)
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [applyBranding])
+
+  const updateCompanySettings = useCallback((newSettings) => {
+    setCompanySettings(newSettings)
+    applyBranding(newSettings)
+  }, [applyBranding])
+
+  useEffect(() => {
+    loadCompanySettings()
+  }, [loadCompanySettings])
+
   // Dark mode effect
   useEffect(() => {
     localStorage.setItem('wa_theme', theme)
@@ -256,7 +300,10 @@ export function AuthProvider({ children }) {
     loadStatus,
     loadQr,
     connectUserWhatsApp,
-    disconnectUserWhatsApp
+    disconnectUserWhatsApp,
+    companySettings,
+    loadCompanySettings,
+    updateCompanySettings
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

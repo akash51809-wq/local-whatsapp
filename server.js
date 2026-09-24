@@ -217,6 +217,7 @@ app.post('/api/system/autoping/trigger', async (req, res) => {
   });
 });
 
+app.use('/api/settings/company', express.json({ limit: '15mb' }));
 app.use(authRouter);
 app.use(botApp);
 app.use(express.static(distPath, { index: false }));

@@ -13,7 +13,8 @@ export function Sidebar() {
     loadQr,
     notify,
     logout,
-    setSidebarOpen
+    setSidebarOpen,
+    companySettings
   } = useAuth()
 
   const closeMobile = () => setSidebarOpen(false)
@@ -21,9 +22,27 @@ export function Sidebar() {
   return (
     <aside className="app-sidebar">
       <div className="app-sidebar__logo">
-        <NavLink className="header-brand" to="/dashboard" onClick={closeMobile}>
-          <img src="/assets/images/brand/logo.png" className="header-brand-img desktop-lgo" alt="Zendash logo" />
-          <img src="/assets/images/brand/favicon.png" className="header-brand-img mobile-logo" alt="Zendash logo" />
+        <NavLink className="header-brand" to="/dashboard" onClick={closeMobile} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {companySettings?.logoUrl ? (
+            <img 
+              src={companySettings.logoUrl} 
+              className="header-brand-img desktop-lgo" 
+              alt={companySettings?.companyName || "Company Logo"} 
+              style={{ maxHeight: 38, maxWidth: '100%', objectFit: 'contain' }}
+            />
+          ) : (
+            <img src="/assets/images/brand/logo.png" className="header-brand-img desktop-lgo" alt="Zendash logo" />
+          )}
+          {companySettings?.faviconUrl ? (
+            <img 
+              src={companySettings.faviconUrl} 
+              className="header-brand-img mobile-logo" 
+              alt={companySettings?.companyName || "Favicon"} 
+              style={{ maxHeight: 30, width: 30, objectFit: 'contain' }}
+            />
+          ) : (
+            <img src="/assets/images/brand/favicon.png" className="header-brand-img mobile-logo" alt="Zendash logo" />
+          )}
         </NavLink>
       </div>
 
@@ -155,6 +174,18 @@ export function Sidebar() {
                   <span className="side-menu__label">Purchase Requests</span>
                 </NavLink>
               </li>
+              <li className="slide">
+                <NavLink 
+                  to="/settings" 
+                  className={({ isActive }) => `side-menu__item ${isActive ? 'active' : ''}`}
+                  onClick={closeMobile}
+                >
+                  <span className="shape1"></span>
+                  <span className="shape2"></span>
+                  <span className="side-menu__icon"><NavIcon name="system" fallback="⚙" /></span>
+                  <span className="side-menu__label">Settings</span>
+                </NavLink>
+              </li>
             </>
           ) : (
             <>
@@ -189,7 +220,7 @@ export function Sidebar() {
           </li>
           <li className="slide">
             <NavLink 
-              to="/system" 
+              to="/settings" 
               className={({ isActive }) => `side-menu__item ${isActive ? 'active' : ''}`}
               onClick={closeMobile}
             >
