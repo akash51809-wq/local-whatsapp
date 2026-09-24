@@ -980,6 +980,34 @@ app.post('/api/incoming/sync-chats', authRequired, async (req, res) => {
     }
 });
 
+// ── Request full history sync without rescanning QR ──────────────────
+app.post('/api/incoming/request-history', authRequired, async (req, res) => {
+    try {
+        const userId = req.user?.userId;
+        const isAdmin = req.user?.role === 'admin';
+
+        if (isAdmin) {
+            if (!sock) return res.status(400).json({ success: false, message: 'Admin WhatsApp not connected' });
+            res.json({ success: true, message: 'History sync started. Reconnecting... wait 5-10 seconds then refresh.' });
+            setTimeout(() => {
+                try { sock.end(new Error('history-sync-request')); } catch (e) {}
+            }, 300);
+        } else {
+            const { getUserSession } = require('./userSessions');
+            const session = getUserSession(userId);
+            if (!session || session.status !== 'connected') {
+                return res.status(400).json({ success: false, message: 'Your WhatsApp is not connected' });
+            }
+            res.json({ success: true, message: 'History sync started. Reconnecting... wait 5-10 seconds then refresh.' });
+            setTimeout(() => {
+                try { session.socket.end(new Error('history-sync-request')); } catch (e) {}
+            }, 300);
+        }
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 app.post('/api/incoming/reply', authRequired, attachmentBodyParser, async (req, res) => {
     try {
         const { chatJid, text, attachment, quotedMsgId } = req.body || {};
