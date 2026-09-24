@@ -1739,7 +1739,7 @@ button { cursor: pointer; }
    USER MANAGEMENT PAGE (ZENDASH users-list-1.html STYLE)
 ========================================================= */
 .page-user-management {
-  padding: 24px 28px;
+  padding: 6px 16px 24px;
   max-width: 1440px;
   margin: 0 auto;
   width: 100%;
@@ -1747,7 +1747,7 @@ button { cursor: pointer; }
 
 @media (max-width: 768px) {
   .page-user-management {
-    padding: 16px 12px;
+    padding: 6px 8px 16px;
   }
 }
 
@@ -2042,6 +2042,109 @@ button { cursor: pointer; }
 .spin-icon {
   animation: spinIcon 1s linear infinite;
   display: inline-block;
+}
+
+/* =========================================================
+   COMPACT USER LIST TOOLBAR & TABLE
+========================================================= */
+.users-compact-toolbar {
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.users-compact-toolbar .filter-control {
+  height: 32px;
+  padding: 2px 10px;
+  font-size: 0.8rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color, #d5dce4);
+  background: var(--input-bg, #ffffff);
+  color: var(--text-main, #282f53);
+  outline: none;
+}
+
+.users-compact-toolbar .filter-control:focus {
+  border-color: #705ec8;
+}
+
+.users-compact-toolbar .btn {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 6px;
+  gap: 5px;
+}
+
+.users-table-card {
+  border: 1px solid var(--border-color, #eff0f6);
+  border-radius: 8px;
+  background: var(--card-bg, #ffffff);
+  box-shadow: 0 1px 4px 0 rgba(160, 175, 208, 0.08);
+  overflow: hidden;
+}
+
+.users-table-compact {
+  width: 100%;
+  margin-bottom: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.users-table-compact th {
+  background-color: var(--header-bg, #f8fafc) !important;
+  color: var(--text-muted, #505d69) !important;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.7rem !important;
+  letter-spacing: 0.5px;
+  padding: 6px 8px !important;
+  border-bottom: 1px solid var(--border-color, #e2e8f0) !important;
+  border-top: none !important;
+  white-space: nowrap;
+  vertical-align: middle !important;
+}
+
+.users-table-compact td {
+  padding: 5px 8px !important;
+  vertical-align: middle !important;
+  font-size: 0.81rem;
+  border-bottom: 1px solid var(--border-color, #eff0f6);
+  line-height: 1.3;
+}
+
+.users-table-compact tbody tr:hover td {
+  background-color: rgba(112, 94, 200, 0.035);
+}
+
+.avatar-compact {
+  width: 26px !important;
+  height: 26px !important;
+  min-width: 26px;
+  font-size: 0.75rem !important;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.btn-table-action {
+  padding: 2px 7px !important;
+  font-size: 0.72rem !important;
+  height: 24px !important;
+  line-height: 1.2 !important;
+  border-radius: 4px !important;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .users-filter-card {
@@ -2735,6 +2838,8 @@ body.dark-mode *::-webkit-scrollbar-track {
 .dark-mode .chat-card,
 .dark-mode .send-card,
 .dark-mode .info-card,
+.dark-mode .users-compact-toolbar,
+.dark-mode .users-table-card,
 .dark-mode .table-card {
   background-color: #141b47 !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;

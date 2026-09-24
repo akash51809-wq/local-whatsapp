@@ -174,120 +174,113 @@ export default function UsersPage({ notify: propNotify }) {
 
   return (
     <section className="page-user-management">
-      {/* Zendash Page Header */}
-      <div className="page-header d-flex flex-wrap align-items-center justify-content-between mb-4">
-        <div className="page-leftheader">
-          <h4 className="page-title mb-1 font-weight-bold" style={{ fontSize: '1.35rem', color: 'var(--text-main, #282f53)' }}>User List</h4>
-          <ol className="breadcrumb mb-0" style={{ background: 'transparent', padding: 0, fontSize: '0.82rem' }}>
-            <li className="breadcrumb-item"><a href="#apps" onClick={e => e.preventDefault()} style={{ color: '#705ec8' }}>Apps</a></li>
-            <li className="breadcrumb-item"><a href="#users" onClick={e => e.preventDefault()} style={{ color: '#705ec8' }}>User List</a></li>
-            <li className="breadcrumb-item active" style={{ color: 'var(--text-muted, #68798b)' }}>User List 01</li>
-          </ol>
-        </div>
-        <div className="page-rightheader d-flex align-items-center gap-2 mt-2 mt-sm-0">
-          <button 
-            className="btn btn-outline-primary d-inline-flex align-items-center"
-            onClick={downloadExcel}
-            title="Download Users List to Excel (.xlsx)"
-            style={{ fontWeight: 600 }}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6 }}>
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
-            Download Excel
-          </button>
-          <button 
-            className="btn btn-primary d-inline-flex align-items-center"
-            onClick={fetchUsers}
-            disabled={loading}
-            title="Refresh Users List"
-            style={{ fontWeight: 600 }}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={loading ? 'spin-icon' : ''} style={{ marginRight: 6 }}>
-              <polyline points="23 4 23 10 17 10"></polyline>
-              <polyline points="1 20 1 14 7 14"></polyline>
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-            </svg>
-            {loading ? 'Refreshing...' : 'Refresh'}
-          </button>
-        </div>
-      </div>
-
-      {/* Filter Toolbar Card */}
-      <div className="card mb-4" style={{ borderRadius: 12, border: '1px solid var(--border-color, #ebecf1)', boxShadow: '0 4px 20px 0 rgba(160, 175, 208, 0.1)' }}>
-        <div className="card-body p-3">
-          <div className="row align-items-center g-3" style={{ rowGap: 12 }}>
-            {/* Search Box */}
-            <div className="col-lg-5 col-md-6 col-12">
-              <div className="users-search-box" style={{ position: 'relative' }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8fa0b2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-                  <circle cx="11" cy="11" r="8"></circle>
-                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-                <input 
-                  type="text" 
-                  className="form-control"
-                  placeholder="Search by name, mobile, user ID..." 
-                  value={search} 
-                  onChange={e => setSearch(e.target.value)}
-                  style={{ paddingLeft: 38, paddingRight: search ? 32 : 12, height: 42, borderRadius: 8, border: '1px solid var(--border-color, #d5dce4)', fontSize: '0.875rem' }}
-                />
-                {search && (
-                  <button 
-                    onClick={() => setSearch('')}
-                    style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 16 }}
-                    title="Clear search"
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Filter Account Status */}
-            <div className="col-lg-3 col-md-3 col-6">
-              <select 
-                className="form-control filter-select" 
-                value={statusFilter} 
-                onChange={e => setStatusFilter(e.target.value)}
-                style={{ height: 42, borderRadius: 8, border: '1px solid var(--border-color, #d5dce4)', fontSize: '0.85rem' }}
+      {/* Compact User Management Toolbar (3 Filters left-to-right + Download Excel & Refresh buttons + Count) */}
+      <div className="users-compact-toolbar mb-2">
+        <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 w-100">
+          {/* Left: 3 Compact Filters + Actions */}
+          <div className="d-flex flex-wrap align-items-center gap-2">
+            {/* Filter 1: Search Box */}
+            <div style={{ position: 'relative', width: 200, minWidth: 150 }}>
+              <svg 
+                width="13" 
+                height="13" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="#8fa0b2" 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
               >
-                <option value="all">Account: All Status (सभी)</option>
-                <option value="active">Active Only (सक्रिय)</option>
-                <option value="inactive">Inactive Only (निष्क्रिय)</option>
-              </select>
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input 
+                type="text" 
+                className="form-control filter-control"
+                placeholder="Search user, mobile, ID..." 
+                value={search} 
+                onChange={e => setSearch(e.target.value)}
+                style={{ paddingLeft: 27, paddingRight: search ? 24 : 8, height: 32, fontSize: '0.8rem' }}
+              />
+              {search && (
+                <button 
+                  onClick={() => setSearch('')}
+                  style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13, padding: 0 }}
+                  title="Clear search"
+                >
+                  ×
+                </button>
+              )}
             </div>
 
-            {/* Filter WhatsApp Status */}
-            <div className="col-lg-2 col-md-3 col-6">
-              <select 
-                className="form-control filter-select" 
-                value={waFilter} 
-                onChange={e => setWaFilter(e.target.value)}
-                style={{ height: 42, borderRadius: 8, border: '1px solid var(--border-color, #d5dce4)', fontSize: '0.85rem' }}
-              >
-                <option value="all">WhatsApp: All</option>
-                <option value="connected">Connected 🟢</option>
-                <option value="waiting">Waiting Scan 🟡</option>
-                <option value="disconnected">Not Connected ⚪</option>
-              </select>
-            </div>
+            {/* Filter 2: Account Status */}
+            <select 
+              className="form-control filter-control filter-select" 
+              value={statusFilter} 
+              onChange={e => setStatusFilter(e.target.value)}
+              style={{ height: 32, width: 'auto', minWidth: 130, cursor: 'pointer', fontSize: '0.8rem' }}
+            >
+              <option value="all">Account: All</option>
+              <option value="active">Active Only (सक्रिय)</option>
+              <option value="inactive">Inactive Only (निष्क्रिय)</option>
+            </select>
 
-            {/* Stats Counter & Reset */}
-            <div className="col-lg-2 col-md-12 col-12 d-flex align-items-center justify-content-lg-end justify-content-between">
-              <div className="text-muted" style={{ fontSize: '0.85rem', fontWeight: 600 }}>
-                Showing <span style={{ color: '#705ec8', fontWeight: 700 }}>{filteredUsers.length}</span> of {users.length} Users
-              </div>
-            </div>
+            {/* Filter 3: WhatsApp Status */}
+            <select 
+              className="form-control filter-control filter-select" 
+              value={waFilter} 
+              onChange={e => setWaFilter(e.target.value)}
+              style={{ height: 32, width: 'auto', minWidth: 140, cursor: 'pointer', fontSize: '0.8rem' }}
+            >
+              <option value="all">WhatsApp: All</option>
+              <option value="connected">Connected 🟢</option>
+              <option value="waiting">Waiting Scan 🟡</option>
+              <option value="disconnected">Not Connected ⚪</option>
+            </select>
+
+            {/* Download Excel Button */}
+            <button 
+              className="btn btn-outline-primary"
+              onClick={downloadExcel}
+              title="Download Users List to Excel (.xlsx)"
+              style={{ height: 32, padding: '0 10px', fontSize: '0.78rem' }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              <span>Download Excel</span>
+            </button>
+
+            {/* Refresh Button */}
+            <button 
+              className="btn btn-primary"
+              onClick={fetchUsers}
+              disabled={loading}
+              title="Refresh Users List"
+              style={{ height: 32, padding: '0 10px', fontSize: '0.78rem' }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={loading ? 'spin-icon' : ''}>
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+              <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
+            </button>
+          </div>
+
+          {/* Right: Showing Counter */}
+          <div className="text-muted" style={{ fontSize: '0.78rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            Showing <strong style={{ color: '#705ec8' }}>{filteredUsers.length}</strong> of {users.length} Users
           </div>
         </div>
       </div>
 
       {/* Temporary Password Notice Alert */}
       {sentNotice && (
-        <div className="alert alert-success d-flex align-items-center justify-content-between mb-4 p-3" style={{ borderRadius: 10, border: '1px solid #7ae0bd', background: '#e9f8f2', color: '#055b44' }}>
+        <div className="alert alert-success d-flex align-items-center justify-content-between mb-2 p-2 px-3" style={{ borderRadius: 8, border: '1px solid #7ae0bd', background: '#e9f8f2', color: '#055b44', fontSize: '0.82rem' }}>
           <div>
             ✓ <strong>Password Sent to WhatsApp!</strong> User <strong>{sentNotice.mobile}</strong> ({sentNotice.userId}) को नया पासवर्ड भेज दिया गया है। 
             Temporary Password: <code style={{ background: '#fff', padding: '2px 8px', borderRadius: 4, border: '1px solid #7ae0bd', fontWeight: 'bold', color: '#0d835f', marginLeft: 6 }}>{sentNotice.newPassword}</code>
@@ -296,179 +289,176 @@ export default function UsersPage({ notify: propNotify }) {
         </div>
       )}
 
-      {/* Zendash users-list-1.html Table Layout */}
-      <div className="row">
-        <div className="col-12">
-          <div className="row flex-lg-nowrap">
-            <div className="col-12 mb-3">
-              <div className="e-panel card" style={{ borderRadius: 12, border: '1px solid var(--border-color, #ebecf1)', boxShadow: '0 4px 20px 0 rgba(160, 175, 208, 0.12)' }}>
-                <div className="card-body">
-                  <div className="e-table">
-                    <div className="table-responsive table-lg mt-3">
-                      <table className="table table-bordered border-top text-nowrap mb-0" id="example1">
-                        <thead>
-                          <tr style={{ background: 'var(--header-bg, #f8fafc)', color: 'var(--text-muted, #505d69)' }}>
-                            <th className="align-top border-bottom-0 wd-5 text-center" style={{ width: '45px' }}>#</th>
-                            <th className="border-bottom-0 w-20">User</th>
-                            <th className="border-bottom-0 w-20">Mobile / WhatsApp</th>
-                            <th className="border-bottom-0 w-15">Date of joining</th>
-                            <th className="border-bottom-0 w-20">Performance</th>
-                            <th className="border-bottom-0 w-10">Account Status</th>
-                            <th className="border-bottom-0 w-15 text-center">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {loading ? (
-                            <tr>
-                              <td colSpan={7} style={{ textAlign: 'center', padding: '48px 20px', color: '#6b7280' }}>
-                                <div className="spinner-border spinner-border-sm text-primary" role="status" style={{ marginRight: 8, display: 'inline-block' }}></div>
-                                उपयोगकर्ता लोड हो रहे हैं (Loading registered users)...
-                              </td>
-                            </tr>
-                          ) : filteredUsers.length === 0 ? (
-                            <tr>
-                              <td colSpan={7} style={{ textAlign: 'center', padding: '48px 20px', color: '#6b7280' }}>
-                                <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
-                                <strong style={{ display: 'block', fontSize: 15, color: 'var(--text-main, #282f53)' }}>कोई उपयोगकर्ता नहीं मिला</strong>
-                                <span style={{ fontSize: 13, color: 'var(--text-muted, #8fa0b2)' }}>No users found matching your search or filters.</span>
-                              </td>
-                            </tr>
-                          ) : (
-                            filteredUsers.map((u, index) => {
-                              const avatarLetter = (u.name || u.username || 'U')[0].toUpperCase()
-                              const avatarBg = avatarPalettes[index % avatarPalettes.length]
-                              const perfPercent = u.status === 'active' ? (u.whatsappStatus === 'connected' ? 85 : 50) : 15
+      {/* Compact Users Table Card */}
+      <div className="users-table-card">
+        <div className="table-responsive">
+          <table className="users-table-compact table-hover">
+            <thead>
+              <tr>
+                <th style={{ width: 36, textAlign: 'center' }}>#</th>
+                <th style={{ minWidth: 160 }}>User</th>
+                <th style={{ minWidth: 160 }}>Mobile / WhatsApp</th>
+                <th style={{ minWidth: 105 }}>Joined</th>
+                <th style={{ minWidth: 130 }}>Plan / Performance</th>
+                <th style={{ minWidth: 80 }}>Status</th>
+                <th style={{ minWidth: 140, textAlign: 'center' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '24px 16px', color: '#6b7280' }}>
+                    <div className="spinner-border spinner-border-sm text-primary" role="status" style={{ marginRight: 8, display: 'inline-block' }}></div>
+                    उपयोगकर्ता लोड हो रहे हैं (Loading users)...
+                  </td>
+                </tr>
+              ) : filteredUsers.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '24px 16px', color: '#6b7280' }}>
+                    <div style={{ fontSize: 22, marginBottom: 4 }}>🔍</div>
+                    <strong style={{ display: 'block', fontSize: 13, color: 'var(--text-main, #282f53)' }}>कोई उपयोगकर्ता नहीं मिला</strong>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted, #8fa0b2)' }}>No users found matching your search or filters.</span>
+                  </td>
+                </tr>
+              ) : (
+                filteredUsers.map((u, index) => {
+                  const avatarLetter = (u.name || u.username || 'U')[0].toUpperCase()
+                  const avatarBg = avatarPalettes[index % avatarPalettes.length]
+                  const perfPercent = u.status === 'active' ? (u.whatsappStatus === 'connected' ? 85 : 50) : 15
 
-                              return (
-                                <tr key={u.userId || u._id}>
-                                  <td className="align-middle text-center text-muted font-weight-bold" style={{ fontSize: 13 }}>
-                                    {index + 1}
-                                  </td>
-                                  <td className="align-middle">
-                                    <div className="d-flex align-items-center">
-                                      <span 
-                                        className="avatar brround avatar-md d-inline-flex align-items-center justify-content-center text-white font-weight-bold flex-shrink-0"
-                                        style={{ background: avatarBg, boxShadow: '0 2px 6px rgba(0,0,0,0.12)' }}
-                                      >
-                                        {avatarLetter}
-                                      </span>
-                                      <div className="ml-3 mt-1" style={{ marginLeft: 12 }}>
-                                        <h6 className="mb-0 font-weight-bold" style={{ color: 'var(--text-main, #282f53)', fontSize: 14 }}>
-                                          {u.name || u.username || 'No Name'}
-                                        </h6>
-                                        <div className="d-flex align-items-center gap-1 mt-1">
-                                          <small className="text-muted" style={{ fontFamily: 'monospace', fontSize: 11 }}>
-                                            {u.userId}
-                                          </small>
-                                          <span className={`badge ${u.role === 'admin' ? 'badge-primary-light' : 'badge-secondary-light'}`} style={{ fontSize: 10, padding: '2px 6px', marginLeft: 4 }}>
-                                            {u.role || 'user'}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </td>
-                                  <td className="align-middle">
-                                    <div className="font-weight-bold" style={{ color: 'var(--text-main, #282f53)', fontSize: 13 }}>
-                                      +91 {u.mobile || u.username}
-                                    </div>
-                                    <div className="mt-1">
-                                      {u.whatsappStatus === 'connected' ? (
-                                        <span className="badge badge-success-light d-inline-flex align-items-center" style={{ fontSize: 11, padding: '3px 8px' }}>
-                                          <span className="dot-label bg-success" style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block', marginRight: 6 }}></span>
-                                          Connected {u.whatsappPhone ? `(+${u.whatsappPhone})` : ''}
-                                        </span>
-                                      ) : u.whatsappStatus === 'connecting' || u.whatsappStatus === 'waiting' ? (
-                                        <span className="badge badge-warning-light d-inline-flex align-items-center" style={{ fontSize: 11, padding: '3px 8px' }}>
-                                          <span className="dot-label bg-warning" style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', display: 'inline-block', marginRight: 6 }}></span>
-                                          Waiting Scan
-                                        </span>
-                                      ) : (
-                                        <span className="badge badge-danger-light d-inline-flex align-items-center" style={{ fontSize: 11, padding: '3px 8px' }}>
-                                          <span className="dot-label bg-danger" style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', display: 'inline-block', marginRight: 6 }}></span>
-                                          Not Connected
-                                        </span>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td className="text-nowrap align-middle">
-                                    <span style={{ fontSize: 13, color: 'var(--text-muted, #505d69)' }}>
-                                      {u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
-                                    </span>
-                                  </td>
-                                  <td className="text-nowrap align-middle">
-                                    <div className="d-flex align-items-center justify-content-between mb-1">
-                                      <span className="badge badge-primary-light font-weight-bold" style={{ fontSize: 11 }}>
-                                        {u.plan || 'Standard'}
-                                      </span>
-                                      <h6 className="mb-0 font-weight-bold" style={{ fontSize: 12, color: 'var(--text-muted, #505d69)' }}>{perfPercent}%</h6>
-                                    </div>
-                                    <div className="progress progress-sm mb-0 mt-1" style={{ height: 6, borderRadius: 10, background: '#f0f2f7' }}>
-                                      <div 
-                                        className={`progress-bar ${perfPercent >= 70 ? 'bg-primary' : perfPercent >= 40 ? 'bg-warning' : 'bg-danger'}`} 
-                                        style={{ 
-                                          width: `${perfPercent}%`,
-                                          borderRadius: 10,
-                                          background: perfPercent >= 70 ? '#705ec8' : perfPercent >= 40 ? '#f59e0b' : '#ef4444'
-                                        }}
-                                      ></div>
-                                    </div>
-                                  </td>
-                                  <td className="align-middle">
-                                    {u.status === 'active' ? (
-                                      <span className="badge badge-success-light" style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6 }}>
-                                        Active
-                                      </span>
-                                    ) : (
-                                      <span className="badge badge-danger-light" style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6 }}>
-                                        Inactive
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="align-middle text-center">
-                                    <div className="btn-group align-top" role="group">
-                                      <button 
-                                        className="btn btn-sm btn-white btn-svg" 
-                                        type="button" 
-                                        onClick={() => openEdit(u)}
-                                        title="Edit profile"
-                                        style={{ border: '1px solid var(--border-color, #e1e7ee)', color: 'var(--text-main, #282f53)', fontSize: 12, fontWeight: 600, padding: '4px 10px' }}
-                                      >
-                                        Edit
-                                      </button>
-                                      <button 
-                                        className={`btn btn-sm ${u.status === 'active' ? 'btn-outline-danger' : 'btn-outline-success'}`}
-                                        type="button" 
-                                        onClick={() => toggleStatus(u)}
-                                        disabled={actionLoading === u.userId}
-                                        title={u.status === 'active' ? 'Deactivate user account' : 'Activate user account'}
-                                        style={{ fontSize: 12, fontWeight: 600, padding: '4px 10px', marginLeft: 4 }}
-                                      >
-                                        {actionLoading === u.userId ? '...' : u.status === 'active' ? 'Deactivate' : 'Activate'}
-                                      </button>
-                                      <button 
-                                        className="btn btn-sm btn-outline-primary"
-                                        type="button" 
-                                        onClick={() => sendPassword(u)}
-                                        disabled={actionLoading === 'pwd-' + u.userId}
-                                        title="Send new random password to user WhatsApp"
-                                        style={{ fontSize: 12, fontWeight: 600, padding: '4px 10px', marginLeft: 4 }}
-                                      >
-                                        {actionLoading === 'pwd-' + u.userId ? '...' : '🔑 Pwd'}
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              )
-                            })
+                  return (
+                    <tr key={u.userId || u._id}>
+                      {/* # */}
+                      <td style={{ textAlign: 'center', color: '#8fa0b2', fontWeight: 600, fontSize: 12 }}>
+                        {index + 1}
+                      </td>
+
+                      {/* User */}
+                      <td>
+                        <div className="d-flex align-items-center" style={{ gap: 8 }}>
+                          <span 
+                            className="avatar-compact"
+                            style={{ background: avatarBg }}
+                          >
+                            {avatarLetter}
+                          </span>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, color: 'var(--text-main, #282f53)', fontSize: '0.82rem', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {u.name || u.username || 'No Name'}
+                            </div>
+                            <div className="d-flex align-items-center gap-1" style={{ marginTop: 2 }}>
+                              <span className="text-muted" style={{ fontFamily: 'monospace', fontSize: 10 }}>
+                                {u.userId}
+                              </span>
+                              <span className={`badge ${u.role === 'admin' ? 'badge-primary-light' : 'badge-secondary-light'}`} style={{ fontSize: 9, padding: '1px 5px', lineHeight: 1 }}>
+                                {u.role || 'user'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Mobile / WhatsApp */}
+                      <td>
+                        <div style={{ fontWeight: 600, color: 'var(--text-main, #282f53)', fontSize: '0.8rem', lineHeight: 1.2 }}>
+                          +91 {u.mobile || u.username}
+                        </div>
+                        <div style={{ marginTop: 2 }}>
+                          {u.whatsappStatus === 'connected' ? (
+                            <span className="badge badge-success-light d-inline-flex align-items-center" style={{ fontSize: 10, padding: '1px 6px', lineHeight: 1.2 }}>
+                              <span className="dot-label bg-success" style={{ width: 5, height: 5, marginRight: 4 }}></span>
+                              Connected {u.whatsappPhone ? `(+${u.whatsappPhone})` : ''}
+                            </span>
+                          ) : u.whatsappStatus === 'connecting' || u.whatsappStatus === 'waiting' ? (
+                            <span className="badge badge-warning-light d-inline-flex align-items-center" style={{ fontSize: 10, padding: '1px 6px', lineHeight: 1.2 }}>
+                              <span className="dot-label bg-warning" style={{ width: 5, height: 5, marginRight: 4 }}></span>
+                              Waiting Scan
+                            </span>
+                          ) : (
+                            <span className="badge badge-danger-light d-inline-flex align-items-center" style={{ fontSize: 10, padding: '1px 6px', lineHeight: 1.2 }}>
+                              <span className="dot-label bg-danger" style={{ width: 5, height: 5, marginRight: 4 }}></span>
+                              Not Connected
+                            </span>
                           )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+                        </div>
+                      </td>
+
+                      {/* Joined Date */}
+                      <td style={{ fontSize: '0.78rem', color: 'var(--text-muted, #505d69)', whiteSpace: 'nowrap' }}>
+                        {u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                      </td>
+
+                      {/* Plan / Performance */}
+                      <td>
+                        <div className="d-flex align-items-center justify-content-between" style={{ marginBottom: 2 }}>
+                          <span className="badge badge-primary-light font-weight-bold" style={{ fontSize: 10, padding: '1px 5px', lineHeight: 1 }}>
+                            {u.plan || 'Standard'}
+                          </span>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted, #505d69)' }}>{perfPercent}%</span>
+                        </div>
+                        <div className="progress progress-sm" style={{ height: 4, borderRadius: 6, background: '#f0f2f7', minWidth: 70 }}>
+                          <div 
+                            className={`progress-bar ${perfPercent >= 70 ? 'bg-primary' : perfPercent >= 40 ? 'bg-warning' : 'bg-danger'}`} 
+                            style={{ 
+                              width: `${perfPercent}%`,
+                              borderRadius: 6,
+                              background: perfPercent >= 70 ? '#705ec8' : perfPercent >= 40 ? '#f59e0b' : '#ef4444'
+                            }}
+                          ></div>
+                        </div>
+                      </td>
+
+                      {/* Account Status */}
+                      <td>
+                        {u.status === 'active' ? (
+                          <span className="badge badge-success-light" style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, lineHeight: 1.2 }}>
+                            Active
+                          </span>
+                        ) : (
+                          <span className="badge badge-danger-light" style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, lineHeight: 1.2 }}>
+                            Inactive
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Actions */}
+                      <td style={{ textAlign: 'center' }}>
+                        <div className="d-inline-flex align-items-center justify-content-center gap-1">
+                          <button 
+                            className="btn btn-white btn-table-action" 
+                            type="button" 
+                            onClick={() => openEdit(u)}
+                            title="Edit profile"
+                            style={{ border: '1px solid var(--border-color, #e1e7ee)', color: 'var(--text-main, #282f53)' }}
+                          >
+                            Edit
+                          </button>
+                          <button 
+                            className={`btn btn-table-action ${u.status === 'active' ? 'btn-outline-danger' : 'btn-outline-success'}`}
+                            type="button" 
+                            onClick={() => toggleStatus(u)}
+                            disabled={actionLoading === u.userId}
+                            title={u.status === 'active' ? 'Deactivate user account' : 'Activate user account'}
+                          >
+                            {actionLoading === u.userId ? '...' : u.status === 'active' ? 'Deactivate' : 'Activate'}
+                          </button>
+                          <button 
+                            className="btn btn-outline-primary btn-table-action"
+                            type="button" 
+                            onClick={() => sendPassword(u)}
+                            disabled={actionLoading === 'pwd-' + u.userId}
+                            title="Send new random password to user WhatsApp"
+                          >
+                            {actionLoading === 'pwd-' + u.userId ? '...' : '🔑 Pwd'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
