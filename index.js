@@ -1099,7 +1099,9 @@ app.post('/api/incoming/reply', authRequired, attachmentBodyParser, async (req, 
             to: chatJid.split('@')[0],
             message: text || (mediaType ? `[${mediaType.toUpperCase()}]` : ''),
             status: 'sent',
-            session: myNumber
+            session: myNumber,
+            type: mediaType || 'text',
+            source: 'direct'
         });
 
         broadcastIncomingEvent('new_message', outRecord, req.user.userId, myNumber);
@@ -1186,33 +1188,128 @@ app.delete('/api/incoming/chat', authRequired, (req, res) => {
 
 app.get('/api/reports/messages', authRequired, (req, res) => {
     try {
-        const { startDate, endDate, status, search } = req.query;
-        let reports = getMessageReports(req.user);
+        const { 
+            startDate, fromDate, 
+            endDate, toDate, 
+            status, search,
+            from, fromNumber,
+            to, toNumber,
+            type, source
+        } = req.query;
 
-        if (startDate) {
-            const start = new Date(startDate).getTime();
+        const allUserReports = getMessageReports(req.user).map(r => {
+            // Infer or normalize type
+            let msgType = r.type;
+            if (!msgType) {
+                const m = (r.message || '').toLowerCase();
+                if (m.startsWith('[image') || m.includes('.jpg') || m.includes('.png') || m.includes('.jpeg') || m.includes('.webp')) {
+                    msgType = 'image';
+                } else if (m.startsWith('[video') || m.includes('.mp4') || m.includes('.mov')) {
+                    msgType = 'video';
+                } else if (m.startsWith('[audio') || m.includes('.mp3') || m.includes('.ogg') || m.includes('.opus')) {
+                    msgType = 'audio';
+                } else if (m.startsWith('[document') || m.startsWith('[file') || m.includes('.pdf') || m.includes('.docx') || m.includes('.xlsx')) {
+                    msgType = 'document';
+                } else if (m.startsWith('[sticker')) {
+                    msgType = 'sticker';
+                } else {
+                    msgType = 'text';
+                }
+            }
+
+            // Infer or normalize source
+            let msgSource = r.source;
+            if (!msgSource) {
+                if (r.to && (r.to.includes('@g.us') || r.to.length > 18 || String(r.to).startsWith('grp_'))) {
+                    msgSource = 'group';
+                } else if (r.id && (String(r.id).startsWith('api_') || String(r.id).startsWith('3EB0'))) {
+                    msgSource = 'api';
+                } else {
+                    msgSource = 'web';
+                }
+            }
+
+            return {
+                ...r,
+                type: msgType,
+                source: msgSource
+            };
+        });
+
+        let reports = [...allUserReports];
+
+        // Date range filtering
+        const startFilter = fromDate || startDate;
+        if (startFilter) {
+            const start = new Date(startFilter).getTime();
             reports = reports.filter(r => new Date(r.date).getTime() >= start);
         }
-        if (endDate) {
-            const end = new Date(endDate);
+        const endFilter = toDate || endDate;
+        if (endFilter) {
+            const end = new Date(endFilter);
             end.setHours(23, 59, 59, 999);
             reports = reports.filter(r => new Date(r.date).getTime() <= end.getTime());
         }
+
+        // Status filtering
         if (status && status !== 'all') {
-            reports = reports.filter(r => r.status === status);
+            reports = reports.filter(r => String(r.status || '').toLowerCase() === String(status).toLowerCase());
         }
+
+        // From Number filtering
+        const fNum = fromNumber || from;
+        if (fNum && fNum !== 'all') {
+            const cleanFrom = String(fNum).replace(/\D/g, '');
+            reports = reports.filter(r => {
+                const rFrom = String(r.from || r.session || '').replace(/\D/g, '');
+                return cleanFrom ? rFrom.includes(cleanFrom) : String(r.from || '').toLowerCase().includes(String(fNum).toLowerCase());
+            });
+        }
+
+        // To Number filtering
+        const tNum = toNumber || to;
+        if (tNum) {
+            const cleanTo = String(tNum).replace(/\D/g, '');
+            reports = reports.filter(r => {
+                const rTo = String(r.to || r.recipient || '').replace(/\D/g, '');
+                return cleanTo ? rTo.includes(cleanTo) : String(r.to || '').toLowerCase().includes(String(tNum).toLowerCase());
+            });
+        }
+
+        // Type filtering
+        if (type && type !== 'all') {
+            reports = reports.filter(r => String(r.type || '').toLowerCase() === String(type).toLowerCase());
+        }
+
+        // Source filtering
+        if (source && source !== 'all') {
+            reports = reports.filter(r => String(r.source || '').toLowerCase() === String(source).toLowerCase());
+        }
+
+        // Search text filtering
         if (search) {
             const q = search.toLowerCase();
             reports = reports.filter(r => 
                 (r.to && r.to.toLowerCase().includes(q)) ||
                 (r.from && r.from.toLowerCase().includes(q)) ||
-                (r.message && r.message.toLowerCase().includes(q))
+                (r.message && r.message.toLowerCase().includes(q)) ||
+                (r.type && r.type.toLowerCase().includes(q)) ||
+                (r.source && r.source.toLowerCase().includes(q))
             );
         }
+
+        const stats = {
+            total: allUserReports.length,
+            sent: allUserReports.filter(r => r.status === 'sent').length,
+            failed: allUserReports.filter(r => r.status === 'failed').length,
+            pending: allUserReports.filter(r => r.status === 'pending').length,
+            filtered: reports.length
+        };
 
         res.json({
             success: true,
             total: reports.length,
+            stats,
             reports
         });
     } catch (error) {
@@ -1424,9 +1521,11 @@ app.post('/api/send-group-message', authRequired, attachmentBodyParser, async (r
                     ownerUserId: req.user.userId,
                     from: fromNumber || String(req.user.mobile || 'User'),
                     to: groupId,
-                    message: String(message || '[Attachment]'),
+                    message: String(message || (attachment?.name ? `[${attachment.name}]` : '[Attachment]')),
                     status: 'sent',
-                    session: fromNumber || 'default'
+                    session: fromNumber || 'default',
+                    type: attachment ? (attachment.mimetype?.split('/')[0] || 'media') : 'text',
+                    source: 'group'
                 });
             } catch (err) {
                 results.push({ 
@@ -1441,9 +1540,11 @@ app.post('/api/send-group-message', authRequired, attachmentBodyParser, async (r
                     ownerUserId: req.user.userId,
                     from: fromNumber || String(req.user.mobile || 'User'),
                     to: groupId,
-                    message: String(message || '[Attachment]'),
+                    message: String(message || (attachment?.name ? `[${attachment.name}]` : '[Attachment]')),
                     status: 'failed',
-                    session: fromNumber || 'default'
+                    session: fromNumber || 'default',
+                    type: attachment ? (attachment.mimetype?.split('/')[0] || 'media') : 'text',
+                    source: 'group'
                 });
             }
             // Anti-spam delay between groups
@@ -1751,6 +1852,8 @@ async function processQueue() {
             ? `[${job.attachment.name || 'Attachment'}] ${job.message || ''}`.trim()
             : job.message;
 
+        const msgType = job.attachment ? (job.attachment.mimetype?.split('/')[0] || 'media') : 'text';
+
         try {
             console.log(`Sending message to ${number}`);
             await sendWhatsAppMessage(job.socket, number, job.message, job.attachment, job.buttons);
@@ -1770,7 +1873,9 @@ async function processQueue() {
                 to: number,
                 message: reportContent,
                 status: 'sent',
-                session: job.fromNumber || 'default'
+                session: job.fromNumber || 'default',
+                type: msgType,
+                source: 'web'
             });
 
             console.log(`✅ Sent: ${number}`);
@@ -1790,7 +1895,9 @@ async function processQueue() {
                 to: number,
                 message: reportContent,
                 status: 'failed',
-                session: job.fromNumber || 'default'
+                session: job.fromNumber || 'default',
+                type: msgType,
+                source: 'web'
             });
 
             console.log(`❌ Failed: ${number}`, error.message);
@@ -2082,7 +2189,9 @@ async function handleSendText(req, res) {
                         message: messageText,
                         status: 'sent',
                         session: activeSession10 || providedSession || 'default',
-                        ownerUserId: ownerUserId
+                        ownerUserId: ownerUserId,
+                        type: 'text',
+                        source: isGroup ? 'group' : 'api'
                     });
                     const incomingRecord = {
                         id: messageId,
@@ -2129,7 +2238,9 @@ async function handleSendText(req, res) {
                         message: messageText,
                         status: 'sent',
                         session: activeSession10 || providedSession || 'default',
-                        ownerUserId: ownerUserId
+                        ownerUserId: ownerUserId,
+                        type: 'text',
+                        source: isGroup ? 'group' : 'api'
                     });
 
                     const incomingRecord = {
