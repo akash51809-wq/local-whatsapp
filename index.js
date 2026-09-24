@@ -138,12 +138,42 @@ const REPORTS_FILE = path.join(__dirname, 'message_reports.json');
 
 function getMessageReports(user = null) {
     try {
-        if (!fs.existsSync(REPORTS_FILE)) {
-            fs.writeFileSync(REPORTS_FILE, JSON.stringify([], null, 2), 'utf-8');
-            return [];
+        let list = [];
+        if (fs.existsSync(REPORTS_FILE)) {
+            const data = fs.readFileSync(REPORTS_FILE, 'utf-8');
+            list = JSON.parse(data || '[]');
         }
-        const data = fs.readFileSync(REPORTS_FILE, 'utf-8');
-        const list = JSON.parse(data || '[]');
+
+        // Also merge sent messages (fromMe: true) from incoming_messages.json
+        const INCOMING_FILE = path.join(__dirname, 'incoming_messages.json');
+        if (fs.existsSync(INCOMING_FILE)) {
+            try {
+                const incData = fs.readFileSync(INCOMING_FILE, 'utf-8');
+                const incList = JSON.parse(incData || '[]');
+                const existingIds = new Set(list.map(r => String(r.id)));
+
+                for (const m of incList) {
+                    if (m.fromMe && !existingIds.has(String(m.id))) {
+                        existingIds.add(String(m.id));
+                        list.push({
+                            id: m.id,
+                            date: m.date || new Date().toISOString(),
+                            from: m.from || connectedNumber || 'me',
+                            to: m.chatJid ? m.chatJid.split('@')[0] : (m.to || ''),
+                            message: m.message || (m.mediaType ? `[${m.mediaType.toUpperCase()}]` : ''),
+                            status: 'sent',
+                            type: m.mediaType || (m.message && m.message.startsWith('[IMAGE') ? 'image' : 'text'),
+                            source: m.isGroup ? 'group' : (m.id && String(m.id).startsWith('api_') ? 'api' : 'web'),
+                            ownerUserId: m.ownerUserId,
+                            session: m.from
+                        });
+                    }
+                }
+            } catch (err) {
+                console.error('Error merging incoming_messages into reports:', err);
+            }
+        }
+
         list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
         if (!user || user.role === 'admin') {
@@ -151,13 +181,24 @@ function getMessageReports(user = null) {
         }
 
         const userMobile10 = user.mobile ? String(user.mobile).replace(/\D/g, '').slice(-10) : '';
-        return list.filter(r => {
-            if (r.ownerUserId && r.ownerUserId === user.userId) return true;
-            if (userMobile10) {
-                const sClean = r.session ? String(r.session).replace(/\D/g, '').slice(-10) : '';
-                const fClean = r.from ? String(r.from).replace(/\D/g, '').slice(-10) : '';
-                if (sClean === userMobile10 || fClean === userMobile10) return true;
+        const userUsername = user.username ? String(user.username).toLowerCase() : '';
+        const userId = user.userId || user.id || user._id;
+
+        let userConnectedNum10 = '';
+        try {
+            const { getUserSession } = require('./userSessions');
+            const sess = getUserSession(userId);
+            if (sess && sess.connectedNumber) {
+                userConnectedNum10 = String(sess.connectedNumber).replace(/\D/g, '').slice(-10);
             }
+        } catch {}
+
+        return list.filter(r => {
+            if (r.ownerUserId && (r.ownerUserId === userId || r.ownerUserId === user.userId || r.ownerUserId === userUsername)) return true;
+            const sClean = r.session ? String(r.session).replace(/\D/g, '').slice(-10) : '';
+            const fClean = r.from ? String(r.from).replace(/\D/g, '').slice(-10) : '';
+            if (userMobile10 && (sClean === userMobile10 || fClean === userMobile10)) return true;
+            if (userConnectedNum10 && (sClean === userConnectedNum10 || fClean === userConnectedNum10)) return true;
             return false;
         });
     } catch (e) {
@@ -168,8 +209,15 @@ function getMessageReports(user = null) {
 
 function appendMessageReport(record) {
     try {
-        const reports = getMessageReports();
+        let reports = [];
+        if (fs.existsSync(REPORTS_FILE)) {
+            const data = fs.readFileSync(REPORTS_FILE, 'utf-8');
+            reports = JSON.parse(data || '[]');
+        }
         reports.unshift(record);
+        if (reports.length > 5000) {
+            reports = reports.slice(0, 5000);
+        }
         fs.writeFileSync(REPORTS_FILE, JSON.stringify(reports, null, 2), 'utf-8');
     } catch (e) {
         console.error('Error appending message report:', e);
@@ -2767,6 +2815,20 @@ async function handleIncomingMessageFromSocket(m, context = {}) {
             const appended = appendIncomingMessage(record);
             if (appended) {
                 broadcastIncomingEvent('new_message', record);
+                if (isFromMe) {
+                    appendMessageReport({
+                        id: record.id,
+                        date: record.date,
+                        from: fromNumber,
+                        to: resolvedRemote.number || (chatJid ? chatJid.split('@')[0] : ''),
+                        message: text || (mediaType ? `[${mediaType.toUpperCase()}]` : 'Media'),
+                        status: 'sent',
+                        type: mediaType || 'text',
+                        source: isGroup ? 'group' : 'web',
+                        ownerUserId: ownerUserId,
+                        session: fromNumber
+                    });
+                }
             }
 
             if (!isFromMe) {

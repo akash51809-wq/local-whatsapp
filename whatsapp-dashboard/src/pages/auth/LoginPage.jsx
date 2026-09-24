@@ -1,10 +1,10 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import api from '../../services/api'
 
 export function LoginPage() {
-  const { handleLogin } = useAuth()
+  const { handleLogin, companySettings, loadCompanySettings } = useAuth()
   const navigate = useNavigate()
 
   const [u, setU] = useState('')
@@ -12,6 +12,18 @@ export function LoginPage() {
   const [err, setErr] = useState('')
   const [loading, setLoading] = useState(false)
   const [rememberMe, setRememberMe] = useState(true)
+  const [inactivityNotice, setInactivityNotice] = useState(false)
+
+  useEffect(() => {
+    if (loadCompanySettings) {
+      loadCompanySettings()
+    }
+    const reason = sessionStorage.getItem('wa_logout_reason')
+    if (reason === 'inactivity') {
+      setInactivityNotice(true)
+      sessionStorage.removeItem('wa_logout_reason')
+    }
+  }, [loadCompanySettings])
 
   const submit = async (e) => { 
     e.preventDefault()
@@ -43,10 +55,24 @@ export function LoginPage() {
               <div className="col mx-auto">
                 <div className="row justify-content-center">
                   <div className="col-md-7 col-lg-4">
-                    <div className="error-logo">
-                      <a href="/">
-                        <img src="/assets/images/brand/logo2.png" className="header-brand-img dark-logo" alt="logo" />
+                    <div className="error-logo text-center">
+                      <a href="/" style={{ display: 'inline-block' }}>
+                        {companySettings?.logoUrl ? (
+                          <img 
+                            src={companySettings.logoUrl} 
+                            className="header-brand-img dark-logo" 
+                            alt={companySettings?.companyName || "logo"} 
+                            style={{ maxHeight: '60px', maxWidth: '240px', objectFit: 'contain' }}
+                          />
+                        ) : (
+                          <img src="/assets/images/brand/logo2.png" className="header-brand-img dark-logo" alt="logo" />
+                        )}
                       </a>
+                      {companySettings?.companyName && (
+                        <div style={{ marginTop: '8px', fontSize: '13.5px', fontWeight: 600, color: '#6c757d', letterSpacing: '0.4px' }}>
+                          {companySettings.companyName}
+                        </div>
+                      )}
                     </div>
                     <div className="card mb-0">
                       <div className="card-body">
@@ -54,6 +80,20 @@ export function LoginPage() {
                           <h2 className="mb-2">Login</h2>
                         </div>
                         <form onSubmit={submit}>
+                          {inactivityNotice && (
+                            <div className="alert alert-warning mb-4 text-left" role="alert" style={{ fontSize: '12.5px', lineHeight: '1.45', borderRadius: '8px', borderLeft: '4px solid #ff9800' }}>
+                              <div className="d-flex align-items-center mb-1">
+                                <span style={{ fontSize: '15px', marginRight: '6px' }}>⏱️</span>
+                                <strong style={{ color: '#2b2b2b' }}>सत्र समाप्त (Session Timed Out)</strong>
+                              </div>
+                              <div style={{ color: '#495057' }}>
+                                30 मिनट तक निष्क्रिय रहने के कारण वेब सुरक्षा हेतु आपका सत्र समाप्त हो गया है। कृपया पुनः लॉगिन करें।
+                              </div>
+                              <div className="mt-1 font-weight-semibold text-success" style={{ fontSize: '11px' }}>
+                                ✓ WhatsApp बैकएंड और API संदेश सुचारू रूप से सक्रिय हैं।
+                              </div>
+                            </div>
+                          )}
                           {err && (
                             <div className="alert alert-danger mb-4" role="alert">
                               {err}

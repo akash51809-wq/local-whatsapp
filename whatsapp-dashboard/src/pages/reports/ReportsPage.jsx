@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import Stat from '../../components/common/Stat'
 import { useAuth } from '../../context/AuthContext'
@@ -11,7 +11,14 @@ export function ReportsPage() {
     notify
   } = useAuth()
 
-  const stats = reportStats
+  // Mount initial fetch & live auto-sync polling every 5 seconds
+  useEffect(() => {
+    if (refresh) refresh()
+    const interval = setInterval(() => {
+      if (refresh) refresh()
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [refresh])
 
   // Filters state
   const [fromDate, setFromDate] = useState('')
@@ -283,7 +290,13 @@ export function ReportsPage() {
       {/* Zendesk Page Header */}
       <div className="page-header d-flex flex-wrap align-items-center justify-content-between mb-4">
         <div className="page-leftheader">
-          <h4 className="page-title mb-1 font-weight-bold" style={{ fontSize: '1.35rem', color: '#282f53' }}>Message Reports</h4>
+          <div className="d-flex align-items-center gap-2 mb-1">
+            <h4 className="page-title mb-0 font-weight-bold" style={{ fontSize: '1.35rem', color: '#282f53' }}>Message Reports</h4>
+            <span className="badge badge-success-light text-success d-inline-flex align-items-center ml-2" style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '12px', fontWeight: 600, background: 'rgba(45, 206, 137, 0.12)', border: '1px solid rgba(45, 206, 137, 0.25)' }}>
+              <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#2dce89', display: 'inline-block', marginRight: '5px' }}></span>
+              Live Sync
+            </span>
+          </div>
           <ol className="breadcrumb mb-0" style={{ background: 'transparent', padding: 0, fontSize: '0.82rem' }}>
             <li className="breadcrumb-item"><a href="#apps" onClick={e => e.preventDefault()} style={{ color: '#705ec8' }}>Home</a></li>
             <li className="breadcrumb-item"><a href="#reports" onClick={e => e.preventDefault()} style={{ color: '#705ec8' }}>Reports</a></li>
@@ -323,9 +336,9 @@ export function ReportsPage() {
 
       {/* Summary KPI Stats */}
       <div className="stat-grid mb-4">
-        <Stat value={stats.total ?? reports.length} label="Total Messages" icon="▤" />
-        <Stat value={stats.sent ?? reports.filter(r => r.status === 'sent').length} label="Successful (Sent)" icon="✓" />
-        <Stat value={stats.failed ?? reports.filter(r => r.status === 'failed').length} label="Failed Delivery" icon="!" />
+        <Stat value={reportStats.total ?? reports.length} label="Total Messages" icon="▤" />
+        <Stat value={reportStats.sent ?? reports.filter(r => (r.status || 'sent').toLowerCase() === 'sent').length} label="Successful (Sent)" icon="✓" />
+        <Stat value={reportStats.failed ?? reports.filter(r => (r.status || '').toLowerCase() === 'failed').length} label="Failed Delivery" icon="!" />
         <Stat value={filteredReports.length} label="Filtered Results" icon="🔍" />
       </div>
 

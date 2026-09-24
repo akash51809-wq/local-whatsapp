@@ -3,9 +3,31 @@ import { api, clearToken, getSavedUser, setSavedUser, setToken } from '../servic
 
 const AuthContext = createContext(null)
 
+const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutes of web inactivity
+
 export function AuthProvider({ children }) {
-  const [login, setLogin] = useState(() => localStorage.getItem('wa_login') || '')
-  const [currentUser, setCurrentUser] = useState(getSavedUser)
+  const [login, setLogin] = useState(() => {
+    const savedToken = localStorage.getItem('wa_login') || ''
+    if (savedToken) {
+      const lastAct = Number(localStorage.getItem('wa_last_activity') || 0)
+      if (lastAct && (Date.now() - lastAct >= INACTIVITY_TIMEOUT_MS)) {
+        clearToken()
+        sessionStorage.setItem('wa_logout_reason', 'inactivity')
+        return ''
+      }
+    }
+    return savedToken
+  })
+
+  const [currentUser, setCurrentUser] = useState(() => {
+    const savedToken = localStorage.getItem('wa_login') || ''
+    if (!savedToken) return {}
+    const lastAct = Number(localStorage.getItem('wa_last_activity') || 0)
+    if (lastAct && (Date.now() - lastAct >= INACTIVITY_TIMEOUT_MS)) {
+      return {}
+    }
+    return getSavedUser()
+  })
   const [theme, setTheme] = useState(() => localStorage.getItem('wa_theme') || 'dark')
   const [status, setStatus] = useState({ status: 'waiting', number: null, profileName: 'WhatsApp Account' })
   const [qr, setQr] = useState(null)
@@ -225,10 +247,53 @@ export function AuthProvider({ children }) {
       } catch {}
       loadChats()
       if (selected) loadMessages(selected.chatJid)
+      loadReports()
     }
     es.onerror = () => {}
     return () => es.close()
-  }, [login, selected, loadChats, loadMessages, loadStatus, loadQr])
+  }, [login, selected, loadChats, loadMessages, loadStatus, loadQr, loadReports])
+
+  // Inactivity Watcher (30 minutes non-use condition)
+  // Only logs out the web browser panel. WhatsApp Baileys session & API message workers remain active 24/7 on the server.
+  useEffect(() => {
+    if (!login) return
+
+    if (!localStorage.getItem('wa_last_activity')) {
+      localStorage.setItem('wa_last_activity', Date.now().toString())
+    }
+
+    let lastThrottle = 0
+    const recordActivity = () => {
+      const now = Date.now()
+      if (now - lastThrottle > 5000) {
+        lastThrottle = now
+        localStorage.setItem('wa_last_activity', now.toString())
+      }
+    }
+
+    const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click']
+    events.forEach(evt => window.addEventListener(evt, recordActivity, { passive: true }))
+
+    const checkInactivity = () => {
+      const storedLast = Number(localStorage.getItem('wa_last_activity') || 0)
+      if (storedLast && (Date.now() - storedLast >= INACTIVITY_TIMEOUT_MS)) {
+        // Auto logout web panel
+        sessionStorage.setItem('wa_logout_reason', 'inactivity')
+        clearToken()
+        localStorage.removeItem('wa_last_activity')
+        setLogin('')
+        setCurrentUser({})
+        notify('30 मिनट की निष्क्रियता (non-use) के कारण आप वेब से लॉगआउट हो गए हैं।')
+      }
+    }
+
+    const intervalId = setInterval(checkInactivity, 10000)
+
+    return () => {
+      events.forEach(evt => window.removeEventListener(evt, recordActivity))
+      clearInterval(intervalId)
+    }
+  }, [login, notify])
 
   // Computed stats
   const stats = useMemo(() => ({
@@ -241,6 +306,8 @@ export function AuthProvider({ children }) {
   const handleLogin = (token, user) => {
     setToken(token)
     setSavedUser(user)
+    localStorage.setItem('wa_last_activity', Date.now().toString())
+    sessionStorage.removeItem('wa_logout_reason')
     setLogin(token)
     setCurrentUser(user)
     notify('लॉगिन सफल!')
@@ -249,6 +316,8 @@ export function AuthProvider({ children }) {
   // Logout handler
   const logout = () => {
     clearToken()
+    localStorage.removeItem('wa_last_activity')
+    sessionStorage.removeItem('wa_logout_reason')
     setLogin('')
     setCurrentUser({})
     notify('लॉगआउट सफल')
