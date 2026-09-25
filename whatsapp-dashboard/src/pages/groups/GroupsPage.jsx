@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { api } from '../../services/api'
 import { useAuth } from '../../context/AuthContext'
 import GroupMembersModal from '../../components/modals/GroupMembersModal'
+import GroupMembersDropdown from '../../components/groups/GroupMembersDropdown'
 
 const QUICK_EMOJIS = [
   '🙏', '✅', '❤️', '😊', '👍', '🔥', '🎉', '💐', '💼', '📌',
@@ -22,6 +23,8 @@ export default function GroupsPage({ notify: propNotify, status: propStatus }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
   const [activeModalGroup, setActiveModalGroup] = useState(null)
+  const [showMembersDropdown, setShowMembersDropdown] = useState(false)
+  const [dropdownFocusedGroupId, setDropdownFocusedGroupId] = useState(null)
 
   // Message Sending states
   const [msgText, setMsgText] = useState('')
@@ -125,9 +128,70 @@ export default function GroupsPage({ notify: propNotify, status: propStatus }) {
 
   const clearSelection = () => {
     setSelectedGroupIds(new Set())
+    setDropdownFocusedGroupId(null)
   }
 
   const isAllFilteredSelected = filteredGroups.length > 0 && filteredGroups.every(g => selectedGroupIds.has(g.id))
+
+  // Active groups for the members dropdown
+  const activeDropdownGroups = useMemo(() => {
+    // 1. If multiple groups are selected via checkboxes, always prioritize showing all selected groups together!
+    if (selectedGroupIds.size > 1) {
+      return groups.filter(g => selectedGroupIds.has(g.id))
+    }
+    // 2. If a specific group was focused by clicking its row button
+    if (dropdownFocusedGroupId) {
+      const match = groups.find(g => g.id === dropdownFocusedGroupId)
+      if (match) return [match]
+    }
+    // 3. If exactly 1 group is selected in checkboxes
+    if (selectedGroupIds.size === 1) {
+      return groups.filter(g => selectedGroupIds.has(g.id))
+    }
+    // 4. Fallback: all filtered groups
+    return filteredGroups
+  }, [groups, selectedGroupIds, dropdownFocusedGroupId, filteredGroups])
+
+  // Handle row "Group Member ▼" click
+  const handleRowGroupMemberClick = (g) => {
+    // If multiple groups are already selected in checkboxes:
+    if (selectedGroupIds.size > 1) {
+      if (showMembersDropdown && !dropdownFocusedGroupId) {
+        setShowMembersDropdown(false)
+      } else {
+        setDropdownFocusedGroupId(null)
+        setShowMembersDropdown(true)
+        notify(`${selectedGroupIds.size} चुने गए ग्रुप्स के मेंबर्स की लिस्ट दिखाई जा रही है`)
+      }
+      return
+    }
+
+    // Single group click
+    if (showMembersDropdown && dropdownFocusedGroupId === g.id) {
+      setShowMembersDropdown(false)
+      setDropdownFocusedGroupId(null)
+    } else {
+      setSelectedGroupIds(new Set([g.id]))
+      setDropdownFocusedGroupId(g.id)
+      setShowMembersDropdown(true)
+      notify(`${g.subject || 'ग्रुप'} के मेंबर्स की लिस्ट ओपन हो गई`)
+    }
+  }
+
+  // Handle toolbar "Group Members ▼" button click
+  const toggleMembersDropdown = () => {
+    if (showMembersDropdown) {
+      setShowMembersDropdown(false)
+      setDropdownFocusedGroupId(null)
+    } else {
+      if (selectedGroupIds.size === 0 && filteredGroups.length > 0) {
+        const allIds = new Set(filteredGroups.map(g => g.id))
+        setSelectedGroupIds(allIds)
+      }
+      setDropdownFocusedGroupId(null)
+      setShowMembersDropdown(true)
+    }
+  }
 
   // Attachment handler
   const handleAttachment = (e) => {
@@ -308,7 +372,7 @@ export default function GroupsPage({ notify: propNotify, status: propStatus }) {
               </select>
             </div>
 
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <button 
                 type="button" 
                 className="btn-action-icon" 
@@ -317,8 +381,37 @@ export default function GroupsPage({ notify: propNotify, status: propStatus }) {
               >
                 {isAllFilteredSelected ? '❌ Deselect All' : '☑️ Select All Filtered'}
               </button>
+              <button 
+                type="button" 
+                className="btn-action-icon" 
+                style={{ 
+                  fontSize: 12, 
+                  padding: '6px 14px', 
+                  fontWeight: 600,
+                  background: showMembersDropdown ? 'var(--zd-primary, #6366f1)' : 'var(--zd-border-subtle, #eef2f6)',
+                  color: showMembersDropdown ? '#ffffff' : 'inherit',
+                  border: '1px solid var(--zd-border, #cbd5e1)'
+                }}
+                onClick={toggleMembersDropdown}
+                title="ग्रुप मेंबर्स की लिस्ट ड्रॉपडाउन में देखें"
+              >
+                👥 Group Members {selectedGroupIds.size > 0 ? `(${selectedGroupIds.size} Selected)` : ''} {showMembersDropdown ? '▲' : '▼'}
+              </button>
             </div>
           </div>
+
+          {/* Group Members Dropdown Panel */}
+          {showMembersDropdown && activeDropdownGroups.length > 0 && (
+            <GroupMembersDropdown 
+              groups={activeDropdownGroups} 
+              onClose={() => {
+                setShowMembersDropdown(false)
+                setDropdownFocusedGroupId(null)
+              }}
+              notify={notify}
+              onRemoveGroup={(gid) => toggleSelectGroup(gid)}
+            />
+          )}
 
           {/* Table */}
           <div className="groups-table-wrapper">
@@ -410,10 +503,21 @@ export default function GroupsPage({ notify: propNotify, status: propStatus }) {
                           <button 
                             type="button" 
                             className="btn-action-icon" 
-                            style={{ fontSize: 12, padding: '5px 10px', background: 'var(--zd-border-subtle, #eef2f6)', color: 'inherit' }}
-                            onClick={() => setActiveModalGroup(g)}
+                            style={{ 
+                              fontSize: 12, 
+                              padding: '5px 10px', 
+                              background: (showMembersDropdown && (dropdownFocusedGroupId === g.id || (selectedGroupIds.size > 1 && selectedGroupIds.has(g.id)))) 
+                                ? 'var(--zd-primary, #6366f1)' 
+                                : 'var(--zd-border-subtle, #eef2f6)', 
+                              color: (showMembersDropdown && (dropdownFocusedGroupId === g.id || (selectedGroupIds.size > 1 && selectedGroupIds.has(g.id)))) 
+                                ? '#ffffff' 
+                                : 'inherit',
+                              fontWeight: 600
+                            }}
+                            onClick={() => handleRowGroupMemberClick(g)}
+                            title="इस ग्रुप के मेंबर्स ड्रॉपडाउन में देखें"
                           >
-                            👥 View Members
+                            👥 Group Member ▼
                           </button>
                         </td>
                       </tr>

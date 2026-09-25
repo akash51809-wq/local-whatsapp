@@ -2708,6 +2708,257 @@ button { cursor: pointer; }
   border-radius: 8px;
 }
 
+/* Group Members Dropdown Panel */
+.group-members-dropdown-panel {
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+  border-bottom: 2px solid #6366f1;
+  padding: 16px 20px;
+  animation: slideDownMembers 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
+}
+
+@keyframes slideDownMembers {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.members-dropdown-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.dropdown-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dropdown-icon-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #eef2ff;
+  color: #4f46e5;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dropdown-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.dropdown-subtitle {
+  margin: 2px 0 0 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.dropdown-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-remove-dups {
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 6px 12px;
+  transition: all 0.2s ease;
+}
+
+.btn-remove-dups:hover {
+  background: #e2e8f0;
+}
+
+.btn-remove-dups.active {
+  background: #ecfdf5 !important;
+  color: #047857 !important;
+  border-color: #10b981 !important;
+}
+
+.btn-download-excel {
+  background: #107c41 !important;
+  color: #ffffff !important;
+  border: 1px solid #0b5a2f !important;
+  font-weight: 600 !important;
+  font-size: 12px !important;
+  padding: 6px 12px !important;
+}
+
+.btn-download-excel:hover {
+  background: #0d6535 !important;
+}
+
+.btn-close-dropdown {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+  font-size: 12px;
+  padding: 6px 12px;
+}
+
+.members-dropdown-stats {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 14px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 12px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+
+.members-stat-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.members-stat-item .label {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.members-stat-item .val {
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.members-stat-item .val.text-success {
+  color: #10b981;
+}
+
+.members-stat-item .val.text-warning {
+  color: #f59e0b;
+}
+
+.members-group-chips-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.group-filter-chip {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.group-filter-chip:hover {
+  background: #e2e8f0;
+}
+
+.group-filter-chip.active {
+  background: #6366f1;
+  color: #ffffff;
+  border-color: #6366f1;
+}
+
+.group-chip-wrapper {
+  display: inline-flex;
+  align-items: center;
+  background: #f1f5f9;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+
+.group-chip-wrapper .group-filter-chip {
+  border: none;
+  background: transparent;
+  padding-right: 4px;
+}
+
+.group-chip-wrapper .group-filter-chip.active {
+  background: #6366f1;
+}
+
+.chip-remove-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 8px 0 2px;
+  line-height: 1;
+}
+
+.chip-remove-btn:hover {
+  color: #ef4444;
+}
+
+.members-dropdown-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.members-dropdown-table-container {
+  max-height: 380px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.members-dropdown-table-container .groups-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.row-duplicate-notice {
+  background: #fffbeb !important;
+}
+
+.row-duplicate-notice:hover {
+  background: #fef3c7 !important;
+}
+
+.members-dropdown-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 /* =========================================================
    ZENDASH OFFICIAL DARK THEME (.dark-mode)
 ========================================================= */
@@ -3544,6 +3795,86 @@ body.dark-mode *::-webkit-scrollbar-track {
 .dark-mode .group-members-list-container {
   border-color: rgba(255, 255, 255, 0.08) !important;
   background-color: #0d1337 !important;
+}
+
+.dark-mode .group-members-dropdown-panel {
+  background: #141b47;
+  border-top-color: rgba(255, 255, 255, 0.08);
+  border-bottom-color: #6366f1;
+}
+
+.dark-mode .dropdown-icon-badge {
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+}
+
+.dark-mode .dropdown-title {
+  color: #edf0f5;
+}
+
+.dark-mode .dropdown-subtitle {
+  color: #a2a6cb;
+}
+
+.dark-mode .btn-remove-dups {
+  background: #1b2253;
+  color: #edf0f5;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark-mode .btn-remove-dups:hover {
+  background: #242c6b;
+}
+
+.dark-mode .btn-remove-dups.active {
+  background: rgba(16, 185, 129, 0.2) !important;
+  color: #34d399 !important;
+  border-color: #059669 !important;
+}
+
+.dark-mode .btn-close-dropdown {
+  background: #1b2253;
+  color: #a2a6cb;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark-mode .members-dropdown-stats {
+  background: #0f163e;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.dark-mode .members-stat-item .val {
+  color: #edf0f5;
+}
+
+.dark-mode .group-filter-chip {
+  background: #1b2253;
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #a2a6cb;
+}
+
+.dark-mode .group-chip-wrapper {
+  background: #1b2253;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.dark-mode .members-dropdown-table-container {
+  background: #0d1337;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.dark-mode .members-dropdown-table-container .groups-table th {
+  background: #141b47;
+  color: #a2a6cb;
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.dark-mode .row-duplicate-notice {
+  background: rgba(245, 158, 11, 0.12) !important;
+}
+
+.dark-mode .row-duplicate-notice:hover {
+  background: rgba(245, 158, 11, 0.2) !important;
 }
 
 /* 4. DASHBOARD PAGE (Right Hero Visual QR Box & Zendash Card) */
