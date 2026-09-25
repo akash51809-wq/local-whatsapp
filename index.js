@@ -16,6 +16,7 @@ const MessageReportModel = require('./models/MessageReport');
 const IncomingMessageModel = require('./models/IncomingMessage');
 const ContactModel = require('./models/Contact');
 const ApiSettingsModel = require('./models/ApiSettings');
+const { generateTTS } = require('./ttsHelper');
 
 const app = express();
 app.disable('x-powered-by');
@@ -2503,16 +2504,13 @@ async function handleSendText(req, res) {
 
         if (isVoice && messageText) {
             try {
-                const gTTS = require('gtts');
-                const speech = new gTTS(messageText, voiceLang || 'hi');
                 const savedName = `tts_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.mp3`;
                 const filePath = path.join(MEDIA_DIR, savedName);
-                await new Promise((resolve, reject) => speech.save(filePath, (err) => err ? reject(err) : resolve()));
-                const audioBuffer = fs.readFileSync(filePath);
-                messagePayload = { audio: audioBuffer, mimetype: 'audio/mp4', ptt: true };
+                const { buffer } = await generateTTS(messageText, voiceLang || 'hi', filePath);
+                messagePayload = { audio: buffer, mimetype: 'audio/mp4', ptt: true };
                 messageType = 'audio';
             } catch (ttsErr) {
-                console.warn('[API /send-text] gTTS conversion warning:', ttsErr.message);
+                console.warn('[API /send-text] TTS conversion warning:', ttsErr.message);
             }
         } else {
             const autoSendConfig = user?.autoSendImage;

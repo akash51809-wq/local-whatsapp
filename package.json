@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "build": "npm --prefix whatsapp-dashboard install --include=dev && npm --prefix whatsapp-dashboard run build",
+    "build": "npm install && npm --prefix whatsapp-dashboard install --include=dev && npm --prefix whatsapp-dashboard run build",
     "test": "node -e \"console.log('test skipped')\""
   },
   "dependencies": {

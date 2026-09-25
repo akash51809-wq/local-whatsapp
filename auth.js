@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { generateTTS } = require('./ttsHelper');
 
 const router = express.Router();
 
@@ -1057,31 +1058,24 @@ router.post('/api/user/send', authRequired, async (req, res) => {
     let mediaType = null;
     let fileName = null;
 
-    // 1. Google Text-to-Speech (gTTS) Conversion: User text -> MP3 Voice Note
+    // 1. Google Text-to-Speech (TTS) Conversion: User text -> MP3 Voice Note
     if (sendAsVoice && text && String(text).trim()) {
       try {
-        const gTTS = require('gtts');
         const targetLang = String(voiceLang || 'hi').trim().toLowerCase();
-        const speech = new gTTS(String(text).trim(), targetLang);
         const path = require('path');
-        const fs = require('fs');
         const MEDIA_DIR = path.join(__dirname, 'media_storage');
-        if (!fs.existsSync(MEDIA_DIR)) fs.mkdirSync(MEDIA_DIR, { recursive: true });
         const savedName = `tts_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.mp3`;
         const filePath = path.join(MEDIA_DIR, savedName);
 
-        await new Promise((resolve, reject) => {
-          speech.save(filePath, (err) => err ? reject(err) : resolve());
-        });
+        const { buffer } = await generateTTS(String(text).trim(), targetLang, filePath);
 
-        const buffer = fs.readFileSync(filePath);
         // In WhatsApp Baileys: ptt: true sends as native voice note waveform
         messageContent = { audio: buffer, mimetype: 'audio/mp4', ptt: true };
         mediaType = 'audio';
         fileName = savedName;
         mediaUrl = `/media/${savedName}`;
       } catch (ttsErr) {
-        console.error('gTTS generation error in /api/user/send:', ttsErr.message);
+        console.error('TTS generation error in /api/user/send:', ttsErr.message);
         return res.status(500).json({ success: false, message: 'Voice generation failed: ' + ttsErr.message });
       }
     } else if (attachment && attachment.data) {
@@ -1764,7 +1758,7 @@ router.delete('/api/user/settings/auto-image', authRequired, async (req, res) =>
   }
 });
 
-// 16. User: Convert Text to Speech (gTTS MP3 Preview)
+// 16. User: Convert Text to Speech (Google TTS MP3 Preview)
 router.post('/api/user/tts-convert', authRequired, async (req, res) => {
   try {
     const { text, lang = 'hi' } = req.body || {};
@@ -1776,30 +1770,18 @@ router.post('/api/user/tts-convert', authRequired, async (req, res) => {
     const targetLang = String(lang || 'hi').trim().toLowerCase();
 
     const MEDIA_DIR = path.join(__dirname, 'media_storage');
-    if (!fs.existsSync(MEDIA_DIR)) fs.mkdirSync(MEDIA_DIR, { recursive: true });
-
     const fileName = `tts_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.mp3`;
     const filePath = path.join(MEDIA_DIR, fileName);
 
-    const gTTS = require('gtts');
-    const speech = new gTTS(cleanText, targetLang);
+    const { buffer } = await generateTTS(cleanText, targetLang, filePath);
+    const base64Data = `data:audio/mp3;base64,${buffer.toString('base64')}`;
 
-    speech.save(filePath, function (err) {
-      if (err) {
-        console.error('gTTS conversion error:', err);
-        return res.status(500).json({ success: false, message: 'Voice conversion failed: ' + err.message });
-      }
-
-      const fileBuffer = fs.readFileSync(filePath);
-      const base64Data = `data:audio/mp3;base64,${fileBuffer.toString('base64')}`;
-
-      res.json({
-        success: true,
-        audioUrl: `/media/${fileName}`,
-        fileName: fileName,
-        data: base64Data,
-        message: 'Text converted to MP3 voice note successfully!'
-      });
+    res.json({
+      success: true,
+      audioUrl: `/media/${fileName}`,
+      fileName: fileName,
+      data: base64Data,
+      message: 'Text converted to MP3 voice note successfully!'
     });
   } catch (error) {
     console.error('TTS Convert Route error:', error);
