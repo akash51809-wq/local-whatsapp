@@ -9,6 +9,21 @@ export const QUICK_EMOJIS = [
   '🎯', '📍', '💰', '🎁', '💐', '🇮🇳', '👌', '👇', '👉', '⚡'
 ]
 
+export const VOICE_LANGUAGES = [
+  { code: 'hi', label: 'Hindi (हिन्दी 🇮🇳)' },
+  { code: 'en', label: 'English (English 🇺🇸)' },
+  { code: 'gu', label: 'Gujarati (ગુજરાતી)' },
+  { code: 'mr', label: 'Marathi (मराठी)' },
+  { code: 'bn', label: 'Bengali (বাংলা)' },
+  { code: 'ta', label: 'Tamil (தமிழ்)' },
+  { code: 'te', label: 'Telugu (తెలుగు)' },
+  { code: 'ur', label: 'Urdu (اردو)' },
+  { code: 'es', label: 'Spanish (Español)' },
+  { code: 'fr', label: 'French (Français)' },
+  { code: 'de', label: 'German (Deutsch)' },
+  { code: 'ar', label: 'Arabic (العربية)' }
+]
+
 export function cleanTo10Digit(val) {
   if (!val) return null
   let s = String(val).trim().replace(/\D/g, '')
@@ -53,6 +68,14 @@ export function SendPage() {
   const [msgText, setMsgText] = useState('')
   const [attachment, setAttachment] = useState(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+
+  // Voice Note (Google Text-to-Speech / gTTS) States
+  const [voiceLang, setVoiceLang] = useState('hi')
+  const [convertingVoice, setConvertingVoice] = useState(false)
+  const [previewAudio, setPreviewAudio] = useState(null)
+  const [showVoiceOptions, setShowVoiceOptions] = useState(false)
+  const audioPlayerRef = useRef(null)
+
   const [sendingProgress, setSendingProgress] = useState({
     active: false,
     current: 0,
@@ -228,15 +251,52 @@ export function SendPage() {
     setMsgText(prev => prev + emoji)
   }
 
-  // 6. Sequential 1-by-1 Sending
-  const handleSendMessages = async () => {
+  // 6. Preview Voice (Google Text-to-Speech / gTTS -> MP3)
+  const handlePreviewVoice = async () => {
+    if (!msgText.trim()) {
+      if (notify) notify('वॉइस सुनने के लिए पहले मैसेज बॉक्स में टेक्स्ट लिखें।')
+      return
+    }
+    setConvertingVoice(true)
+    try {
+      const res = await api('/api/user/tts-convert', {
+        method: 'POST',
+        body: JSON.stringify({
+          text: msgText.trim(),
+          lang: voiceLang || 'hi'
+        })
+      })
+      if (res.success && res.audioUrl) {
+        setPreviewAudio({ url: res.audioUrl, fileName: res.fileName })
+        if (notify) notify('✓ टेक्स्ट को MP3 वॉइस में बदल दिया गया! नीचे ऑडियो प्ले करके सुनें।')
+        setTimeout(() => {
+          if (audioPlayerRef.current) {
+            audioPlayerRef.current.play().catch(() => {})
+          }
+        }, 150)
+      } else {
+        if (notify) notify('Voice conversion failed: ' + (res.message || 'Unknown error'))
+      }
+    } catch (err) {
+      if (notify) notify('Voice conversion error: ' + err.message)
+    } finally {
+      setConvertingVoice(false)
+    }
+  }
+
+  // 7. Sequential 1-by-1 Sending (Supports Text or Google Voice Note MP3)
+  const handleSendMessages = async (asVoice = false) => {
     const targets = numberStats.unique
     if (targets.length === 0) {
       if (notify) notify('कम से कम एक वैध 10-अंकीय मोबाइल नंबर दर्ज करें।')
       return
     }
-    if (!msgText.trim() && !attachment) {
+    if (!msgText.trim() && !attachment && !asVoice) {
       if (notify) notify('मैसेज टेक्स्ट लिखें या कोई अटैचमेंट फ़ाइल जोड़ें।')
+      return
+    }
+    if (asVoice && !msgText.trim()) {
+      if (notify) notify('वॉइस मैसेज भेजने के लिए मैसेज बॉक्स में टेक्स्ट लिखना आवश्यक है।')
       return
     }
 
@@ -252,7 +312,7 @@ export function SendPage() {
       current: 0,
       total: targets.length,
       currentNumber: '',
-      statusText: 'भेजना शुरू हो रहा है...',
+      statusText: asVoice ? 'वॉइस (MP3) में बदला जा रहा है...' : 'भेजना शुरू हो रहा है...',
       sentCount: 0,
       failCount: 0
     })
@@ -272,7 +332,9 @@ export function SendPage() {
         ...prev,
         current: i + 1,
         currentNumber: num,
-        statusText: `भेजा जा रहा है (${i + 1}/${targets.length}): +91 ${num}`
+        statusText: asVoice 
+          ? `वॉइस नोट भेजा जा रहा है (${i + 1}/${targets.length}): +91 ${num}`
+          : `भेजा जा रहा है (${i + 1}/${targets.length}): +91 ${num}`
       }))
 
       try {
@@ -281,7 +343,9 @@ export function SendPage() {
           body: JSON.stringify({
             to: num,
             text: msgText.trim(),
-            attachment: attachment ? { name: attachment.name, type: attachment.type, data: attachment.data } : null,
+            sendAsVoice: asVoice,
+            voiceLang: voiceLang || 'hi',
+            attachment: (!asVoice && attachment) ? { name: attachment.name, type: attachment.type, data: attachment.data } : null,
             session: selectedSession
           })
         })
@@ -307,11 +371,11 @@ export function SendPage() {
     setSendingProgress(prev => ({
       ...prev,
       active: false,
-      statusText: `पूरा हुआ! भेजे गए: ${sent}, विफल: ${failed}`
+      statusText: `पूरा हुआ! ${asVoice ? 'वॉइस मैसेज' : 'मैसेज'} भेजे गए: ${sent}, विफल: ${failed}`
     }))
 
     if (sent > 0) {
-      if (notify) notify(`✓ ${sent} संदेश सफलतापूर्वक भेज दिए गए!`)
+      if (notify) notify(`✓ ${sent} ${asVoice ? 'वॉइस मैसेज (MP3)' : 'संदेश'} सफलतापूर्वक भेज दिए गए!`)
     } else if (failed > 0) {
       if (notify) notify(lastError ? `मैसेज भेजने में समस्या हुई: ${lastError}` : `मैसेज भेजने में समस्या हुई। कृपया WhatsApp कनेक्शन जांचें।`)
     }
@@ -441,17 +505,90 @@ export function SendPage() {
                 </div>
               )}
 
+              {/* Voice Note (Google TTS) Controls Banner */}
+              {(showVoiceOptions || previewAudio) && (
+                <div className="voice-options-bar">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#705ec8' }}>
+                      🎙️ Google Voice (TTS):
+                    </span>
+                    <select
+                      value={voiceLang}
+                      onChange={e => {
+                        setVoiceLang(e.target.value)
+                        setPreviewAudio(null)
+                      }}
+                      style={{
+                        height: 28,
+                        fontSize: 12,
+                        padding: '2px 8px',
+                        borderRadius: 6,
+                        border: '1px solid #cbd5e1',
+                        background: '#fff'
+                      }}
+                    >
+                      {VOICE_LANGUAGES.map(l => (
+                        <option key={l.code} value={l.code}>{l.label}</option>
+                      ))}
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={handlePreviewVoice}
+                      disabled={convertingVoice || !msgText.trim()}
+                      className="tool-btn"
+                      style={{
+                        padding: '3px 10px',
+                        fontSize: 11,
+                        background: '#ede9fe',
+                        borderColor: '#c4b5fd',
+                        color: '#6d28d9',
+                        fontWeight: 600
+                      }}
+                      title="टेक्स्ट को MP3 में बदलकर प्रीव्यू सुनें"
+                    >
+                      {convertingVoice ? '⏳ कन्वर्ट हो रहा है...' : '🔊 Listen / Preview Voice'}
+                    </button>
+                  </div>
+
+                  {previewAudio && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <audio
+                        ref={audioPlayerRef}
+                        controls
+                        src={previewAudio.url}
+                        style={{ height: 28, maxWidth: 220 }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setPreviewAudio(null)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#dc2626',
+                          fontSize: 14,
+                          cursor: 'pointer'
+                        }}
+                        title="हटाएं"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <textarea 
                 className="main-msg-textarea"
                 rows={4}
-                placeholder="यहाँ अपना मैसेज लिखें (Type your message here)..."
+                placeholder="यहाँ अपना मैसेज लिखें (Type your message here)... आप इसे 'Send as Voice' से सीधे MP3 में भी भेज सकते हैं!"
                 value={msgText}
                 onChange={e => setMsgText(e.target.value)}
               />
 
-              {/* Compact bottom action bar: Attachment, Emoji, Send button */}
-              <div className="msg-action-bar">
-                <div className="msg-tools-group">
+              {/* Compact bottom action bar: Attachment, Emoji, Voice, Send buttons */}
+              <div className="msg-action-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="msg-tools-group" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   {/* Attachment Button */}
                   <input 
                     type="file" 
@@ -478,6 +615,22 @@ export function SendPage() {
                     😊 Emoji
                   </button>
 
+                  {/* Voice Options Toggle Button */}
+                  <button
+                    type="button"
+                    className={`tool-icon-btn ${showVoiceOptions ? 'active' : ''}`}
+                    onClick={() => setShowVoiceOptions(prev => !prev)}
+                    title="Google Text-to-Speech (gTTS) Voice Settings"
+                    style={{
+                      background: showVoiceOptions ? '#ede9fe' : undefined,
+                      borderColor: showVoiceOptions ? '#c4b5fd' : undefined,
+                      color: showVoiceOptions ? '#6d28d9' : undefined,
+                      fontWeight: showVoiceOptions ? 600 : undefined
+                    }}
+                  >
+                    🎙️ Voice Options {showVoiceOptions ? '▲' : '▼'}
+                  </button>
+
                   {/* Emoji Popover */}
                   {showEmojiPicker && (
                     <div className="emoji-popover-box">
@@ -495,15 +648,29 @@ export function SendPage() {
                   )}
                 </div>
 
-                {/* Send Button */}
-                <button 
-                  type="button" 
-                  className="btn-send-main"
-                  disabled={sendingProgress.active || numberStats.unique.length === 0 || (!msgText.trim() && !attachment)}
-                  onClick={handleSendMessages}
-                >
-                  {sendingProgress.active ? 'Sending...' : `🚀 Send Message (${numberStats.unique.length})`}
-                </button>
+                {/* Right Action Buttons: Voice Send + Text Send */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  {/* Voice Button (Google Text-to-Speech gTTS -> MP3) */}
+                  <button
+                    type="button"
+                    className="btn-voice-send"
+                    disabled={sendingProgress.active || numberStats.unique.length === 0 || !msgText.trim()}
+                    onClick={() => handleSendMessages(true)}
+                    title="टाइप किए गए टेक्स्ट को Google TTS द्वारा MP3 ऑडियो में बदलकर भेजें"
+                  >
+                    {sendingProgress.active ? 'Sending...' : `🎙️ Send as Voice (${numberStats.unique.length})`}
+                  </button>
+
+                  {/* Regular Send Button */}
+                  <button 
+                    type="button" 
+                    className="btn-send-main"
+                    disabled={sendingProgress.active || numberStats.unique.length === 0 || (!msgText.trim() && !attachment)}
+                    onClick={() => handleSendMessages(false)}
+                  >
+                    {sendingProgress.active ? 'Sending...' : `🚀 Send Message (${numberStats.unique.length})`}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -587,8 +754,16 @@ export function SendPage() {
             <div className="how-step">
               <div className="step-num-badge">6</div>
               <div className="step-content">
+                <strong>Google Voice (gTTS MP3 वॉइस नोट)</strong>
+                मैसेज बॉक्स में लिखे टेक्स्ट को <b>🎙️ Send as Voice</b> बटन दबाकर सीधे MP3 वॉइस नोट के रूप में भेजें। <b>🎙️ Voice Options</b> से अपनी भाषा (जैसे हिन्दी 🇮🇳, English 🇺🇸) चुनें और भेजने से पहले <b>🔊 Listen / Preview</b> करके सुन भी सकते हैं।
+              </div>
+            </div>
+
+            <div className="how-step">
+              <div className="step-num-badge">7</div>
+              <div className="step-content">
                 <strong>Send Message (1-by-1 सुरक्षित डिलीवरी)</strong>
-                <b>Send Message</b> बटन दबाएं। सिस्टम हर नंबर पर सुरक्षित 1.2 सेकंड के अंतराल से 1-by-1 मैसेज भेजेगा ताकि आपका व्हाट्सएप अकाउंट सुरक्षित रहे।
+                <b>🚀 Send Message</b> या <b>🎙️ Send as Voice</b> बटन दबाएं। सिस्टम हर नंबर पर सुरक्षित 1.2 सेकंड के अंतराल से 1-by-1 मैसेज भेजेगा ताकि आपका व्हाट्सएप अकाउंट सुरक्षित रहे।
               </div>
             </div>
 

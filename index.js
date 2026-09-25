@@ -89,8 +89,8 @@ app.get('/media/:filename', (req, res, next) => {
             return res.status(403).json({ success: false, message: 'Access forbidden: invalid path.' });
         }
 
-        // Allow preview without mandatory header auth for auto send images and company assets
-        if (safeFilename.startsWith('auto_img_') || safeFilename.startsWith('company_')) {
+        // Allow preview without mandatory header auth for auto send images, company assets, and tts voice notes
+        if (safeFilename.startsWith('auto_img_') || safeFilename.startsWith('company_') || safeFilename.startsWith('tts_')) {
             if (!fs.existsSync(filePath)) {
                 return res.status(404).json({ success: false, message: 'Media file not found.' });
             }
@@ -2365,6 +2365,8 @@ async function handleSendText(req, res) {
         const rawMessage = req.query.message !== undefined ? req.query.message : (req.body?.message !== undefined ? req.body?.message : (req.query.text !== undefined ? req.query.text : req.body?.text));
         const providedSession = String(req.query.session || req.body?.session || '').trim();
         const isAsync = req.query.async === '1' || req.query.fast === '1' || req.body?.async === 1;
+        const isVoice = req.query.voice === '1' || req.query.audio === '1' || req.query.tts === '1' || req.body?.voice === 1 || req.body?.sendAsVoice === true;
+        const voiceLang = String(req.query.lang || req.body?.lang || 'hi').trim().toLowerCase();
 
         if (!token) {
             return res.status(401).json({ status: false, message: "Authentication failed: 'token' parameter is required." });
@@ -2494,50 +2496,65 @@ async function handleSendText(req, res) {
 
         const ownerUserId = isGlobalAdmin ? 'admin' : (user?.userId || null);
 
-        // Resolve Auto Send Image if enabled for the user
+        // Resolve Voice Note (gTTS) or Auto Send Image if enabled
         let messagePayload = { text: messageText };
         let messageType = 'text';
         let autoImageAttached = false;
 
-        const autoSendConfig = user?.autoSendImage;
-        if (autoSendConfig && autoSendConfig.enabled && autoSendConfig.imageUrl) {
-            const rawImg = String(autoSendConfig.imageUrl).trim();
-            if (rawImg.startsWith('/media/')) {
-                const safeName = path.basename(rawImg.split('?')[0]);
-                const localPath = path.resolve(MEDIA_DIR, safeName);
-                if (fs.existsSync(localPath)) {
+        if (isVoice && messageText) {
+            try {
+                const gTTS = require('gtts');
+                const speech = new gTTS(messageText, voiceLang || 'hi');
+                const savedName = `tts_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.mp3`;
+                const filePath = path.join(MEDIA_DIR, savedName);
+                await new Promise((resolve, reject) => speech.save(filePath, (err) => err ? reject(err) : resolve()));
+                const audioBuffer = fs.readFileSync(filePath);
+                messagePayload = { audio: audioBuffer, mimetype: 'audio/mp4', ptt: true };
+                messageType = 'audio';
+            } catch (ttsErr) {
+                console.warn('[API /send-text] gTTS conversion warning:', ttsErr.message);
+            }
+        } else {
+            const autoSendConfig = user?.autoSendImage;
+            if (autoSendConfig && autoSendConfig.enabled && autoSendConfig.imageUrl) {
+                const rawImg = String(autoSendConfig.imageUrl).trim();
+                if (rawImg.startsWith('/media/')) {
+                    const safeName = path.basename(rawImg.split('?')[0]);
+                    const localPath = path.resolve(MEDIA_DIR, safeName);
+                    if (fs.existsSync(localPath)) {
+                        try {
+                            const imgBuffer = fs.readFileSync(localPath);
+                            messagePayload = {
+                                image: imgBuffer,
+                                caption: messageText || undefined
+                            };
+                            messageType = 'image';
+                            autoImageAttached = true;
+                        } catch (readErr) {
+                            console.warn('[API /send-text] Error reading autoSendImage buffer:', readErr.message);
+                        }
+                    }
+                } else if (rawImg.startsWith('data:image/')) {
                     try {
-                        const imgBuffer = fs.readFileSync(localPath);
+                        const base64Clean = rawImg.replace(/^data:.*?;base64,/, '');
+                        const imgBuffer = Buffer.from(base64Clean, 'base64');
                         messagePayload = {
                             image: imgBuffer,
                             caption: messageText || undefined
                         };
                         messageType = 'image';
                         autoImageAttached = true;
-                    } catch (readErr) {
-                        console.warn('[API /send-text] Error reading autoSendImage buffer:', readErr.message);
+                    } catch (b64Err) {
+                        console.warn('[API /send-text] Error parsing base64 autoSendImage:', b64Err.message);
                     }
-                }
-            } else if (rawImg.startsWith('data:image/')) {
-                try {
-                    const base64Clean = rawImg.replace(/^data:.*?;base64,/, '');
-                    const imgBuffer = Buffer.from(base64Clean, 'base64');
+                } else if (rawImg.startsWith('http://') || rawImg.startsWith('https://')) {
                     messagePayload = {
-                        image: imgBuffer,
+                        image: { url: rawImg },
                         caption: messageText || undefined
                     };
                     messageType = 'image';
                     autoImageAttached = true;
-                } catch (b64Err) {
-                    console.warn('[API /send-text] Error parsing base64 autoSendImage:', b64Err.message);
                 }
-            } else if (rawImg.startsWith('http://') || rawImg.startsWith('https://')) {
-                messagePayload = {
-                    image: { url: rawImg },
-                    caption: messageText || undefined
-                };
-                messageType = 'image';
-                autoImageAttached = true;
             }
         }
 

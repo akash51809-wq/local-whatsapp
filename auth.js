@@ -962,7 +962,7 @@ router.get('/api/user/whatsapp/sessions', authRequired, async (req, res) => {
 // Send message from selected WhatsApp (single or sequential)
 router.post('/api/user/send', authRequired, async (req, res) => {
   try {
-    const { to, text, attachment, session } = req.body || {};
+    const { to, text, attachment, session, sendAsVoice, voiceLang } = req.body || {};
     if (!to) return res.status(400).json({ success: false, message: 'Recipient number (to) is required.' });
     if (!text && !attachment) return res.status(400).json({ success: false, message: 'Message text or attachment is required.' });
 
@@ -1057,7 +1057,34 @@ router.post('/api/user/send', authRequired, async (req, res) => {
     let mediaType = null;
     let fileName = null;
 
-    if (attachment && attachment.data) {
+    // 1. Google Text-to-Speech (gTTS) Conversion: User text -> MP3 Voice Note
+    if (sendAsVoice && text && String(text).trim()) {
+      try {
+        const gTTS = require('gtts');
+        const targetLang = String(voiceLang || 'hi').trim().toLowerCase();
+        const speech = new gTTS(String(text).trim(), targetLang);
+        const path = require('path');
+        const fs = require('fs');
+        const MEDIA_DIR = path.join(__dirname, 'media_storage');
+        if (!fs.existsSync(MEDIA_DIR)) fs.mkdirSync(MEDIA_DIR, { recursive: true });
+        const savedName = `tts_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.mp3`;
+        const filePath = path.join(MEDIA_DIR, savedName);
+
+        await new Promise((resolve, reject) => {
+          speech.save(filePath, (err) => err ? reject(err) : resolve());
+        });
+
+        const buffer = fs.readFileSync(filePath);
+        // In WhatsApp Baileys: ptt: true sends as native voice note waveform
+        messageContent = { audio: buffer, mimetype: 'audio/mp4', ptt: true };
+        mediaType = 'audio';
+        fileName = savedName;
+        mediaUrl = `/media/${savedName}`;
+      } catch (ttsErr) {
+        console.error('gTTS generation error in /api/user/send:', ttsErr.message);
+        return res.status(500).json({ success: false, message: 'Voice generation failed: ' + ttsErr.message });
+      }
+    } else if (attachment && attachment.data) {
       const base64Clean = attachment.data.replace(/^data:.*?;base64,/, '');
       const buffer = Buffer.from(base64Clean, 'base64');
       const mimeType = attachment.type || 'application/octet-stream';
@@ -1079,7 +1106,7 @@ router.post('/api/user/send', authRequired, async (req, res) => {
         messageContent = { video: buffer, caption: text ? String(text) : undefined, mimetype: mimeType };
         mediaType = 'video';
       } else if (mimeType.startsWith('audio/')) {
-        messageContent = { audio: buffer, mimetype: mimeType, ptt: false };
+        messageContent = { audio: buffer, mimetype: mimeType, ptt: Boolean(attachment.isVoice) };
         mediaType = 'audio';
       } else {
         messageContent = { document: buffer, fileName: fileName, caption: text ? String(text) : undefined, mimetype: mimeType };
@@ -1095,7 +1122,7 @@ router.post('/api/user/send', authRequired, async (req, res) => {
     // Log to message_reports & incoming_messages
     try {
       const { appendMessageReport, appendIncomingMessage, broadcastIncomingEvent } = require('./index');
-      const reportText = attachment ? `[${mediaType?.toUpperCase() || 'ATTACHMENT'}] ${text || ''}`.trim() : String(text || '');
+      const reportText = sendAsVoice ? `[VOICE NOTE] ${text || ''}`.trim() : (attachment ? `[${mediaType?.toUpperCase() || 'ATTACHMENT'}] ${text || ''}`.trim() : String(text || ''));
       appendMessageReport({
         id: messageId,
         date: new Date().toISOString(),
@@ -1733,6 +1760,49 @@ router.delete('/api/user/settings/auto-image', authRequired, async (req, res) =>
     });
   } catch (error) {
     console.error('Delete auto-image settings error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 16. User: Convert Text to Speech (gTTS MP3 Preview)
+router.post('/api/user/tts-convert', authRequired, async (req, res) => {
+  try {
+    const { text, lang = 'hi' } = req.body || {};
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ success: false, message: 'Voice conversion के लिए टेक्स्ट अनिवार्य है।' });
+    }
+
+    const cleanText = String(text).trim();
+    const targetLang = String(lang || 'hi').trim().toLowerCase();
+
+    const MEDIA_DIR = path.join(__dirname, 'media_storage');
+    if (!fs.existsSync(MEDIA_DIR)) fs.mkdirSync(MEDIA_DIR, { recursive: true });
+
+    const fileName = `tts_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.mp3`;
+    const filePath = path.join(MEDIA_DIR, fileName);
+
+    const gTTS = require('gtts');
+    const speech = new gTTS(cleanText, targetLang);
+
+    speech.save(filePath, function (err) {
+      if (err) {
+        console.error('gTTS conversion error:', err);
+        return res.status(500).json({ success: false, message: 'Voice conversion failed: ' + err.message });
+      }
+
+      const fileBuffer = fs.readFileSync(filePath);
+      const base64Data = `data:audio/mp3;base64,${fileBuffer.toString('base64')}`;
+
+      res.json({
+        success: true,
+        audioUrl: `/media/${fileName}`,
+        fileName: fileName,
+        data: base64Data,
+        message: 'Text converted to MP3 voice note successfully!'
+      });
+    });
+  } catch (error) {
+    console.error('TTS Convert Route error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
