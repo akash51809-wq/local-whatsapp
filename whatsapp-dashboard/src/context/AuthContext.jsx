@@ -91,6 +91,34 @@ export function AuthProvider({ children }) {
     loadCompanySettings()
   }, [loadCompanySettings])
 
+  // User Current Subscription Plan State
+  const [planInfo, setPlanInfo] = useState(null)
+
+  const loadPlanInfo = useCallback(async () => {
+    if (!login || isAdmin) return
+    try {
+      const res = await api('/api/user/plan-status')
+      if (res && res.success && res.plan) {
+        setPlanInfo(res.plan)
+        setCurrentUser(prev => {
+          const updated = { 
+            ...prev, 
+            plan: res.plan.planName, 
+            planExpiresAt: res.plan.expiresAt 
+          }
+          setSavedUser(updated)
+          return updated
+        })
+      }
+    } catch {}
+  }, [login, isAdmin])
+
+  useEffect(() => {
+    if (login && !isAdmin) {
+      loadPlanInfo()
+    }
+  }, [login, isAdmin, loadPlanInfo])
+
   // Dark mode effect
   useEffect(() => {
     localStorage.setItem('wa_theme', theme)
@@ -372,7 +400,9 @@ export function AuthProvider({ children }) {
     disconnectUserWhatsApp,
     companySettings,
     loadCompanySettings,
-    updateCompanySettings
+    updateCompanySettings,
+    planInfo,
+    loadPlanInfo
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

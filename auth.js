@@ -15,6 +15,7 @@ const UserSchema = new mongoose.Schema({
   apiToken: { type: String, unique: true, sparse: true, index: true },
   role: { type: String, enum: ['admin', 'user'], default: 'user', index: true },
   plan: { type: String, default: 'Standard' },
+  planExpiresAt: { type: Date },
   status: { type: String, enum: ['active', 'blocked', 'inactive'], default: 'active' },
   sessions: [{
     tokenHash: String,
@@ -336,8 +337,25 @@ router.post('/api/auth/login', async (req, res) => {
       user.role = 'admin';
       await user.save();
     }
+    if (!user.planExpiresAt && user.role !== 'admin') {
+      const baseDate = user.createdAt ? new Date(user.createdAt) : new Date();
+      user.planExpiresAt = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+      await user.save().catch(() => {});
+    }
     const token = await createLoginToken(user);
-    res.json({ success: true, user: { token, userId: user.userId, username: user.username, mobile: user.mobile || null, role: user.role } });
+    res.json({ 
+      success: true, 
+      user: { 
+        token, 
+        userId: user.userId, 
+        username: user.username, 
+        name: user.name || '',
+        mobile: user.mobile || null, 
+        role: user.role,
+        plan: user.plan || 'Standard',
+        planExpiresAt: user.planExpiresAt || null
+      } 
+    });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ success: false, message: 'Login service error' });
@@ -458,6 +476,9 @@ router.post('/api/auth/signup/verify', async (req, res) => {
     const username = mobile; // User ID = Registered mobile number
     const password = makePassword(); // Random password
 
+    const initialExpiresAt = new Date();
+    initialExpiresAt.setDate(initialExpiresAt.getDate() + 30);
+
     const user = await User.create({
       userId,
       username,
@@ -465,6 +486,8 @@ router.post('/api/auth/signup/verify', async (req, res) => {
       passwordHash: await hashPassword(password),
       apiToken: generateApiToken(),
       role: 'user',
+      plan: 'Standard',
+      planExpiresAt: initialExpiresAt,
       status: 'active'
     });
 
@@ -617,7 +640,14 @@ router.put('/api/admin/users/:userId', authRequired, adminRequired, async (req, 
 
     if (name !== undefined) user.name = String(name).trim();
     if (mobile !== undefined) user.mobile = String(mobile).replace(/\D/g, '').slice(-10);
-    if (plan !== undefined) user.plan = String(plan).trim();
+    if (plan !== undefined) {
+      user.plan = String(plan).trim();
+      const planDoc = await Plan.findOne({ name: new RegExp(`^${user.plan}$`, 'i') });
+      const validityDays = planDoc?.validityDays || 30;
+      const expiresDate = new Date();
+      expiresDate.setDate(expiresDate.getDate() + validityDays);
+      user.planExpiresAt = expiresDate;
+    }
     if (role && ['admin', 'user'].includes(role)) user.role = role;
     if (status && ['active', 'inactive', 'blocked'].includes(status)) user.status = status;
     user.updatedAt = new Date();
@@ -1176,7 +1206,80 @@ router.post('/api/user/api-token/regenerate', authRequired, async (req, res) => 
 });
 
 router.get('/api/auth/me', authRequired, async (req, res) => {
-  res.json({ success: true, user: { userId: req.user.userId, username: req.user.username, mobile: req.user.mobile || null, role: req.user.role } });
+  const user = req.user;
+  if (!user.planExpiresAt && user.role !== 'admin') {
+    const baseDate = user.createdAt ? new Date(user.createdAt) : new Date();
+    user.planExpiresAt = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+    await user.save().catch(() => {});
+  }
+  res.json({ 
+    success: true, 
+    user: { 
+      userId: user.userId, 
+      username: user.username, 
+      name: user.name || '',
+      mobile: user.mobile || null, 
+      role: user.role,
+      plan: user.plan || 'Standard',
+      planExpiresAt: user.planExpiresAt || null
+    } 
+  });
+});
+
+router.get('/api/user/plan-status', authRequired, async (req, res) => {
+  try {
+    const user = req.user;
+    const planName = String(user.plan || 'Standard').trim();
+
+    const planDoc = await Plan.findOne({ 
+      $or: [
+        { name: new RegExp(`^${planName}$`, 'i') },
+        { planId: planName.toLowerCase() }
+      ] 
+    });
+
+    const validityDays = planDoc?.validityDays || 30;
+    const validityText = planDoc?.validity || `${validityDays} Days`;
+    const dailyLimit = planDoc?.dailyLimit || '500/Day';
+
+    let expiresAt = user.planExpiresAt;
+    if (!expiresAt) {
+      const baseDate = user.createdAt ? new Date(user.createdAt) : new Date();
+      expiresAt = new Date(baseDate.getTime() + validityDays * 24 * 60 * 60 * 1000);
+      user.planExpiresAt = expiresAt;
+      await user.save().catch(() => {});
+    }
+
+    const now = Date.now();
+    const expiryTime = new Date(expiresAt).getTime();
+    const msLeft = expiryTime - now;
+    const daysLeft = Math.max(0, Math.ceil(msLeft / (1000 * 60 * 60 * 24)));
+    const isExpired = msLeft <= 0;
+
+    res.json({
+      success: true,
+      plan: {
+        planName,
+        price: planDoc?.price || 0,
+        currency: planDoc?.currency || 'INR',
+        validity: validityText,
+        validityDays,
+        dailyLimit,
+        expiresAt: expiresAt.toISOString(),
+        daysLeft,
+        isExpired,
+        description: planDoc?.description || '',
+        deviceLimit: planDoc?.deviceLimit || '1 Free + 1 Add-on',
+        apiAccess: planDoc?.apiAccess || false,
+        webAccess: planDoc?.webAccess !== false,
+        bulkMsg: planDoc?.bulkMsg || false,
+        groupOption: planDoc?.groupOption || false
+      }
+    });
+  } catch (error) {
+    console.error('Fetch user plan-status error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 router.post('/api/auth/logout', authRequired, async (req, res) => {
@@ -1419,8 +1522,18 @@ router.post('/api/admin/plan-requests/:requestId/approve', authRequired, adminRe
     const user = await User.findOne({ userId: request.userId });
     if (!user) return res.status(404).json({ success: false, message: 'User नहीं मिला।' });
 
-    // Update user plan
+    // Update user plan & validity
     user.plan = request.planName;
+    const planDoc = await Plan.findOne({ 
+      $or: [
+        { planId: request.planId }, 
+        { name: new RegExp(`^${request.planName}$`, 'i') }
+      ] 
+    });
+    const validityDays = planDoc?.validityDays || 30;
+    const expiresDate = new Date();
+    expiresDate.setDate(expiresDate.getDate() + validityDays);
+    user.planExpiresAt = expiresDate;
     user.updatedAt = new Date();
     await user.save();
 

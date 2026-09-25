@@ -14,7 +14,8 @@ export function Sidebar() {
     notify,
     logout,
     setSidebarOpen,
-    companySettings
+    companySettings,
+    planInfo
   } = useAuth()
 
   const closeMobile = () => setSidebarOpen(false)
@@ -59,7 +60,7 @@ export function Sidebar() {
                 {status.profileName || (currentUser?.username ? currentUser.username : 'WhatsApp Account')}
               </h5>
               <span className="text-muted app-sidebar__user-name text-sm">
-                {isAdmin ? 'System Administrator' : 'User Portal'}
+                {isAdmin ? 'System Administrator' : `Plan: ${planInfo?.planName || currentUser?.plan || 'Standard'}`}
               </span>
               <div className="sidebar-status-line">
                 <span className={`dot ${status.status === 'connected' ? 'online' : ''}`}></span>

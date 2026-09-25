@@ -15,7 +15,9 @@ export function DashboardPage() {
     loadQr,
     connectUserWhatsApp,
     disconnectUserWhatsApp,
-    setSelected
+    setSelected,
+    currentUser,
+    planInfo
   } = useAuth()
 
   const navigate = useNavigate()
@@ -29,12 +31,100 @@ export function DashboardPage() {
     navigate('/incoming')
   }
 
+  const formatExpiry = (isoString) => {
+    if (!isoString) return ''
+    try {
+      const d = new Date(isoString)
+      return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+    } catch {
+      return ''
+    }
+  }
+
+  const currentPlanName = planInfo?.planName || currentUser?.plan || 'Standard'
+
   return (
     <section className="page-content">
+      {/* USER CURRENT PLAN & VALIDITY BANNER (Visible for regular users) */}
+      {!isAdmin && (
+        <div className="card plan-banner-card mb-4">
+          <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 p-3">
+            <div className="d-flex align-items-center gap-3">
+              <div className="plan-badge-icon">
+                💎
+              </div>
+              <div>
+                <div className="d-flex align-items-center gap-2 flex-wrap mb-1">
+                  <span className="font-weight-semibold text-muted" style={{ fontSize: '0.85rem' }}>
+                    वर्तमान प्लान (Current Plan):
+                  </span>
+                  <span className="badge badge-purple" style={{ fontSize: '0.85rem', fontWeight: 700, padding: '4px 10px', borderRadius: 6 }}>
+                    {currentPlanName}
+                  </span>
+                  <span className={`badge ${planInfo?.isExpired ? 'badge-danger' : 'badge-success'}`} style={{ fontSize: '0.75rem', padding: '3px 8px', borderRadius: 6 }}>
+                    {planInfo?.isExpired ? '⚠️ Expired' : '● Active'}
+                  </span>
+                </div>
+                <div className="d-flex align-items-center gap-2 flex-wrap" style={{ fontSize: '0.82rem', color: 'var(--text-main, #282f53)' }}>
+                  <span>
+                    ⏳ <strong>वैधता (Validity):</strong> {planInfo?.validity || '30 Days'}
+                  </span>
+                  {planInfo?.expiresAt && (
+                    <>
+                      <span className="text-muted">•</span>
+                      <span>
+                        📅 <strong>समाप्ति (Valid Till):</strong> {formatExpiry(planInfo.expiresAt)}
+                      </span>
+                      <span className="text-muted">•</span>
+                      <span style={{ 
+                        color: planInfo.isExpired ? '#e53e3e' : (planInfo.daysLeft <= 5 ? '#e67e22' : '#087a5d'), 
+                        fontWeight: 700 
+                      }}>
+                        {planInfo.isExpired ? 'प्लान समाप्त (Expired)' : `${planInfo.daysLeft} दिन शेष (${planInfo.daysLeft} Days Left)`}
+                      </span>
+                    </>
+                  )}
+                  {planInfo?.dailyLimit && (
+                    <>
+                      <span className="text-muted">•</span>
+                      <span className="text-muted">
+                        📊 लिमिट: <strong>{planInfo.dailyLimit}</strong>
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => navigate('/plans')}
+                style={{ 
+                  height: 36, 
+                  fontSize: '0.82rem', 
+                  fontWeight: 600, 
+                  padding: '0 16px', 
+                  borderRadius: 8,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6
+                }}
+              >
+                <span>🏷️</span> प्लान अपग्रेड / बदलें (Upgrade Plan)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="hero-card">
         <div className="hero-text-content">
           <span className="hero-eyebrow-badge">
-            {isAdmin ? 'ADMIN WHATSAPP SESSION' : 'YOUR PERSONAL WHATSAPP SESSION'}
+            {isAdmin 
+              ? 'ADMIN WHATSAPP SESSION' 
+              : `YOUR PERSONAL WHATSAPP SESSION · ${currentPlanName.toUpperCase()} PLAN (${planInfo?.validity || '30 Days'})`}
           </span>
           <h2>{status.status === 'connected' ? 'WhatsApp Connected ✓' : 'अपना WhatsApp जोड़ें'}</h2>
           <p>
