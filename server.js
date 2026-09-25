@@ -257,6 +257,14 @@ async function startServer() {
 
     console.log('MongoDB Atlas Connected Successfully');
     await ensureAdminUser();
+    try {
+      const { initMongoDataSync } = require('./index');
+      if (typeof initMongoDataSync === 'function') {
+        await initMongoDataSync();
+      }
+    } catch (syncErr) {
+      console.warn('[Server] Initial data sync warning:', syncErr.message);
+    }
 
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`Unified Server running and listening on 0.0.0.0:${PORT}`);

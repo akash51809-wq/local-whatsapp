@@ -11,6 +11,11 @@ const QRCode = require('qrcode');
 const express = require('express');
 const cors = require('cors');
 const { authRequired, adminRequired } = require('./auth');
+const mongoose = require('mongoose');
+const MessageReportModel = require('./models/MessageReport');
+const IncomingMessageModel = require('./models/IncomingMessage');
+const ContactModel = require('./models/Contact');
+const ApiSettingsModel = require('./models/ApiSettings');
 
 const app = express();
 app.disable('x-powered-by');
@@ -131,46 +136,164 @@ let lastConnectedTime = new Date().toISOString();
 let sendingQueue = [];
 
 /* =========================================================
-   REPORTS STORAGE
+   REPORTS STORAGE (MONGODB ATLAS WITH JSON FALLBACK)
 ========================================================= */
 
 const REPORTS_FILE = path.join(__dirname, 'message_reports.json');
+let messageReportsCache = null;
+let isMongoDataSynced = false;
+
+async function initMongoDataSync() {
+    if (mongoose.connection.readyState !== 1 || isMongoDataSynced) return;
+    try {
+        console.log('[Mongo Data Sync] Initializing MongoDB persistence for reports, messages, and contacts...');
+
+        // 1. Sync Message Reports
+        const reportCount = await MessageReportModel.countDocuments();
+        if (reportCount === 0 && fs.existsSync(REPORTS_FILE)) {
+            try {
+                const data = fs.readFileSync(REPORTS_FILE, 'utf-8');
+                const list = JSON.parse(data || '[]');
+                if (list.length > 0) {
+                    const ops = list.filter(r => r && r.id).map(r => ({
+                        updateOne: {
+                            filter: { id: r.id },
+                            update: { $set: r },
+                            upsert: true
+                        }
+                    }));
+                    if (ops.length > 0) {
+                        await MessageReportModel.bulkWrite(ops, { ordered: false });
+                        console.log(`[Mongo Data Sync] Migrated ${ops.length} message reports from JSON to MongoDB.`);
+                    }
+                }
+            } catch (err) {
+                console.warn('[Mongo Data Sync] Message reports migration warning:', err.message);
+            }
+        }
+        const dbReports = await MessageReportModel.find().sort({ date: -1 }).limit(5000).lean();
+        messageReportsCache = dbReports;
+
+        // 2. Sync Incoming Messages
+        const msgCount = await IncomingMessageModel.countDocuments();
+        if (msgCount === 0 && fs.existsSync(INCOMING_FILE)) {
+            try {
+                const data = fs.readFileSync(INCOMING_FILE, 'utf-8');
+                const list = JSON.parse(data || '[]');
+                if (list.length > 0) {
+                    const ops = list.filter(m => m && m.id).map(m => ({
+                        updateOne: {
+                            filter: { id: m.id },
+                            update: { $set: m },
+                            upsert: true
+                        }
+                    }));
+                    if (ops.length > 0) {
+                        await IncomingMessageModel.bulkWrite(ops, { ordered: false });
+                        console.log(`[Mongo Data Sync] Migrated ${ops.length} incoming messages from JSON to MongoDB.`);
+                    }
+                }
+            } catch (err) {
+                console.warn('[Mongo Data Sync] Incoming messages migration warning:', err.message);
+            }
+        }
+        const dbIncoming = await IncomingMessageModel.find().sort({ timestamp: -1 }).limit(5000).lean();
+        if (dbIncoming.length > 0) {
+            incomingMessagesCache = dbIncoming;
+        }
+
+        // 3. Sync Contacts
+        const contactCount = await ContactModel.countDocuments();
+        if (contactCount === 0 && fs.existsSync(CONTACTS_FILE)) {
+            try {
+                const raw = fs.readFileSync(CONTACTS_FILE, 'utf-8');
+                const list = JSON.parse(raw || '[]');
+                if (list.length > 0) {
+                    const ops = list.filter(c => c && c.id).map(c => ({
+                        updateOne: {
+                            filter: { id: c.id },
+                            update: { $set: c },
+                            upsert: true
+                        }
+                    }));
+                    if (ops.length > 0) {
+                        await ContactModel.bulkWrite(ops, { ordered: false });
+                        console.log(`[Mongo Data Sync] Migrated ${ops.length} contacts from JSON to MongoDB.`);
+                    }
+                }
+            } catch (err) {
+                console.warn('[Mongo Data Sync] Contacts migration warning:', err.message);
+            }
+        }
+        const dbContacts = await ContactModel.find().lean();
+        for (const c of dbContacts) {
+            if (c && c.id) {
+                contactsMap.set(c.id, c);
+                const clean = c.id.split('@')[0];
+                if (clean) contactsMap.set(clean, c);
+                if (c.lid && c.phone) {
+                    lidReverseCache.set(c.lid.replace(/@lid$/, ''), c.phone);
+                }
+            }
+        }
+
+        // 4. Sync API Settings
+        const apiSettingsDoc = await ApiSettingsModel.findOne({ key: 'default' }).lean();
+        if (!apiSettingsDoc && fs.existsSync(API_SETTINGS_FILE)) {
+            try {
+                const data = fs.readFileSync(API_SETTINGS_FILE, 'utf-8');
+                const parsed = JSON.parse(data || '{}');
+                if (Object.keys(parsed).length > 0) {
+                    await ApiSettingsModel.findOneAndUpdate({ key: 'default' }, { $set: { ...parsed, key: 'default' } }, { upsert: true });
+                }
+            } catch {}
+        }
+
+        isMongoDataSynced = true;
+        console.log('[Mongo Data Sync] All database data successfully synced with MongoDB Atlas.');
+    } catch (err) {
+        console.error('[Mongo Data Sync] Error:', err.message);
+    }
+}
+
+if (mongoose.connection.readyState === 1) {
+    initMongoDataSync();
+}
+mongoose.connection.on('connected', () => {
+    initMongoDataSync();
+});
 
 function getMessageReports(user = null) {
     try {
         let list = [];
-        if (fs.existsSync(REPORTS_FILE)) {
+        if (messageReportsCache && messageReportsCache.length > 0) {
+            list = [...messageReportsCache];
+        } else if (fs.existsSync(REPORTS_FILE)) {
             const data = fs.readFileSync(REPORTS_FILE, 'utf-8');
             list = JSON.parse(data || '[]');
         }
 
-        // Also merge sent messages (fromMe: true) from incoming_messages.json
-        const INCOMING_FILE = path.join(__dirname, 'incoming_messages.json');
-        if (fs.existsSync(INCOMING_FILE)) {
-            try {
-                const incData = fs.readFileSync(INCOMING_FILE, 'utf-8');
-                const incList = JSON.parse(incData || '[]');
-                const existingIds = new Set(list.map(r => String(r.id)));
+        // Also merge sent messages (fromMe: true) from incomingMessagesCache or file
+        const incList = incomingMessagesCache && incomingMessagesCache.length > 0 
+            ? incomingMessagesCache 
+            : (fs.existsSync(INCOMING_FILE) ? JSON.parse(fs.readFileSync(INCOMING_FILE, 'utf-8') || '[]') : []);
+        const existingIds = new Set(list.map(r => String(r.id)));
 
-                for (const m of incList) {
-                    if (m.fromMe && !existingIds.has(String(m.id))) {
-                        existingIds.add(String(m.id));
-                        list.push({
-                            id: m.id,
-                            date: m.date || new Date().toISOString(),
-                            from: m.from || connectedNumber || 'me',
-                            to: m.chatJid ? m.chatJid.split('@')[0] : (m.to || ''),
-                            message: m.message || (m.mediaType ? `[${m.mediaType.toUpperCase()}]` : ''),
-                            status: 'sent',
-                            type: m.mediaType || (m.message && m.message.startsWith('[IMAGE') ? 'image' : 'text'),
-                            source: m.isGroup ? 'group' : (m.id && String(m.id).startsWith('api_') ? 'api' : 'web'),
-                            ownerUserId: m.ownerUserId,
-                            session: m.from
-                        });
-                    }
-                }
-            } catch (err) {
-                console.error('Error merging incoming_messages into reports:', err);
+        for (const m of incList) {
+            if (m.fromMe && !existingIds.has(String(m.id))) {
+                existingIds.add(String(m.id));
+                list.push({
+                    id: m.id,
+                    date: m.date || new Date().toISOString(),
+                    from: m.from || connectedNumber || 'me',
+                    to: m.chatJid ? m.chatJid.split('@')[0] : (m.to || ''),
+                    message: m.message || (m.mediaType ? `[${m.mediaType.toUpperCase()}]` : ''),
+                    status: 'sent',
+                    type: m.mediaType || (m.message && m.message.startsWith('[IMAGE') ? 'image' : 'text'),
+                    source: m.isGroup ? 'group' : (m.id && String(m.id).startsWith('api_') ? 'api' : 'web'),
+                    ownerUserId: m.ownerUserId,
+                    session: m.from
+                });
             }
         }
 
@@ -209,16 +332,44 @@ function getMessageReports(user = null) {
 
 function appendMessageReport(record) {
     try {
-        let reports = [];
-        if (fs.existsSync(REPORTS_FILE)) {
-            const data = fs.readFileSync(REPORTS_FILE, 'utf-8');
-            reports = JSON.parse(data || '[]');
+        if (!record || !record.id) return;
+
+        // 1. Update in-memory cache
+        if (!messageReportsCache) messageReportsCache = [];
+        const existingIdx = messageReportsCache.findIndex(r => r.id === record.id);
+        if (existingIdx >= 0) {
+            messageReportsCache[existingIdx] = { ...messageReportsCache[existingIdx], ...record };
+        } else {
+            messageReportsCache.unshift(record);
         }
-        reports.unshift(record);
-        if (reports.length > 5000) {
-            reports = reports.slice(0, 5000);
+        if (messageReportsCache.length > 5000) {
+            messageReportsCache = messageReportsCache.slice(0, 5000);
         }
-        fs.writeFileSync(REPORTS_FILE, JSON.stringify(reports, null, 2), 'utf-8');
+
+        // 2. Fallback to local JSON file
+        try {
+            let reports = [];
+            if (fs.existsSync(REPORTS_FILE)) {
+                const data = fs.readFileSync(REPORTS_FILE, 'utf-8');
+                reports = JSON.parse(data || '[]');
+            }
+            const fIdx = reports.findIndex(r => r.id === record.id);
+            if (fIdx >= 0) reports[fIdx] = { ...reports[fIdx], ...record };
+            else reports.unshift(record);
+            if (reports.length > 5000) reports = reports.slice(0, 5000);
+            fs.writeFileSync(REPORTS_FILE, JSON.stringify(reports, null, 2), 'utf-8');
+        } catch (fErr) {
+            console.warn('[appendMessageReport] Local file write warning:', fErr.message);
+        }
+
+        // 3. Save permanently to MongoDB Atlas
+        if (mongoose.connection.readyState === 1) {
+            MessageReportModel.findOneAndUpdate(
+                { id: record.id },
+                { $set: record },
+                { upsert: true, new: true }
+            ).catch(mErr => console.warn('[Mongo] MessageReport save warning:', mErr.message));
+        }
     } catch (e) {
         console.error('Error appending message report:', e);
     }
@@ -316,6 +467,14 @@ function saveContact(c) {
             fs.writeFileSync(CONTACTS_FILE, JSON.stringify(unique, null, 2), 'utf-8');
         } catch {}
     }, 2000);
+
+    if (mongoose.connection.readyState === 1) {
+        ContactModel.findOneAndUpdate(
+            { id: c.id },
+            { $set: updated },
+            { upsert: true }
+        ).catch(err => console.warn('[Mongo] Save contact warning:', err.message));
+    }
 }
 
 function unwrapMessage(msg) {
@@ -447,6 +606,15 @@ function appendIncomingMessage(record) {
     }
     messages.unshift(record);
     persistIncomingMessages();
+
+    if (mongoose.connection.readyState === 1) {
+        IncomingMessageModel.findOneAndUpdate(
+            { id: record.id },
+            { $set: record },
+            { upsert: true }
+        ).catch(err => console.warn('[Mongo] Save incoming message error:', err.message));
+    }
+
     return true;
 }
 
@@ -466,6 +634,21 @@ function appendIncomingMessagesBatch(records) {
         messages.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         persistIncomingMessages();
     }
+
+    if (mongoose.connection.readyState === 1 && records.length > 0) {
+        const ops = records.filter(r => r && r.id).map(r => ({
+            updateOne: {
+                filter: { id: r.id },
+                update: { $set: r },
+                upsert: true
+            }
+        }));
+        if (ops.length > 0) {
+            IncomingMessageModel.bulkWrite(ops, { ordered: false })
+                .catch(err => console.warn('[Mongo] Batch incoming save error:', err.message));
+        }
+    }
+
     return added;
 }
 
@@ -619,6 +802,15 @@ function saveApiSettings(settings) {
             toSave.token = '';
         }
         fs.writeFileSync(API_SETTINGS_FILE, JSON.stringify(toSave, null, 2), 'utf-8');
+
+        if (mongoose.connection.readyState === 1) {
+            ApiSettingsModel.findOneAndUpdate(
+                { key: 'default' },
+                { $set: { ...toSave, key: 'default' } },
+                { upsert: true }
+            ).catch(err => console.warn('[Mongo] Save API settings error:', err.message));
+        }
+
         return true;
     } catch (e) {
         console.error('Error saving API settings:', e);
@@ -1262,7 +1454,7 @@ app.delete('/api/incoming/chat', authRequired, (req, res) => {
    MESSAGE REPORTS API
 ========================================================= */
 
-app.get('/api/reports/messages', authRequired, (req, res) => {
+app.get('/api/reports/messages', authRequired, async (req, res) => {
     try {
         const { 
             startDate, fromDate, 
@@ -1273,7 +1465,50 @@ app.get('/api/reports/messages', authRequired, (req, res) => {
             type, source
         } = req.query;
 
-        const allUserReports = getMessageReports(req.user).map(r => {
+        let rawUserReports = [];
+        if (mongoose.connection.readyState === 1) {
+            try {
+                let dbQuery = {};
+                if (req.user.role !== 'admin') {
+                    const userMobile10 = req.user.mobile ? String(req.user.mobile).replace(/\D/g, '').slice(-10) : '';
+                    const userUsername = req.user.username ? String(req.user.username).toLowerCase() : '';
+                    const userId = req.user.userId || req.user.id || req.user._id;
+
+                    let userConnectedNum10 = '';
+                    try {
+                        const { getUserSession } = require('./userSessions');
+                        const sess = getUserSession(userId);
+                        if (sess && sess.connectedNumber) {
+                            userConnectedNum10 = String(sess.connectedNumber).replace(/\D/g, '').slice(-10);
+                        }
+                    } catch {}
+
+                    const orConditions = [
+                        { ownerUserId: userId },
+                        { ownerUserId: req.user.userId },
+                        { ownerUserId: userUsername }
+                    ];
+                    if (userMobile10) {
+                        orConditions.push({ from: new RegExp(userMobile10) });
+                        orConditions.push({ session: new RegExp(userMobile10) });
+                    }
+                    if (userConnectedNum10) {
+                        orConditions.push({ from: new RegExp(userConnectedNum10) });
+                        orConditions.push({ session: new RegExp(userConnectedNum10) });
+                    }
+                    dbQuery.$or = orConditions;
+                }
+                rawUserReports = await MessageReportModel.find(dbQuery).sort({ date: -1 }).limit(5000).lean();
+            } catch (dbErr) {
+                console.warn('[Reports API] MongoDB query warning:', dbErr.message);
+            }
+        }
+
+        if (!rawUserReports || rawUserReports.length === 0) {
+            rawUserReports = getMessageReports(req.user);
+        }
+
+        const allUserReports = rawUserReports.map(r => {
             // Infer or normalize type
             let msgType = r.type;
             if (!msgType) {
@@ -2891,5 +3126,6 @@ module.exports = {
     handleIncomingMessageFromSocket,
     unwrapMessage,
     extractMessageText,
-    saveContact
+    saveContact,
+    initMongoDataSync
 };
