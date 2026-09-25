@@ -22,6 +22,12 @@ const UserSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now },
     expiresAt: Date,
   }],
+  autoSendImage: {
+    enabled: { type: Boolean, default: false },
+    imageUrl: { type: String, default: '' },
+    fileName: { type: String, default: '' },
+    updatedAt: { type: Date, default: Date.now },
+  },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });
@@ -1623,6 +1629,110 @@ router.post('/api/settings/company', express.json({ limit: '15mb' }), authRequir
     });
   } catch (error) {
     console.error('Save company settings error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 13. User / Admin: Get Auto Send Image settings
+router.get('/api/user/settings/auto-image', authRequired, async (req, res) => {
+  try {
+    const user = req.user;
+    const autoSendImage = user.autoSendImage || {
+      enabled: false,
+      imageUrl: '',
+      fileName: '',
+      updatedAt: null
+    };
+    res.json({ success: true, autoSendImage });
+  } catch (error) {
+    console.error('Get auto-image settings error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 14. User / Admin: Save / Update Auto Send Image settings
+router.post('/api/user/settings/auto-image', express.json({ limit: '15mb' }), authRequired, async (req, res) => {
+  try {
+    const user = req.user;
+    const { enabled, imageUrl, fileData, fileName } = req.body || {};
+
+    let finalImageUrl = (typeof imageUrl === 'string' ? imageUrl.trim() : '');
+    let finalFileName = (typeof fileName === 'string' ? fileName.trim() : '');
+
+    // If base64 file data is provided, save it to media_storage
+    if (fileData && typeof fileData === 'string' && fileData.startsWith('data:image/')) {
+      const base64Clean = fileData.replace(/^data:.*?;base64,/, '');
+      const buffer = Buffer.from(base64Clean, 'base64');
+      const MEDIA_DIR = path.join(__dirname, 'media_storage');
+      if (!fs.existsSync(MEDIA_DIR)) fs.mkdirSync(MEDIA_DIR, { recursive: true });
+
+      let ext = '.jpg';
+      if (fileData.startsWith('data:image/png')) ext = '.png';
+      else if (fileData.startsWith('data:image/jpeg')) ext = '.jpg';
+      else if (fileData.startsWith('data:image/webp')) ext = '.webp';
+      else if (fileData.startsWith('data:image/gif')) ext = '.gif';
+      else if (finalFileName) ext = path.extname(finalFileName) || '.jpg';
+
+      const savedName = `auto_img_${user.userId || 'usr'}_${Date.now()}${ext}`;
+      fs.writeFileSync(path.join(MEDIA_DIR, savedName), buffer);
+      finalImageUrl = `/media/${savedName}`;
+      if (!finalFileName) finalFileName = savedName;
+    }
+
+    user.autoSendImage = {
+      enabled: Boolean(enabled),
+      imageUrl: finalImageUrl,
+      fileName: finalFileName,
+      updatedAt: new Date()
+    };
+
+    await user.save();
+
+    // Invalidate API Token cache in index.js so incoming /send-text uses new settings immediately
+    try {
+      const { invalidateApiTokenCache } = require('./index');
+      if (typeof invalidateApiTokenCache === 'function') {
+        invalidateApiTokenCache(user.apiToken);
+      }
+    } catch (cacheErr) {}
+
+    res.json({
+      success: true,
+      autoSendImage: user.autoSendImage,
+      message: 'Auto Send Image settings saved successfully!'
+    });
+  } catch (error) {
+    console.error('Save auto-image settings error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 15. User / Admin: Remove / Disable Auto Send Image
+router.delete('/api/user/settings/auto-image', authRequired, async (req, res) => {
+  try {
+    const user = req.user;
+    user.autoSendImage = {
+      enabled: false,
+      imageUrl: '',
+      fileName: '',
+      updatedAt: new Date()
+    };
+    await user.save();
+
+    try {
+      const { invalidateApiTokenCache } = require('./index');
+      if (typeof invalidateApiTokenCache === 'function') {
+        invalidateApiTokenCache(user.apiToken);
+      }
+    } catch (cacheErr) {}
+
+    res.json({
+      success: true,
+      autoSendImage: user.autoSendImage,
+      message: 'Auto Send Image removed successfully.'
+    });
+  } catch (error) {
+    console.error('Delete auto-image settings error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

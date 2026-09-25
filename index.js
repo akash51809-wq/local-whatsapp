@@ -78,8 +78,8 @@ if (!fs.existsSync(MEDIA_DIR)) {
     }
 }
 
-// Protected Media Route: requires authentication, protects against path traversal
-app.get('/media/:filename', authRequired, (req, res) => {
+// Media Storage Route: allows auto_img and company assets preview, protects against path traversal
+app.get('/media/:filename', (req, res, next) => {
     try {
         const rawFilename = req.params.filename || '';
         const safeFilename = path.basename(rawFilename);
@@ -89,11 +89,20 @@ app.get('/media/:filename', authRequired, (req, res) => {
             return res.status(403).json({ success: false, message: 'Access forbidden: invalid path.' });
         }
 
-        if (!fs.existsSync(filePath)) {
-            return res.status(404).json({ success: false, message: 'Media file not found.' });
+        // Allow preview without mandatory header auth for auto send images and company assets
+        if (safeFilename.startsWith('auto_img_') || safeFilename.startsWith('company_')) {
+            if (!fs.existsSync(filePath)) {
+                return res.status(404).json({ success: false, message: 'Media file not found.' });
+            }
+            return res.sendFile(filePath);
         }
 
-        return res.sendFile(filePath);
+        return authRequired(req, res, () => {
+            if (!fs.existsSync(filePath)) {
+                return res.status(404).json({ success: false, message: 'Media file not found.' });
+            }
+            return res.sendFile(filePath);
+        });
     } catch (err) {
         console.error('Media fetch error:', err.message);
         return res.status(500).json({ success: false, message: 'Error retrieving media file.' });
@@ -2340,6 +2349,14 @@ app.post('/api/settings/webhook', authRequired, adminRequired, (req, res) => {
 
 const apiTokenCache = new Map();
 
+function invalidateApiTokenCache(token) {
+    if (token) {
+        apiTokenCache.delete(token);
+    } else {
+        apiTokenCache.clear();
+    }
+}
+
 async function handleSendText(req, res) {
     res.setHeader('Connection', 'keep-alive');
     try {
@@ -2405,6 +2422,10 @@ async function handleSendText(req, res) {
             const settings = getApiSettings();
             if (!user && token === settings.token) {
                 isGlobalAdmin = true;
+                try {
+                    const { User } = require('./auth');
+                    user = await User.findOne({ role: 'admin', status: 'active' }).lean();
+                } catch {}
             }
 
             if (!user && !isGlobalAdmin) {
@@ -2473,6 +2494,53 @@ async function handleSendText(req, res) {
 
         const ownerUserId = isGlobalAdmin ? 'admin' : (user?.userId || null);
 
+        // Resolve Auto Send Image if enabled for the user
+        let messagePayload = { text: messageText };
+        let messageType = 'text';
+        let autoImageAttached = false;
+
+        const autoSendConfig = user?.autoSendImage;
+        if (autoSendConfig && autoSendConfig.enabled && autoSendConfig.imageUrl) {
+            const rawImg = String(autoSendConfig.imageUrl).trim();
+            if (rawImg.startsWith('/media/')) {
+                const safeName = path.basename(rawImg.split('?')[0]);
+                const localPath = path.resolve(MEDIA_DIR, safeName);
+                if (fs.existsSync(localPath)) {
+                    try {
+                        const imgBuffer = fs.readFileSync(localPath);
+                        messagePayload = {
+                            image: imgBuffer,
+                            caption: messageText || undefined
+                        };
+                        messageType = 'image';
+                        autoImageAttached = true;
+                    } catch (readErr) {
+                        console.warn('[API /send-text] Error reading autoSendImage buffer:', readErr.message);
+                    }
+                }
+            } else if (rawImg.startsWith('data:image/')) {
+                try {
+                    const base64Clean = rawImg.replace(/^data:.*?;base64,/, '');
+                    const imgBuffer = Buffer.from(base64Clean, 'base64');
+                    messagePayload = {
+                        image: imgBuffer,
+                        caption: messageText || undefined
+                    };
+                    messageType = 'image';
+                    autoImageAttached = true;
+                } catch (b64Err) {
+                    console.warn('[API /send-text] Error parsing base64 autoSendImage:', b64Err.message);
+                }
+            } else if (rawImg.startsWith('http://') || rawImg.startsWith('https://')) {
+                messagePayload = {
+                    image: { url: rawImg },
+                    caption: messageText || undefined
+                };
+                messageType = 'image';
+                autoImageAttached = true;
+            }
+        }
+
         // Fast / Async Mode: Instant HTTP response under 15ms
         if (isAsync) {
             const tempMessageId = 'api_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
@@ -2484,13 +2552,14 @@ async function handleSendText(req, res) {
                     recipientType: isGroup ? 'group' : 'user',
                     message: messageText,
                     session: activeSession10 || providedSession || null,
+                    autoImageAttached: autoImageAttached,
                     messageId: tempMessageId
                 }
             });
 
             setImmediate(async () => {
                 try {
-                    const sendResult = await activeSocket.sendMessage(jid, { text: messageText });
+                    const sendResult = await activeSocket.sendMessage(jid, messagePayload);
                     const messageId = sendResult?.key?.id || tempMessageId;
                     appendMessageReport({
                         id: messageId,
@@ -2501,7 +2570,7 @@ async function handleSendText(req, res) {
                         status: 'sent',
                         session: activeSession10 || providedSession || 'default',
                         ownerUserId: ownerUserId,
-                        type: 'text',
+                        type: messageType,
                         source: isGroup ? 'group' : 'api'
                     });
                     const incomingRecord = {
@@ -2514,6 +2583,7 @@ async function handleSendText(req, res) {
                         timestamp: Date.now(),
                         isRead: true,
                         isGroup: isGroup,
+                        type: messageType,
                         ownerUserId: ownerUserId
                     };
                     appendIncomingMessage(incomingRecord);
@@ -2550,7 +2620,7 @@ async function handleSendText(req, res) {
                         status: 'sent',
                         session: activeSession10 || providedSession || 'default',
                         ownerUserId: ownerUserId,
-                        type: 'text',
+                        type: messageType,
                         source: isGroup ? 'group' : 'api'
                     });
 
@@ -2564,6 +2634,7 @@ async function handleSendText(req, res) {
                         timestamp: Date.now(),
                         isRead: true,
                         isGroup: isGroup,
+                        type: messageType,
                         ownerUserId: ownerUserId
                     };
                     appendIncomingMessage(incomingRecord);
@@ -2580,7 +2651,7 @@ async function handleSendText(req, res) {
             });
         }
 
-        const sendPromise = activeSocket.sendMessage(jid, { text: messageText });
+        const sendPromise = activeSocket.sendMessage(jid, messagePayload);
         const timeoutPromise = new Promise((resolve) => {
             setTimeout(() => resolve({ __fastTimeout: true }), 2200);
         });
@@ -2598,6 +2669,7 @@ async function handleSendText(req, res) {
                     recipientType: isGroup ? 'group' : 'user',
                     message: messageText,
                     session: activeSession10 || providedSession || null,
+                    autoImageAttached: autoImageAttached,
                     messageId: fallbackMsgId
                 }
             });
@@ -2606,7 +2678,7 @@ async function handleSendText(req, res) {
             sendPromise.then((sendRes) => {
                 const finalMsgId = sendRes?.key?.id || fallbackMsgId;
                 handleBackgroundLogging(finalMsgId);
-                console.log(`[API /send-text Background] Message delivered to ${normalizedTo} (${isGroup ? 'group' : 'user'}) via session ${activeSession10 || 'default'} (ID: ${finalMsgId})`);
+                console.log(`[API /send-text Background] ${autoImageAttached ? 'Image+' : ''}Message delivered to ${normalizedTo} (${isGroup ? 'group' : 'user'}) via session ${activeSession10 || 'default'} (ID: ${finalMsgId})`);
             }).catch((sendErr) => {
                 console.error('[API /send-text Background Error]:', sendErr.message);
             });
@@ -2623,12 +2695,13 @@ async function handleSendText(req, res) {
                 recipientType: isGroup ? 'group' : 'user',
                 message: messageText,
                 session: activeSession10 || providedSession || null,
+                autoImageAttached: autoImageAttached,
                 messageId: actualMessageId
             }
         });
 
         handleBackgroundLogging(actualMessageId);
-        console.log(`[API /send-text] Message sent successfully to ${normalizedTo} (${isGroup ? 'group' : 'user'}) via session ${activeSession10 || 'default'} (ID: ${actualMessageId})`);
+        console.log(`[API /send-text] ${autoImageAttached ? 'Image+' : ''}Message sent successfully to ${normalizedTo} (${isGroup ? 'group' : 'user'}) via session ${activeSession10 || 'default'} (ID: ${actualMessageId})`);
         return;
     } catch (error) {
         console.error('Error in /send-text API:', error);
@@ -3127,5 +3200,6 @@ module.exports = {
     unwrapMessage,
     extractMessageText,
     saveContact,
-    initMongoDataSync
+    initMongoDataSync,
+    invalidateApiTokenCache
 };
