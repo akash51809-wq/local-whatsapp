@@ -12,7 +12,14 @@ export default function SettingsPage({ defaultTab = 'company' }) {
     updateCompanySettings 
   } = useAuth()
 
-  const [activeTab, setActiveTab] = useState(defaultTab)
+  // Company settings tab is strictly for admin. Regular users can only access system tab.
+  const [activeTab, setActiveTab] = useState(() => (isAdmin ? defaultTab : 'system'))
+
+  useEffect(() => {
+    if (!isAdmin && activeTab === 'company') {
+      setActiveTab('system')
+    }
+  }, [isAdmin, activeTab])
 
   // Company Settings Form State
   const [form, setForm] = useState({
@@ -189,24 +196,28 @@ export default function SettingsPage({ defaultTab = 'company' }) {
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
         <div>
           <h4 className="page-title mb-1 font-weight-bold" style={{ fontSize: '1.25rem', color: 'var(--text-main, #282f53)' }}>
-            ⚙️ System &amp; Brand Settings
+            {isAdmin ? '⚙️ System & Brand Settings' : '⚙️ System & Security Settings'}
           </h4>
           <span className="text-muted" style={{ fontSize: '0.8rem' }}>
-            कंपनी ब्रांडिंग, फेविकॉन, लोगो और सर्वर सुरक्षा कॉन्फ़िगरेशन
+            {isAdmin 
+              ? 'कंपनी ब्रांडिंग, फेविकॉन, लोगो और सर्वर सुरक्षा कॉन्फ़िगरेशन'
+              : 'पासवर्ड बदलें, सेशन और खाता सुरक्षा कॉन्फ़िगरेशन'}
           </span>
         </div>
       </div>
 
       {/* Tabs Header */}
       <div className="users-compact-toolbar mb-3 p-1 d-flex flex-wrap gap-1 align-items-center">
-        <button
-          type="button"
-          onClick={() => setActiveTab('company')}
-          className={`btn ${activeTab === 'company' ? 'btn-primary' : 'btn-white'}`}
-          style={{ height: 34, fontSize: '0.82rem', padding: '0 16px', borderRadius: 6 }}
-        >
-          🏢 1. Company Setting
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('company')}
+            className={`btn ${activeTab === 'company' ? 'btn-primary' : 'btn-white'}`}
+            style={{ height: 34, fontSize: '0.82rem', padding: '0 16px', borderRadius: 6 }}
+          >
+            🏢 1. Company Setting
+          </button>
+        )}
 
         <button
           type="button"
@@ -214,7 +225,7 @@ export default function SettingsPage({ defaultTab = 'company' }) {
           className={`btn ${activeTab === 'system' ? 'btn-primary' : 'btn-white'}`}
           style={{ height: 34, fontSize: '0.82rem', padding: '0 16px', borderRadius: 6 }}
         >
-          🔒 2. System &amp; Security
+          {isAdmin ? '🔒 2. System & Security' : '🔒 1. System & Security'}
         </button>
 
         <button
@@ -224,7 +235,7 @@ export default function SettingsPage({ defaultTab = 'company' }) {
           style={{ height: 34, fontSize: '0.82rem', padding: '0 14px', borderRadius: 6, opacity: 0.6, cursor: 'not-allowed' }}
           title="Upcoming tab"
         >
-          🔔 3. Notifications <small style={{ fontSize: 9, opacity: 0.8, marginLeft: 4 }}>Soon</small>
+          {isAdmin ? '🔔 3. Notifications' : '🔔 2. Notifications'} <small style={{ fontSize: 9, opacity: 0.8, marginLeft: 4 }}>Soon</small>
         </button>
 
         <button
@@ -234,14 +245,14 @@ export default function SettingsPage({ defaultTab = 'company' }) {
           style={{ height: 34, fontSize: '0.82rem', padding: '0 14px', borderRadius: 6, opacity: 0.6, cursor: 'not-allowed' }}
           title="Upcoming tab"
         >
-          🌐 4. Localization <small style={{ fontSize: 9, opacity: 0.8, marginLeft: 4 }}>Soon</small>
+          {isAdmin ? '🌐 4. Localization' : '🌐 3. Localization'} <small style={{ fontSize: 9, opacity: 0.8, marginLeft: 4 }}>Soon</small>
         </button>
       </div>
 
       {/* ============================================================== */}
-      {/* TAB 1: COMPANY SETTINGS                                         */}
+      {/* TAB 1: COMPANY SETTINGS (ADMIN ONLY)                           */}
       {/* ============================================================== */}
-      {activeTab === 'company' && (
+      {isAdmin && activeTab === 'company' && (
         <div className="row g-3">
           {/* Left Column: Form Settings */}
           <div className="col-lg-7 col-12">

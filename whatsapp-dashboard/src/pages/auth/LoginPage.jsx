@@ -37,7 +37,11 @@ export function LoginPage() {
       })
       if (d.success) { 
         handleLogin(d.user.token, d.user)
-        navigate('/dashboard')
+        if (d.user && d.user.role === 'admin') {
+          navigate('/admin')
+        } else {
+          navigate('/dashboard')
+        }
       } 
     } catch (e) { 
       setErr(e.message || 'Login failed') 

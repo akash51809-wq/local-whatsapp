@@ -22,7 +22,7 @@ export function Sidebar() {
   return (
     <aside className="app-sidebar">
       <div className="app-sidebar__logo">
-        <NavLink className="header-brand" to="/dashboard" onClick={closeMobile} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <NavLink className="header-brand" to={isAdmin ? "/admin" : "/dashboard"} onClick={closeMobile} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {companySettings?.logoUrl ? (
             <img 
               src={companySettings.logoUrl} 
@@ -140,7 +140,8 @@ export function Sidebar() {
               <li><h3>ADMINISTRATION</h3></li>
               <li className="slide">
                 <NavLink 
-                  to="/user" 
+                  to="/admin" 
+                  end
                   className={({ isActive }) => `side-menu__item ${isActive ? 'active' : ''}`}
                   onClick={closeMobile}
                 >
@@ -183,7 +184,7 @@ export function Sidebar() {
                   <span className="shape1"></span>
                   <span className="shape2"></span>
                   <span className="side-menu__icon"><NavIcon name="system" fallback="⚙" /></span>
-                  <span className="side-menu__label">Settings</span>
+                  <span className="side-menu__label">Company Settings</span>
                 </NavLink>
               </li>
             </>
@@ -220,14 +221,14 @@ export function Sidebar() {
           </li>
           <li className="slide">
             <NavLink 
-              to="/settings" 
+              to={isAdmin ? "/system" : "/settings"} 
               className={({ isActive }) => `side-menu__item ${isActive ? 'active' : ''}`}
               onClick={closeMobile}
             >
               <span className="shape1"></span>
               <span className="shape2"></span>
               <span className="side-menu__icon"><NavIcon name="system" fallback="⚙" /></span>
-              <span className="side-menu__label">System &amp; Settings</span>
+              <span className="side-menu__label">{isAdmin ? "System & Security" : "System & Settings"}</span>
             </NavLink>
           </li>
         </ul>

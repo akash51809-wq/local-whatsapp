@@ -35,11 +35,16 @@ function AdminRoute({ children }) {
 }
 
 function PublicOnlyRoute({ children }) {
-  const { login } = useAuth()
+  const { login, isAdmin } = useAuth()
   if (login) {
-    return <Navigate to="/dashboard" replace />
+    return <Navigate to={isAdmin ? "/admin" : "/dashboard"} replace />
   }
   return children
+}
+
+function RootRedirect() {
+  const { isAdmin } = useAuth()
+  return <Navigate to={isAdmin ? "/admin" : "/dashboard"} replace />
 }
 
 export default function AppRoutes() {
@@ -64,7 +69,7 @@ export default function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route index element={<RootRedirect />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="send" element={<SendPage />} />
         <Route path="groups" element={<GroupsPage />} />
@@ -79,26 +84,19 @@ export default function AppRoutes() {
         <Route path="plans" element={<UserPlansPage />} />
         <Route path="subscription" element={<Navigate to="/plans" replace />} />
 
-        {/* Admin Routes */}
+        {/* Admin Routes - Main admin panel is /admin */}
         <Route 
-          path="user" 
+          path="admin" 
           element={
             <AdminRoute>
               <UsersPage />
             </AdminRoute>
           } 
         />
-        <Route path="users" element={<Navigate to="/user" replace />} />
-        <Route path="admin/users" element={<Navigate to="/user" replace />} />
+        <Route path="admin/users" element={<Navigate to="/admin" replace />} />
+        <Route path="user" element={<Navigate to="/admin" replace />} />
+        <Route path="users" element={<Navigate to="/admin" replace />} />
         
-        <Route 
-          path="admin" 
-          element={
-            <AdminRoute>
-              <AdminPlansPage />
-            </AdminRoute>
-          } 
-        />
         <Route 
           path="admin/plans" 
           element={
@@ -123,14 +121,21 @@ export default function AppRoutes() {
         <Route path="api" element={<ApiPage />} />
         <Route path="system" element={<SettingsPage defaultTab="system" />} />
         <Route path="settings" element={<SettingsPage defaultTab="company" />} />
-        <Route path="admin/settings" element={<Navigate to="/settings" replace />} />
+        <Route 
+          path="admin/settings" 
+          element={
+            <AdminRoute>
+              <SettingsPage defaultTab="company" />
+            </AdminRoute>
+          } 
+        />
 
         {/* Default fallback inside layout */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<RootRedirect />} />
       </Route>
 
       {/* Global Fallback */}
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<RootRedirect />} />
     </Routes>
   )
 }

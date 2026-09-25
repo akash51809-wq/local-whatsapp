@@ -11,10 +11,10 @@ const pageTitles = {
   '/chat': 'Incoming Messages',
   '/report': 'Message Reports',
   '/reports': 'Message Reports',
+  '/admin': 'User Management',
+  '/admin/users': 'User Management',
   '/user': 'User Management',
   '/users': 'User Management',
-  '/admin/users': 'User Management',
-  '/admin': 'Plan Management',
   '/admin/plans': 'Plan Management',
   '/payment/daybook': 'Purchase Requests',
   '/admin/plan-requests': 'Purchase Requests',
@@ -22,9 +22,9 @@ const pageTitles = {
   '/plans': 'Pricing & Plans',
   '/subscription': 'Pricing & Plans',
   '/api': 'API & Webhook',
-  '/system': 'System & Settings',
-  '/settings': 'System Settings',
-  '/admin/settings': 'System Settings'
+  '/system': 'System & Security',
+  '/settings': 'Settings',
+  '/admin/settings': 'Company Settings'
 }
 
 export function Navbar() {
@@ -44,7 +44,9 @@ export function Navbar() {
 
   const location = useLocation()
   const currentPath = location.pathname
-  const pageTitle = pageTitles[currentPath] || 'WhatsApp Dashboard'
+  const pageTitle = (currentPath === '/settings')
+    ? (isAdmin ? 'Company Settings' : 'System & Security')
+    : (pageTitles[currentPath] || 'WhatsApp Dashboard')
 
   return (
     <header className="app-header header">
