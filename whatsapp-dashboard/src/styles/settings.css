@@ -310,3 +310,91 @@
   .wa-save-btn { align-self: flex-start; }
   .gemini-row { grid-template-columns: 1fr 1fr auto; }
 }
+
+/* ── Company Branding & Previews ─────────────────────────────────── */
+.preview-box {
+  border: 1px solid rgba(30,58,45,.10);
+  border-radius: 12px;
+  background: #f8faf8;
+  padding: 14px;
+  margin-top: 10px;
+}
+.browser-tab-mock {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px 8px 0 0;
+  padding: 6px 14px;
+  box-shadow: 0 2px 5px rgba(0,0,0,.04);
+  font-size: 12px;
+  font-weight: 700;
+  color: #374151;
+  max-width: 260px;
+}
+.browser-tab-mock img {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  object-fit: contain;
+}
+.browser-tab-mock .tab-close {
+  color: #9ca3af;
+  margin-left: auto;
+  font-size: 14px;
+  cursor: default;
+}
+.sidebar-logo-mock {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  margin-top: 8px;
+}
+.sidebar-logo-mock.light {
+  background: rgba(255,255,255,.95);
+  border: 1px solid rgba(30,58,45,.12);
+  color: #183126;
+}
+.sidebar-logo-mock.dark {
+  background: #081610;
+  border: 1px solid rgba(53,227,154,.2);
+  color: #eff8ff;
+}
+.sidebar-logo-mock img {
+  max-height: 38px;
+  max-width: 140px;
+  object-fit: contain;
+}
+
+/* ── System Info Stats ────────────────────────────────────────────── */
+.system-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+.sys-stat-card {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(30,58,45,.08);
+  background: #fff;
+}
+.sys-stat-card small {
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  color: #718078;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+}
+.sys-stat-card strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  color: #183126;
+  margin-top: 4px;
+}
+
