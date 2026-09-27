@@ -131,6 +131,7 @@ export default function AppRoutes() {
 
         {/* API & System & Settings */}
         <Route path="api" element={<ApiPage />} />
+        <Route path="api-docs" element={<Navigate to="/api" replace />} />
         <Route path="system" element={<SettingsPage defaultTab="security" />} />
         <Route path="settings" element={<SettingsPage defaultTab="api" />} />
         <Route 

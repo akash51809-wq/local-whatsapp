@@ -2361,8 +2361,8 @@ function invalidateApiTokenCache(token) {
 async function handleSendText(req, res) {
     res.setHeader('Connection', 'keep-alive');
     try {
-        const token = String(req.query.token || req.body?.token || req.headers['x-api-token'] || '').trim();
-        const to = String(req.query.to || req.body?.to || '').trim();
+        const token = String(req.query.token || req.body?.token || req.headers['x-api-token'] || (req.headers['authorization'] ? req.headers['authorization'].replace(/^Bearer\s+/i, '') : '') || '').trim();
+        const to = String(req.query.to || req.body?.to || req.body?.number || req.body?.groupId || '').trim();
         const rawMessage = req.query.message !== undefined ? req.query.message : (req.body?.message !== undefined ? req.body?.message : (req.query.text !== undefined ? req.query.text : req.body?.text));
         const providedSession = String(req.query.session || req.body?.session || '').trim();
         const isAsync = req.query.async === '1' || req.query.fast === '1' || req.body?.async === 1;
@@ -2728,6 +2728,8 @@ app.get('/send-text', handleSendText);
 app.post('/send-text', handleSendText);
 app.get('/api/send-text', handleSendText);
 app.post('/api/send-text', handleSendText);
+app.post('/api/message/send', handleSendText);
+app.post('/api/group/message/send', handleSendText);
 
 /* =========================================================
    WHATSAPP CONNECTION

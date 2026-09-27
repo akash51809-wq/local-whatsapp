@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import api from '../../services/api'
+import '../../styles/api-docs.css'
 
-export function ApiPage() { 
-  const { notify } = useAuth()
+export function ApiPage() {
+  const { notify, user } = useAuth()
   const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
   const [copied, setCopied] = useState('')
   const [testTo, setTestTo] = useState('')
@@ -13,11 +15,25 @@ export function ApiPage() {
   const [testing, setTesting] = useState(false)
   const [regenLoading, setRegenLoading] = useState(false)
 
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://your-domain.com'
+
   const loadApiData = useCallback(() => {
+    setLoading(true)
     api('/api/user/api-token')
-      .then(setData)
+      .then(res => {
+        setData(res)
+        setLoading(false)
+      })
       .catch(() => {
-        api('/api/settings/api-token').then(setData).catch(e => setErr(e.message))
+        api('/api/settings/api-token')
+          .then(res => {
+            setData(res)
+            setLoading(false)
+          })
+          .catch(e => {
+            setErr(e.message)
+            setLoading(false)
+          })
       })
   }, [])
 
@@ -25,11 +41,12 @@ export function ApiPage() {
     loadApiData()
   }, [loadApiData])
 
-  const copyText = (text, label) => {
+  const copyText = (text, key) => {
+    if (!text) return
     navigator.clipboard.writeText(text)
-    setCopied(label)
-    if (notify) notify(`${label} copied to clipboard!`)
-    setTimeout(() => setCopied(''), 2500)
+    setCopied(key)
+    if (notify) notify(`${key} copied to clipboard!`)
+    setTimeout(() => setCopied(''), 2000)
   }
 
   const regenerateToken = async () => {
@@ -51,17 +68,29 @@ export function ApiPage() {
   const runTestApi = async (e) => {
     e.preventDefault()
     if (!testTo.trim() || !testMsg.trim()) {
-      alert('Recipient Number और Message दोनों दर्ज करें।')
+      alert('Recipient Number / Group ID और Message दोनों दर्ज करें।')
       return
     }
     setTesting(true)
     setTestResult(null)
     try {
-      const url = `/send-text?token=${encodeURIComponent(data?.token || '')}&to=${encodeURIComponent(testTo.trim())}&message=${encodeURIComponent(testMsg.trim())}${data?.session ? `&session=${encodeURIComponent(data.session)}` : ''}`
-      const res = await fetch(url)
+      const url = `/api/message/send`
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${data?.token || ''}`
+        },
+        body: JSON.stringify({
+          token: data?.token || '',
+          number: testTo.trim(),
+          message: testMsg.trim(),
+          session: data?.session || ''
+        })
+      })
       const json = await res.json()
       setTestResult(json)
-      if (json.status) {
+      if (json.status || json.success) {
         if (notify) notify('API Test message sent successfully!')
       }
     } catch (e) {
@@ -71,162 +100,384 @@ export function ApiPage() {
     }
   }
 
-  const sampleUrl = data?.sampleProductionUrl || data?.sampleUrl || `https://local-whatsapp.onrender.com/send-text?token=${data?.token || 'YOUR_TOKEN'}&to=9876543210&message=Hello${data?.session ? `&session=${data.session}` : ''}`
+  const currentToken = data?.token || 'YOUR_API_TOKEN'
+  const currentSession = data?.session || (user?.mobile || 'main')
+
+  const singleSendUrl = `${baseUrl}/api/message/send`
+  const groupSendUrl = `${baseUrl}/api/group/message/send`
+  const getUrl = `${baseUrl}/send-text?token=${currentToken}&to=9876543210&message=Hello+from+API${data?.session ? `&session=${data.session}` : ''}`
+
+  const singleRequestBody = JSON.stringify({
+    number: "+919876543210",
+    message: "Hello from API",
+    token: currentToken,
+    session: currentSession
+  }, null, 2)
+
+  const groupRequestBody = JSON.stringify({
+    groupId: "120363012345678901@g.us",
+    message: "Hello group",
+    token: currentToken,
+    session: currentSession
+  }, null, 2)
 
   return (
-    <section className="page-content">
-      <div className="section-head">
+    <div className="content api-content">
+      {/* Intro Header */}
+      <div className="api-intro">
         <div>
-          <span className="eyebrow">DEVELOPER & EXTERNAL INTEGRATION</span>
-          <h2>WhatsApp Send-Text API</h2>
-          <p>इस API का उपयोग करके किसी भी सॉफ्टवेयर, CRM या वेबसाइट से ऑटोमैटिक WhatsApp मैसेज भेजें।</p>
+          <h1>API Docs</h1>
+          <p>Integrate automated WhatsApp messaging into your website, CRM, ERP, or billing software.</p>
+        </div>
+        <div className="api-version">REST API <b>v1.0</b></div>
+      </div>
+
+      {err && <div className="alert" style={{ marginBottom: 16 }}>⚠ {err}</div>}
+
+      {/* API Credentials & Session Cards */}
+      <div className="api-credentials-grid">
+        <div className="cred-card">
+          <small>Your Secret API Token</small>
+          <div className="cred-token-box">
+            <span className="cred-token-code">{loading ? 'Loading...' : currentToken}</span>
+            <button 
+              type="button" 
+              className={`copy-btn ${copied === 'Token' ? 'copied' : ''}`} 
+              onClick={() => copyText(data?.token || '', 'Token')}
+            >
+              <span>{copied === 'Token' ? '✓' : '⧉'}</span> {copied === 'Token' ? 'Copied' : 'Copy'}
+            </button>
+            <button 
+              type="button" 
+              className="copy-btn" 
+              onClick={regenerateToken} 
+              disabled={regenLoading} 
+              title="Regenerate API Token"
+            >
+              <span>{regenLoading ? '...' : '🔄'}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="cred-card">
+          <small>Scanned WhatsApp Session</small>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <strong style={{ fontSize: 15, color: '#183126' }}>
+              {data?.session ? `+91 ${data.session}` : (data?.connectedNumber ? `+${data.connectedNumber}` : 'Not Scanned Yet')}
+            </strong>
+            <span className={`cred-status-pill ${data?.status === 'connected' ? 'connected' : 'offline'}`}>
+              <span className="dot" style={{ width: 6, height: 6, margin: 0 }}></span>
+              {data?.status === 'connected' ? 'Connected' : 'Offline'}
+            </span>
+          </div>
+        </div>
+
+        <div className="cred-card">
+          <small>API Server Base URL</small>
+          <div className="cred-token-box">
+            <span className="cred-token-code" style={{ fontSize: 12 }}>{baseUrl}</span>
+            <button 
+              type="button" 
+              className={`copy-btn ${copied === 'BaseURL' ? 'copied' : ''}`} 
+              onClick={() => copyText(baseUrl, 'BaseURL')}
+            >
+              <span>{copied === 'BaseURL' ? '✓' : '⧉'}</span> {copied === 'BaseURL' ? 'Copied' : 'Copy'}
+            </button>
+          </div>
         </div>
       </div>
 
-      {err && <div className="alert">⚠ {err}</div>}
-
-      {/* Token & Session Card */}
-      <div className="api-card" style={{ marginBottom: 24 }}>
-        <h3>🔑 आपकी API क्रेडेंशियल्स (API Credentials)</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginTop: 14 }}>
-          <div style={{ background: '#f8fafc', padding: 16, borderRadius: 10, border: '1px solid #e2e8f0' }}>
-            <small style={{ color: '#64748b', fontWeight: 700, display: 'block', marginBottom: 6 }}>YOUR API TOKEN</small>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <code style={{ fontSize: 14, background: '#fff', padding: '8px 12px', borderRadius: 6, border: '1px solid #cbd5e1', flex: 1, wordBreak: 'break-all' }}>
-                {data?.token || 'Loading...'}
-              </code>
-              <button className="secondary" onClick={() => copyText(data?.token || '', 'Token')} style={{ padding: '8px 12px' }}>
-                {copied === 'Token' ? '✓ Copied' : '📋 Copy'}
-              </button>
-              <button className="secondary" onClick={regenerateToken} disabled={regenLoading} title="Generate New Token" style={{ padding: '8px 10px' }}>
-                {regenLoading ? '...' : '🔄'}
-              </button>
-            </div>
+      {/* Section 01: Send Message API */}
+      <section className="api-section">
+        <div className="api-section-head">
+          <div className="api-number">01</div>
+          <div>
+            <h2>Send Message API</h2>
+            <p>Send a WhatsApp message to a single recipient or a prepared number.</p>
           </div>
-
-          <div style={{ background: '#f8fafc', padding: 16, borderRadius: 10, border: '1px solid #e2e8f0' }}>
-            <small style={{ color: '#64748b', fontWeight: 700, display: 'block', marginBottom: 6 }}>YOUR SCANNED WHATSAPP SESSION</small>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <span style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', background: '#fff', padding: '8px 14px', borderRadius: 6, border: '1px solid #cbd5e1', flex: 1 }}>
-                {data?.session ? `+91 ${data.session}` : (data?.connectedNumber ? `+${data.connectedNumber}` : 'Not Scanned Yet')}
-              </span>
-              <span style={{
-                padding: '6px 12px',
-                borderRadius: 20,
-                fontSize: 12,
-                fontWeight: 700,
-                background: data?.status === 'connected' ? '#dcfce7' : '#fee2e2',
-                color: data?.status === 'connected' ? '#15803d' : '#b91c1c'
-              }}>
-                {data?.status === 'connected' ? '● Connected' : '○ Offline'}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Live API URL Card */}
-      <div className="api-card" style={{ marginBottom: 24 }}>
-        <h3>🌐 HTTP GET / POST Endpoint URL</h3>
-        <p style={{ color: '#666', fontSize: 13, margin: '6px 0 12px' }}>
-          निचे दिए गए URL पर GET या POST रिक्वेस्ट भेजकर अपने स्कैन किए हुए WhatsApp नंबर से तुरंत मैसेज भेजें:
-        </p>
-
-        <div style={{ background: '#1e293b', color: '#f8fafc', padding: '14px 16px', borderRadius: 10, fontFamily: 'monospace', fontSize: 13, overflowX: 'auto', display: 'flex', alignItems: 'center', justifyItems: 'space-between', gap: 12 }}>
-          <span style={{ wordBreak: 'break-all' }}>{sampleUrl}</span>
-          <button 
-            onClick={() => copyText(sampleUrl, 'API URL')} 
-            style={{ background: '#128c7e', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 14px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
-          >
-            {copied === 'API URL' ? '✓ Copied' : '📋 Copy URL'}
-          </button>
+          <span className="method-badge post">POST</span>
         </div>
 
-        <div style={{ marginTop: 20 }}>
-          <h4 style={{ margin: '0 0 10px', fontSize: 14 }}>Parameter विवरण (Query Parameters):</h4>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <div className="api-io">
+          <article className="api-panel request-panel">
+            <div className="panel-title">
+              <div>
+                <span className="panel-icon">↗</span>
+                <div>
+                  <h3>Request URL</h3>
+                  <small>Endpoint and request example</small>
+                </div>
+              </div>
+              <button 
+                className={`copy-btn ${copied === 'url_01' ? 'copied' : ''}`} 
+                onClick={() => copyText(singleSendUrl, 'url_01')} 
+                type="button"
+              >
+                <span>{copied === 'url_01' ? '✓' : '⧉'}</span> {copied === 'url_01' ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <div className="url-box">
+              <span className="method-mini">POST</span>
+              <code>{singleSendUrl}</code>
+            </div>
+            <div className="code-title">REQUEST BODY (JSON)</div>
+            <pre className="code-block"><code>{singleRequestBody}</code></pre>
+          </article>
+
+          <article className="api-panel response-panel">
+            <div className="panel-title">
+              <div>
+                <span className="panel-icon response">✓</span>
+                <div>
+                  <h3>Response</h3>
+                  <small>Successful response</small>
+                </div>
+              </div>
+              <span className="status-badge">200 OK</span>
+            </div>
+            <pre className="code-block response-code"><code>{`{
+  "status": true,
+  "success": true,
+  "message": "Message sent"
+}`}</code></pre>
+          </article>
+        </div>
+      </section>
+
+      {/* Section 02: Send Message in Group */}
+      <section className="api-section">
+        <div className="api-section-head">
+          <div className="api-number">02</div>
+          <div>
+            <h2>Send Message in Group</h2>
+            <p>Send a WhatsApp message directly to a selected group.</p>
+          </div>
+          <span className="method-badge post">POST</span>
+        </div>
+
+        <div className="api-io">
+          <article className="api-panel request-panel">
+            <div className="panel-title">
+              <div>
+                <span className="panel-icon">↗</span>
+                <div>
+                  <h3>Request URL</h3>
+                  <small>Group messaging endpoint</small>
+                </div>
+              </div>
+              <button 
+                className={`copy-btn ${copied === 'url_02' ? 'copied' : ''}`} 
+                onClick={() => copyText(groupSendUrl, 'url_02')} 
+                type="button"
+              >
+                <span>{copied === 'url_02' ? '✓' : '⧉'}</span> {copied === 'url_02' ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <div className="url-box">
+              <span className="method-mini">POST</span>
+              <code>{groupSendUrl}</code>
+            </div>
+            <div className="code-title">REQUEST BODY (JSON)</div>
+            <pre className="code-block"><code>{groupRequestBody}</code></pre>
+          </article>
+
+          <article className="api-panel response-panel">
+            <div className="panel-title">
+              <div>
+                <span className="panel-icon response">✓</span>
+                <div>
+                  <h3>Response</h3>
+                  <small>Successful response</small>
+                </div>
+              </div>
+              <span className="status-badge">200 OK</span>
+            </div>
+            <pre className="code-block response-code"><code>{`{
+  "status": true,
+  "success": true,
+  "message": "Group message sent"
+}`}</code></pre>
+          </article>
+        </div>
+      </section>
+
+      {/* Section 03: HTTP GET URL API */}
+      <section className="api-section">
+        <div className="api-section-head">
+          <div className="api-number">03</div>
+          <div>
+            <h2>HTTP GET URL (Simple Webhook / URL Request)</h2>
+            <p>One-line instant URL request for Google Sheets, Zapier, Excel, Webhooks, or browser integration.</p>
+          </div>
+          <span className="method-badge get">GET</span>
+        </div>
+
+        <div className="api-io">
+          <article className="api-panel request-panel">
+            <div className="panel-title">
+              <div>
+                <span className="panel-icon">↗</span>
+                <div>
+                  <h3>Request URL</h3>
+                  <small>Instant URL format with query parameters</small>
+                </div>
+              </div>
+              <button 
+                className={`copy-btn ${copied === 'url_03' ? 'copied' : ''}`} 
+                onClick={() => copyText(getUrl, 'url_03')} 
+                type="button"
+              >
+                <span>{copied === 'url_03' ? '✓' : '⧉'}</span> {copied === 'url_03' ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <div className="url-box">
+              <span className="method-mini get">GET</span>
+              <code>{getUrl}</code>
+            </div>
+            <div className="code-title">SUPPORTED QUERY PARAMETERS</div>
+            <pre className="code-block"><code>{`token   : ${currentToken}
+to      : 9876543210 (or 120363012345678901@g.us)
+message : Hello from API (URL-encoded text)
+session : ${currentSession} (optional)
+voice   : 1 (optional, to send as voice audio note)`}</code></pre>
+          </article>
+
+          <article className="api-panel response-panel">
+            <div className="panel-title">
+              <div>
+                <span className="panel-icon response">✓</span>
+                <div>
+                  <h3>Response</h3>
+                  <small>Successful response</small>
+                </div>
+              </div>
+              <span className="status-badge">200 OK</span>
+            </div>
+            <pre className="code-block response-code"><code>{`{
+  "status": true,
+  "message": "Message sent successfully"
+}`}</code></pre>
+          </article>
+        </div>
+      </section>
+
+      {/* Parameter Specification Table Card */}
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="card-head">
+          <div>
+            <h3>API Parameters Reference</h3>
+            <p>All query and JSON body parameters supported by the messaging endpoints</p>
+          </div>
+        </div>
+        <div className="card-body" style={{ overflowX: 'auto' }}>
+          <table className="api-param-table">
             <thead>
-              <tr style={{ background: '#f1f5f9', textAlign: 'left' }}>
-                <th style={{ padding: 8, border: '1px solid #e2e8f0' }}>Parameter</th>
-                <th style={{ padding: 8, border: '1px solid #e2e8f0' }}>Type</th>
-                <th style={{ padding: 8, border: '1px solid #e2e8f0' }}>Required</th>
-                <th style={{ padding: 8, border: '1px solid #e2e8f0' }}>विवरण (Description)</th>
+              <tr>
+                <th>Parameter</th>
+                <th>Type</th>
+                <th>Required</th>
+                <th>Description</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td style={{ padding: 8, border: '1px solid #e2e8f0' }}><code>token</code></td>
-                <td style={{ padding: 8, border: '1px solid #e2e8f0' }}>String</td>
-                <td style={{ padding: 8, border: '1px solid #e2e8f0', color: '#16a34a', fontWeight: 700 }}>Yes</td>
-                <td style={{ padding: 8, border: '1px solid #e2e8f0' }}>आपका API Token (ऊपर से कॉपी करें)</td>
+                <td><code>token</code></td>
+                <td>String</td>
+                <td><span className="badge success">Required</span></td>
+                <td>Your secret API token. Can also be passed in HTTP header: <code>Authorization: Bearer YOUR_TOKEN</code> or <code>x-api-token</code>.</td>
               </tr>
               <tr>
-                <td style={{ padding: 8, border: '1px solid #e2e8f0' }}><code>to</code></td>
-                <td style={{ padding: 8, border: '1px solid #e2e8f0' }}>String</td>
-                <td style={{ padding: 8, border: '1px solid #e2e8f0', color: '#16a34a', fontWeight: 700 }}>Yes</td>
-                <td style={{ padding: 8, border: '1px solid #e2e8f0' }}>10-digit मोबाइल नंबर (e.g. 9876543210) या WhatsApp Group ID (e.g. 120363049565083040@g.us)</td>
+                <td><code>number</code> / <code>to</code></td>
+                <td>String</td>
+                <td><span className="badge success">Required</span></td>
+                <td>Recipient's 10-digit mobile number (e.g. <code>9876543210</code>) or group JID (e.g. <code>120363012345678901@g.us</code>).</td>
               </tr>
               <tr>
-                <td style={{ padding: 8, border: '1px solid #e2e8f0' }}><code>message</code></td>
-                <td style={{ padding: 8, border: '1px solid #e2e8f0' }}>String</td>
-                <td style={{ padding: 8, border: '1px solid #e2e8f0', color: '#16a34a', fontWeight: 700 }}>Yes</td>
-                <td style={{ padding: 8, border: '1px solid #e2e8f0' }}>भेजा जाने वाला टेक्स्ट संदेश (URL Encoded)</td>
+                <td><code>message</code></td>
+                <td>String</td>
+                <td><span className="badge success">Required</span></td>
+                <td>Text message content to send. Supports emojis and multi-line strings.</td>
               </tr>
               <tr>
-                <td style={{ padding: 8, border: '1px solid #e2e8f0' }}><code>session</code></td>
-                <td style={{ padding: 8, border: '1px solid #e2e8f0' }}>String</td>
-                <td style={{ padding: 8, border: '1px solid #e2e8f0', color: '#d97706' }}>Optional</td>
-                <td style={{ padding: 8, border: '1px solid #e2e8f0' }}>आपका 10 अंकों का स्कैन WhatsApp नंबर (e.g. {data?.session || '9876543210'})</td>
+                <td><code>session</code></td>
+                <td>String</td>
+                <td><span className="badge pending">Optional</span></td>
+                <td>Your 10-digit scanned WhatsApp number (e.g. <code>{currentSession}</code>). If omitted, default active session is used.</td>
+              </tr>
+              <tr>
+                <td><code>voice</code></td>
+                <td>Number / Boolean</td>
+                <td><span className="badge pending">Optional</span></td>
+                <td>Pass <code>1</code> or <code>true</code> to convert text into Hindi/English speech and send as a WhatsApp Voice Note (PTT).</td>
               </tr>
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Live API Tester */}
-      <div className="api-card">
-        <h3>⚡ Live API Tester (यहाँ से टेस्ट करें)</h3>
-        <p style={{ color: '#666', fontSize: 13, margin: '4px 0 16px' }}>नीचे नंबर/ग्रुप ID और मैसेज लिखकर सीधे API चलाकर टेस्ट करें:</p>
-        
-        <form onSubmit={runTestApi} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, alignItems: 'end' }}>
+      {/* Live Interactive API Tester */}
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="card-head">
           <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Recipient (मोबाइल नंबर या Group ID)</label>
-            <input 
-              placeholder="मोबाइल नंबर (e.g. 9876543210) या Group ID (@g.us)" 
-              value={testTo} 
-              onChange={e => setTestTo(e.target.value)} 
-              style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
-            />
+            <h3>⚡ Live API Tester (Console)</h3>
+            <p>Test sending real WhatsApp messages right from your browser using your active credentials</p>
           </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Message</label>
-            <input 
-              placeholder="मैसेज लिखें..." 
-              value={testMsg} 
-              onChange={e => setTestMsg(e.target.value)} 
-              style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
-            />
-          </div>
-          <div>
-            <button className="primary" disabled={testing || !data?.token} style={{ width: '100%', padding: '11px' }}>
-              {testing ? 'Sending...' : '🚀 Send Test API Request'}
-            </button>
-          </div>
-        </form>
+        </div>
+        <div className="card-body">
+          <form onSubmit={runTestApi} className="api-tester-form">
+            <div className="field">
+              <label>Recipient Number or Group ID</label>
+              <input 
+                className="input" 
+                placeholder="e.g. 9876543210 or group @g.us" 
+                value={testTo} 
+                onChange={e => setTestTo(e.target.value)} 
+                required 
+              />
+            </div>
+            <div className="field">
+              <label>Message Text</label>
+              <input 
+                className="input" 
+                placeholder="Type test message..." 
+                value={testMsg} 
+                onChange={e => setTestMsg(e.target.value)} 
+                required 
+              />
+            </div>
+            <div className="field" style={{ alignSelf: 'end' }}>
+              <button 
+                type="submit" 
+                className="btn primary" 
+                disabled={testing || !data?.token} 
+                style={{ width: '100%', height: 42, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                {testing ? 'Sending...' : '🚀 Send Test API Request'}
+              </button>
+            </div>
+          </form>
 
-        {testResult && (
-          <div style={{ marginTop: 16, background: testResult.status ? '#f0fdf4' : '#fef2f2', border: `1px solid ${testResult.status ? '#bbf7d0' : '#fecaca'}`, borderRadius: 8, padding: 14 }}>
-            <b style={{ color: testResult.status ? '#16a34a' : '#dc2626' }}>
-              {testResult.status ? '✓ Success: ' : '✗ Error: '}
-              {testResult.message}
-            </b>
-            <pre style={{ marginTop: 8, fontSize: 12, overflowX: 'auto', background: '#fff', padding: 10, borderRadius: 6, border: '1px solid #e2e8f0' }}>
-              {JSON.stringify(testResult, null, 2)}
-            </pre>
-          </div>
-        )}
+          {testResult && (
+            <div className={`api-tester-result ${testResult.status || testResult.success ? 'success' : 'error'}`}>
+              <strong style={{ color: testResult.status || testResult.success ? '#15803d' : '#b91c1c' }}>
+                {testResult.status || testResult.success ? '✓ API Success: ' : '✗ API Error: '}
+                {testResult.message || 'Response received'}
+              </strong>
+              <pre><code>{JSON.stringify(testResult, null, 2)}</code></pre>
+            </div>
+          )}
+        </div>
       </div>
-    </section>
+
+      {/* API Note Footer matching sample UI */}
+      <div className="api-note" style={{ marginTop: 20 }}>
+        <span>✦</span>
+        <div>
+          <strong>API Base URL</strong>
+          <small>All API requests should be sent to your active server address: <b>{baseUrl}</b></small>
+        </div>
+      </div>
+    </div>
   )
 }
 
