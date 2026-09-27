@@ -1789,6 +1789,242 @@ router.post('/api/user/tts-convert', authRequired, async (req, res) => {
   }
 });
 
+// =================== EXTENDED SETTINGS ROUTES ===================
+
+// 17. Admin: Get/Save API Setting (IP + Callback URL)
+const API_SETTINGS_FILE = path.join(__dirname, 'api_settings.json');
+function getApiSettingsFile() {
+  try {
+    if (fs.existsSync(API_SETTINGS_FILE)) {
+      return JSON.parse(fs.readFileSync(API_SETTINGS_FILE, 'utf-8') || '{}');
+    }
+  } catch (e) {}
+  return {};
+}
+function saveApiSettingsFile(data) {
+  try { fs.writeFileSync(API_SETTINGS_FILE, JSON.stringify(data, null, 2), 'utf-8'); } catch (e) {}
+}
+
+router.get('/api/settings/api-setting', authRequired, adminRequired, async (req, res) => {
+  try {
+    res.json({ success: true, data: getApiSettingsFile() });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.post('/api/settings/api-setting', authRequired, adminRequired, async (req, res) => {
+  try {
+    const { allowedIp, callbackUrl } = req.body || {};
+    const data = { allowedIp: String(allowedIp || '').trim(), callbackUrl: String(callbackUrl || '').trim(), updatedAt: new Date().toISOString() };
+    saveApiSettingsFile(data);
+    res.json({ success: true, message: 'API Setting saved.', data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 18. Admin: Get/Save G Drive Settings
+const GDRIVE_SETTINGS_FILE = path.join(__dirname, 'gdrive_settings.json');
+function getGDriveSettingsFile() {
+  try {
+    if (fs.existsSync(GDRIVE_SETTINGS_FILE)) {
+      return JSON.parse(fs.readFileSync(GDRIVE_SETTINGS_FILE, 'utf-8') || '{}');
+    }
+  } catch (e) {}
+  return {};
+}
+function saveGDriveSettingsFile(data) {
+  try { fs.writeFileSync(GDRIVE_SETTINGS_FILE, JSON.stringify(data, null, 2), 'utf-8'); } catch (e) {}
+}
+
+router.get('/api/settings/gdrive', authRequired, adminRequired, async (req, res) => {
+  try {
+    const data = getGDriveSettingsFile();
+    if (data.clientSecret) data.clientSecret = '***';
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.post('/api/settings/gdrive', authRequired, adminRequired, async (req, res) => {
+  try {
+    const { clientId, clientSecret, redirectUri } = req.body || {};
+    const existing = getGDriveSettingsFile();
+    const data = {
+      clientId: String(clientId || '').trim(),
+      clientSecret: clientSecret && clientSecret !== '***' ? String(clientSecret).trim() : (existing.clientSecret || ''),
+      redirectUri: String(redirectUri || '').trim(),
+      updatedAt: new Date().toISOString()
+    };
+    saveGDriveSettingsFile(data);
+    res.json({ success: true, message: 'G Drive settings saved.', data: { ...data, clientSecret: '***' } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 19. Admin: Get/Save Gmail Settings
+const GMAIL_SETTINGS_FILE = path.join(__dirname, 'gmail_settings.json');
+function getGmailSettingsFile() {
+  try {
+    if (fs.existsSync(GMAIL_SETTINGS_FILE)) {
+      return JSON.parse(fs.readFileSync(GMAIL_SETTINGS_FILE, 'utf-8') || '{}');
+    }
+  } catch (e) {}
+  return {};
+}
+function saveGmailSettingsFile(data) {
+  try { fs.writeFileSync(GMAIL_SETTINGS_FILE, JSON.stringify(data, null, 2), 'utf-8'); } catch (e) {}
+}
+
+router.get('/api/settings/gmail', authRequired, adminRequired, async (req, res) => {
+  try {
+    const data = getGmailSettingsFile();
+    if (data.appPassword) data.appPassword = '***';
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.post('/api/settings/gmail', authRequired, adminRequired, async (req, res) => {
+  try {
+    const { gmailAddress, smtpHost, smtpPort, appPassword } = req.body || {};
+    const existing = getGmailSettingsFile();
+    const data = {
+      gmailAddress: String(gmailAddress || '').trim(),
+      smtpHost: String(smtpHost || '').trim(),
+      smtpPort: String(smtpPort || '').trim(),
+      appPassword: appPassword && appPassword !== '***' ? String(appPassword).trim() : (existing.appPassword || ''),
+      updatedAt: new Date().toISOString()
+    };
+    saveGmailSettingsFile(data);
+    res.json({ success: true, message: 'Gmail settings saved.', data: { ...data, appPassword: '***' } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 20. Admin: Get/Save Gemini API Keys (multiple)
+const GEMINI_SETTINGS_FILE = path.join(__dirname, 'gemini_settings.json');
+function getGeminiSettingsFile() {
+  try {
+    if (fs.existsSync(GEMINI_SETTINGS_FILE)) {
+      return JSON.parse(fs.readFileSync(GEMINI_SETTINGS_FILE, 'utf-8') || '{"keys":[]}');
+    }
+  } catch (e) {}
+  return { keys: [] };
+}
+function saveGeminiSettingsFile(data) {
+  try { fs.writeFileSync(GEMINI_SETTINGS_FILE, JSON.stringify(data, null, 2), 'utf-8'); } catch (e) {}
+}
+
+router.get('/api/settings/gemini', authRequired, adminRequired, async (req, res) => {
+  try {
+    const data = getGeminiSettingsFile();
+    const masked = (data.keys || []).map(k => ({ ...k, apiKey: k.apiKey ? '***' + k.apiKey.slice(-4) : '' }));
+    res.json({ success: true, keys: masked });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.post('/api/settings/gemini', authRequired, adminRequired, async (req, res) => {
+  try {
+    const { keys } = req.body || {};
+    if (!Array.isArray(keys)) return res.status(400).json({ success: false, message: 'keys array required' });
+    const existing = getGeminiSettingsFile();
+    const processed = keys.map((k, i) => ({
+      id: k.id || `gemini_${Date.now()}_${i}`,
+      apiKey: k.apiKey && !k.apiKey.startsWith('***') ? String(k.apiKey).trim() : (existing.keys?.[i]?.apiKey || ''),
+      model: String(k.model || 'Gemini Flash').trim()
+    }));
+    saveGeminiSettingsFile({ keys: processed, updatedAt: new Date().toISOString() });
+    const masked = processed.map(k => ({ ...k, apiKey: k.apiKey ? '***' + k.apiKey.slice(-4) : '' }));
+    res.json({ success: true, message: 'Gemini settings saved.', keys: masked });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 21. Admin: Get/Save Email Template
+const EMAIL_TEMPLATE_FILE = path.join(__dirname, 'email_template.json');
+function getEmailTemplateFile() {
+  try {
+    if (fs.existsSync(EMAIL_TEMPLATE_FILE)) {
+      return JSON.parse(fs.readFileSync(EMAIL_TEMPLATE_FILE, 'utf-8') || '{}');
+    }
+  } catch (e) {}
+  return {};
+}
+function saveEmailTemplateFile(data) {
+  try { fs.writeFileSync(EMAIL_TEMPLATE_FILE, JSON.stringify(data, null, 2), 'utf-8'); } catch (e) {}
+}
+
+router.get('/api/settings/email-template', authRequired, adminRequired, async (req, res) => {
+  try {
+    res.json({ success: true, data: getEmailTemplateFile() });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.post('/api/settings/email-template', authRequired, adminRequired, async (req, res) => {
+  try {
+    const { subject, htmlTemplate, availableVariables } = req.body || {};
+    const data = {
+      subject: String(subject || '').trim(),
+      htmlTemplate: String(htmlTemplate || '').trim(),
+      availableVariables: String(availableVariables || '{{name}}, {{number}}, {{message}}').trim(),
+      updatedAt: new Date().toISOString()
+    };
+    saveEmailTemplateFile(data);
+    res.json({ success: true, message: 'Email template saved.', data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 22. Admin: Get/Save Message Queue Delay
+const WA_QUEUE_SETTINGS_FILE = path.join(__dirname, 'wa_queue_settings.json');
+function getWaQueueSettingsFile() {
+  try {
+    if (fs.existsSync(WA_QUEUE_SETTINGS_FILE)) {
+      return JSON.parse(fs.readFileSync(WA_QUEUE_SETTINGS_FILE, 'utf-8') || '{}');
+    }
+  } catch (e) {}
+  return { minDelay: 3, maxDelay: 8 };
+}
+function saveWaQueueSettingsFile(data) {
+  try { fs.writeFileSync(WA_QUEUE_SETTINGS_FILE, JSON.stringify(data, null, 2), 'utf-8'); } catch (e) {}
+}
+
+router.get('/api/settings/wa-queue', authRequired, adminRequired, async (req, res) => {
+  try {
+    res.json({ success: true, data: getWaQueueSettingsFile() });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.post('/api/settings/wa-queue', authRequired, adminRequired, async (req, res) => {
+  try {
+    const { minDelay, maxDelay } = req.body || {};
+    const min = Number(minDelay);
+    const max = Number(maxDelay);
+    if (isNaN(min) || isNaN(max) || min < 0 || max < min) {
+      return res.status(400).json({ success: false, message: 'Invalid delay values.' });
+    }
+    const data = { minDelay: min, maxDelay: max, updatedAt: new Date().toISOString() };
+    saveWaQueueSettingsFile(data);
+    res.json({ success: true, message: 'Queue delay saved.', data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 module.exports = { 
   router, 
   authRequired, 

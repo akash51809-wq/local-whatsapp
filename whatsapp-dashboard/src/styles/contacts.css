@@ -1,0 +1,210 @@
+@import url("./app-shell.css");
+
+/* =========================================================
+   CONTACTS PAGE - 3D CERAMIC & LIGHT MODERN STYLING
+========================================================= */
+
+.contacts-container {
+  width: 100%;
+}
+
+.table-card {
+  margin-top: 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(30, 58, 45, 0.10);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 243, 235, 0.96));
+  box-shadow: 0 18px 40px rgba(48, 62, 53, 0.10), 0 3px 10px rgba(48, 62, 53, 0.05), inset 0 1px rgba(255, 255, 255, 0.95);
+  overflow: hidden;
+}
+
+.table-card .card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(30, 58, 45, 0.08);
+}
+
+.table-card .card-head h3 {
+  font-size: 18px;
+  font-weight: 800;
+  color: #183126;
+  margin: 0 0 4px;
+}
+
+.table-card .card-head p {
+  font-size: 13px;
+  font-weight: 600;
+  color: #718078;
+  margin: 0;
+}
+
+/* Contacts Toolbar */
+.contacts-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 24px;
+  background: rgba(246, 243, 235, 0.5);
+  border-bottom: 1px solid rgba(30, 58, 45, 0.06);
+  flex-wrap: wrap;
+}
+
+.contacts-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid rgba(30, 58, 45, 0.12);
+  border-radius: 10px;
+  padding: 6px 12px;
+  min-width: 260px;
+}
+
+.contacts-search-box input {
+  border: 0;
+  outline: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #183126;
+  width: 100%;
+  background: transparent;
+}
+
+.contacts-filter-pills {
+  display: flex;
+  gap: 6px;
+}
+
+.contact-pill {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(30, 58, 45, 0.10);
+  background: #fff;
+  color: #718078;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.contact-pill:hover, .contact-pill.active {
+  background: #183126;
+  color: #fff;
+  border-color: #183126;
+}
+
+/* Table */
+.contacts-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.contacts-table th {
+  background: #f0ede5;
+  color: #718078;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 14px 24px;
+  text-align: left;
+  border-bottom: 1px solid rgba(30, 58, 45, 0.08);
+}
+
+.contacts-table td {
+  padding: 16px 24px;
+  border-top: 1px solid rgba(30, 58, 45, 0.07);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #315044;
+  vertical-align: middle;
+}
+
+.contacts-table tbody tr:hover td {
+  background: rgba(22, 167, 101, 0.035);
+}
+
+.contact-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.contact-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: linear-gradient(145deg, rgba(53, 227, 154, 0.2), rgba(21, 159, 103, 0.15));
+  color: #129e65;
+  font-weight: 800;
+  font-size: 12px;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 4px 10px rgba(22, 167, 101, 0.08);
+}
+
+.contact-avatar.group {
+  background: linear-gradient(145deg, rgba(76, 143, 210, 0.2), rgba(38, 114, 191, 0.15));
+  color: #2672bf;
+}
+
+.contact-type-tag {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  background: rgba(30, 58, 45, 0.06);
+  color: #40544b;
+}
+
+.contact-type-tag.customer {
+  background: rgba(22, 167, 101, 0.09);
+  color: #129e65;
+}
+
+.contact-type-tag.lead {
+  background: rgba(228, 165, 28, 0.12);
+  color: #b37d12;
+}
+
+.contact-type-tag.group {
+  background: rgba(38, 114, 191, 0.10);
+  color: #2672bf;
+}
+
+.btn-view-contact {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 800;
+  border-radius: 9px;
+  background: linear-gradient(145deg, #ffffff, #eeeae0);
+  border: 1px solid rgba(30, 58, 45, 0.12);
+  color: #315044;
+  box-shadow: 0 4px 0 #d9d4c8, inset 0 1px #fff;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.btn-view-contact:hover {
+  transform: translateY(-1px);
+  color: #17613f;
+  border-color: rgba(22, 167, 101, 0.3);
+}
+
+@media (max-width: 768px) {
+  .table-card .card-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .contacts-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .contacts-search-box {
+    width: 100%;
+  }
+}

@@ -2,7 +2,7 @@ import React, { Component } from 'react'
 import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import AppRoutes from './routes/AppRoutes'
-import './App.css'
+import './styles/app-shell.css'
 
 class ErrorBoundary extends Component {
   constructor(props) {

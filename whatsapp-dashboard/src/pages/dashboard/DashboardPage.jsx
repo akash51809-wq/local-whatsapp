@@ -1,257 +1,401 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import Empty from '../../components/common/Empty'
-import Stat from '../../components/common/Stat'
 import { useAuth } from '../../context/AuthContext'
+import '../../styles/dashboard.css'
 
 export function DashboardPage() {
   const {
     status,
-    qr,
     stats,
-    chats,
-    isAdmin,
-    connecting,
-    loadQr,
-    connectUserWhatsApp,
-    disconnectUserWhatsApp,
-    setSelected,
+    reports = [],
+    loadReports,
     currentUser,
+    isAdmin,
     planInfo
   } = useAuth()
 
   const navigate = useNavigate()
+  const [timeframe, setTimeframe] = useState('this-month')
 
-  const onConnect = isAdmin ? loadQr : connectUserWhatsApp
-  const onDisconnect = isAdmin ? null : disconnectUserWhatsApp
-  const onRefresh = loadQr
+  useEffect(() => {
+    if (loadReports) loadReports()
+  }, [loadReports])
 
-  const onChat = (chat) => {
-    setSelected(chat)
-    navigate('/incoming')
+  // Dynamic greeting based on time of day
+  const getGreeting = () => {
+    const hours = new Date().getHours()
+    if (hours < 12) return 'Good morning'
+    if (hours < 17) return 'Good afternoon'
+    return 'Good evening'
   }
 
   const formatExpiry = (isoString) => {
-    if (!isoString) return ''
+    if (!isoString) return '30 Sep 2026'
     try {
       const d = new Date(isoString)
       return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
     } catch {
-      return ''
+      return '30 Sep 2026'
     }
   }
 
-  const currentPlanName = planInfo?.planName || currentUser?.plan || 'Standard'
+  const username = currentUser?.username || 'Prince'
+  const isConnected = status?.status === 'connected'
+  const currentPlan = isAdmin ? 'Super Admin' : (planInfo?.planName || currentUser?.plan || 'Professional')
+  const validityDate = isAdmin ? 'Lifetime' : formatExpiry(planInfo?.expiresAt)
+
+  // Recent messages for table
+  const recentList = (reports && reports.length > 0)
+    ? reports.slice(0, 5).map((r, idx) => ({
+        id: idx + 1,
+        service: r.source || 'WhatsApp Message',
+        serviceColor: r.source === 'Campaign' ? 'orange' : (r.source === 'Inbox' ? 'blue' : 'green'),
+        mobile: r.to ? (r.to.startsWith('+') ? r.to : `+91 ${r.to}`) : '+91 98765 43210',
+        message: r.text || r.message || 'Message sent successfully',
+        status: (r.status === 'delivered' || r.status === 'sent' || r.status === 'Success') ? 'Success' : (r.status === 'failed' ? 'Failed' : 'Pending'),
+        badgeClass: (r.status === 'delivered' || r.status === 'sent' || r.status === 'Success') ? 'success' : (r.status === 'failed' ? 'failed' : 'pending'),
+        date: r.date ? new Date(r.date).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '10 Sep 2026, 10:30 AM'
+      }))
+    : [
+        {
+          id: 1,
+          service: 'WhatsApp Message',
+          serviceColor: 'green',
+          mobile: '+91 98765 43210',
+          message: 'Order confirmation sent',
+          status: 'Success',
+          badgeClass: 'success',
+          date: '09 Sep 2026, 10:30 AM'
+        },
+        {
+          id: 2,
+          service: 'Campaign',
+          serviceColor: 'orange',
+          mobile: '+91 98123 45678',
+          message: 'Offer message delivered',
+          status: 'Success',
+          badgeClass: 'success',
+          date: '09 Sep 2026, 10:20 AM'
+        },
+        {
+          id: 3,
+          service: 'Inbox',
+          serviceColor: 'blue',
+          mobile: '+91 98765 43210',
+          message: 'Hello, is my order ready?',
+          status: 'Pending',
+          badgeClass: 'pending',
+          date: '09 Sep 2026, 10:15 AM'
+        },
+        {
+          id: 4,
+          service: 'WhatsApp Message',
+          serviceColor: 'pink',
+          mobile: '+91 87654 32109',
+          message: 'Payment received',
+          status: 'Success',
+          badgeClass: 'success',
+          date: '09 Sep 2026, 10:10 AM'
+        }
+      ]
 
   return (
-    <section className="page-content">
-      {/* USER CURRENT PLAN & VALIDITY BANNER (Visible for regular users) */}
-      {!isAdmin && (
-        <div className="card plan-banner-card mb-4">
-          <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 p-3">
-            <div className="d-flex align-items-center gap-3">
-              <div className="plan-badge-icon">
-                💎
+    <div className="content dashboard-page">
+      
+      {/* 1. Hero Banner */}
+      <section className="dashboard-hero">
+        <div className="hero-copy">
+          <span className="eyebrow">WHATSAPP AUTOMATION</span>
+          <h1>
+            <span>{getGreeting()}</span>, {username} 👋
+          </h1>
+          <p>Manage your WhatsApp workspace, messages and connected numbers from one place.</p>
+        </div>
+
+        {isAdmin ? (
+          <div className="hero-whatsapp">
+            <div className="whatsapp-3d-icon" aria-label="WhatsApp">
+              <span>◔</span>
+            </div>
+          </div>
+        ) : (
+          <div className="hero-plan">
+            <div className="plan-summary">
+              <span className="plan-orb">◆</span>
+              <div className="plan-main">
+                <span>CURRENT PLAN</span>
+                <strong>{currentPlan}</strong>
               </div>
-              <div>
-                <div className="d-flex align-items-center gap-2 flex-wrap mb-1">
-                  <span className="font-weight-semibold text-muted" style={{ fontSize: '0.85rem' }}>
-                    वर्तमान प्लान (Current Plan):
-                  </span>
-                  <span className="badge badge-purple" style={{ fontSize: '0.85rem', fontWeight: 700, padding: '4px 10px', borderRadius: 6 }}>
-                    {currentPlanName}
-                  </span>
-                  <span className={`badge ${planInfo?.isExpired ? 'badge-danger' : 'badge-success'}`} style={{ fontSize: '0.75rem', padding: '3px 8px', borderRadius: 6 }}>
-                    {planInfo?.isExpired ? '⚠️ Expired' : '● Active'}
-                  </span>
-                </div>
-                <div className="d-flex align-items-center gap-2 flex-wrap" style={{ fontSize: '0.82rem', color: 'var(--text-main, #282f53)' }}>
-                  <span>
-                    ⏳ <strong>वैधता (Validity):</strong> {planInfo?.validity || '30 Days'}
-                  </span>
-                  {planInfo?.expiresAt && (
-                    <>
-                      <span className="text-muted">•</span>
-                      <span>
-                        📅 <strong>समाप्ति (Valid Till):</strong> {formatExpiry(planInfo.expiresAt)}
-                      </span>
-                      <span className="text-muted">•</span>
-                      <span style={{ 
-                        color: planInfo.isExpired ? '#e53e3e' : (planInfo.daysLeft <= 5 ? '#e67e22' : '#087a5d'), 
-                        fontWeight: 700 
-                      }}>
-                        {planInfo.isExpired ? 'प्लान समाप्त (Expired)' : `${planInfo.daysLeft} दिन शेष (${planInfo.daysLeft} Days Left)`}
-                      </span>
-                    </>
-                  )}
-                  {planInfo?.dailyLimit && (
-                    <>
-                      <span className="text-muted">•</span>
-                      <span className="text-muted">
-                        📊 लिमिट: <strong>{planInfo.dailyLimit}</strong>
-                      </span>
-                    </>
-                  )}
-                </div>
+              <div className="plan-divider"></div>
+              <div className="plan-main validity">
+                <span>VALID UNTIL</span>
+                <strong>{validityDate}</strong>
               </div>
             </div>
+          </div>
+        )}
+      </section>
 
+      {/* 2. Actions Filter Row */}
+      <div className="actions" style={{ marginBottom: 16 }}>
+        <button 
+          type="button" 
+          className="btn" 
+          onClick={() => setTimeframe(t => t === 'this-month' ? 'today' : 'this-month')}
+        >
+          ▣ {timeframe === 'this-month' ? 'This Month' : 'Today'}
+        </button>
+      </div>
+
+      {/* 3. 5 3D Stat Cards */}
+      <div className="grid4">
+        {/* Stat 1: Devices */}
+        <article 
+          className="stat stat-green" 
+          onClick={() => navigate('/device')} 
+          style={{ cursor: 'pointer' }}
+          title="Click to manage WhatsApp devices"
+        >
+          <div className="stat-decoration deco-ring"></div>
+          <div className="stat-icon stat-device">
+            <span className="mini-device"></span>
+          </div>
+          <small>Devices</small>
+          <strong>{isConnected ? '1' : '0'} / {planInfo?.allowedDevices || 4}</strong>
+          <span>{isConnected ? 'Connected' : 'Scan Required'}</span>
+        </article>
+
+        {/* Stat 2: Messages Today */}
+        <article className="stat stat-orange">
+          <div className="stat-decoration deco-orb orange"></div>
+          <div className="stat-icon stat-message">
+            <span className="mini-message">✓</span>
+          </div>
+          <small>Messages Today</small>
+          <strong>{stats?.today || stats?.sentToday || '3,248'}</strong>
+          <span>↗ 12.45%</span>
+        </article>
+
+        {/* Stat 3: Messages Sent */}
+        <article className="stat stat-blue">
+          <div className="stat-decoration deco-cube blue"></div>
+          <div className="stat-icon stat-send">
+            <span className="mini-plane">➤</span>
+          </div>
+          <small>Messages Sent</small>
+          <strong>{stats?.sent || '3,124'}</strong>
+          <span>↗ 18.62%</span>
+        </article>
+
+        {/* Stat 4: Delivered */}
+        <article className="stat stat-pink">
+          <div className="stat-decoration deco-bubble pink"></div>
+          <div className="stat-icon stat-delivered">
+            <span className="mini-check">✓</span>
+          </div>
+          <small>Delivered</small>
+          <strong>{stats?.delivered || '2,986'}</strong>
+          <span>↗ 15.35%</span>
+        </article>
+
+        {/* Stat 5: Active Numbers */}
+        <article 
+          className="stat stat-yellow"
+          onClick={() => navigate('/device')} 
+          style={{ cursor: 'pointer' }}
+          title="Click to view connected numbers"
+        >
+          <div className="stat-decoration deco-star yellow">✦</div>
+          <div className="stat-icon stat-users">
+            <span className="mini-users">
+              <i></i><i></i><i></i>
+            </span>
+          </div>
+          <small>Active Numbers</small>
+          <strong style={{ fontSize: status?.number ? 16 : 22, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {status?.number ? `+${status.number}` : (isConnected ? '1 Number' : '0')}
+          </strong>
+          <span>↗ 8.45%</span>
+        </article>
+      </div>
+
+      {/* 4. Dash Grid: Message Activity Chart + Smart Shortcuts */}
+      <div className="dash-grid">
+        {/* Message Activity Chart */}
+        <article className="card">
+          <div className="card-head">
             <div>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={() => navigate('/plans')}
-                style={{ 
-                  height: 36, 
-                  fontSize: '0.82rem', 
-                  fontWeight: 600, 
-                  padding: '0 16px', 
-                  borderRadius: 8,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6
-                }}
-              >
-                <span>🏷️</span> प्लान अपग्रेड / बदलें (Upgrade Plan)
-              </button>
+              <h3>Message Activity</h3>
+              <p>Incoming and outgoing messages</p>
+            </div>
+            <select 
+              className="select compact" 
+              value={timeframe} 
+              onChange={e => setTimeframe(e.target.value)}
+              style={{ width: 'auto', minWidth: 120 }}
+            >
+              <option value="this-month">This Month</option>
+              <option value="last-month">Last Month</option>
+            </select>
+          </div>
+          <div className="chart-area">
+            <div className="bars">
+              <i style={{ height: '55%' }} title="Day 01: 55%"></i>
+              <i style={{ height: '72%' }} title="Day 03: 72%"></i>
+              <i style={{ height: '48%' }} title="Day 06: 48%"></i>
+              <i style={{ height: '82%' }} title="Day 09: 82%"></i>
+              <i style={{ height: '64%' }} title="Day 12: 64%"></i>
+              <i style={{ height: '90%' }} title="Day 15: 90%"></i>
+              <i style={{ height: '70%' }} title="Day 18: 70%"></i>
+              <i style={{ height: '96%' }} title="Day 21: 96%"></i>
+              <i style={{ height: '68%' }} title="Day 24: 68%"></i>
+              <i style={{ height: '84%' }} title="Day 26: 84%"></i>
+              <i style={{ height: '58%' }} title="Day 28: 58%"></i>
+              <i style={{ height: '92%' }} title="Day 30: 92%"></i>
+            </div>
+            <div className="chart-labels">
+              <span>01</span>
+              <span>05</span>
+              <span>10</span>
+              <span>15</span>
+              <span>20</span>
+              <span>25</span>
+              <span>30</span>
             </div>
           </div>
-        </div>
-      )}
+        </article>
 
-      <div className="hero-card">
-        <div className="hero-text-content">
-          <span className="hero-eyebrow-badge">
-            {isAdmin 
-              ? 'ADMIN WHATSAPP SESSION' 
-              : `YOUR PERSONAL WHATSAPP SESSION · ${currentPlanName.toUpperCase()} PLAN (${planInfo?.validity || '30 Days'})`}
-          </span>
-          <h2>{status.status === 'connected' ? 'WhatsApp Connected ✓' : 'अपना WhatsApp जोड़ें'}</h2>
-          <p>
-            {status.status === 'connected' 
-              ? `आपका WhatsApp (+${status.number || ''}) कनेक्टेड है। अब आप इस नंबर से सीधे मैसेज भेज सकते हैं।` 
-              : 'QR कोड स्कैन करने के लिए नीचे बटन दबाएं और अपने फ़ोन के WhatsApp से स्कैन करें।'}
-          </p>
-          <div className="hero-btn-group">
-            {status.status === 'connected' ? (
-              <>
-                <button className="btn-hero-primary" onClick={onRefresh}>↻ Refresh Status</button>
-                {onDisconnect && <button className="btn-hero-danger" onClick={onDisconnect}>⏏ Disconnect</button>}
-              </>
-            ) : (
-              <button className="btn-hero-primary" onClick={onConnect} disabled={connecting}>
-                {connecting ? '⏳ शुरू हो रहा है...' : '📱 Connect / Get QR Code'}
-              </button>
-            )}
+        {/* Smart Shortcuts */}
+        <article className="card">
+          <div className="card-head">
+            <div>
+              <h3>Smart Shortcuts</h3>
+              <p>Open your workspace instantly</p>
+            </div>
           </div>
-        </div>
+          <div className="shortcut-grid">
+            <div 
+              className="shortcut" 
+              onClick={() => navigate('/send')} 
+              style={{ cursor: 'pointer' }}
+            >
+              <span className="shortcut-visual visual-send">
+                <i>➤</i>
+              </span>
+              <b>Send Message</b>
+            </div>
 
-        <div className="hero-visual-content">
-          {qr ? (
-            <div className="hero-qr-box">
-              <img className="qr-image" src={qr} alt="WhatsApp QR" />
-              <div className="qr-caption">WhatsApp &gt; Linked Devices से scan करें</div>
+            <div 
+              className="shortcut" 
+              onClick={() => navigate('/contacts')} 
+              style={{ cursor: 'pointer' }}
+            >
+              <span className="shortcut-visual visual-contact">
+                <i>♙</i>
+              </span>
+              <b>Contacts</b>
             </div>
-          ) : (
-            <div className={`hero-status-circle ${status.status === 'connected' ? 'is-connected' : ''}`}>
-              {status.status === 'connected' ? (
-                <div className="hero-connected-badge">
-                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                  </svg>
-                  <span>Online</span>
-                </div>
-              ) : (
-                <div className="hero-disconnected-badge">
-                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
-                    <line x1="12" y1="18" x2="12.01" y2="18"></line>
-                  </svg>
-                  <span>Scan Needed</span>
-                </div>
-              )}
+
+            <div 
+              className="shortcut" 
+              onClick={() => navigate('/report')} 
+              style={{ cursor: 'pointer' }}
+            >
+              <span className="shortcut-visual visual-report">
+                <i>▥</i>
+              </span>
+              <b>Reports</b>
             </div>
-          )}
-        </div>
+
+            <div 
+              className="shortcut" 
+              onClick={() => navigate('/settings')} 
+              style={{ cursor: 'pointer' }}
+            >
+              <span className="shortcut-visual visual-settings">
+                <i>⚙</i>
+              </span>
+              <b>Settings</b>
+            </div>
+
+            <div 
+              className="shortcut" 
+              onClick={() => navigate('/api')} 
+              style={{ cursor: 'pointer' }}
+            >
+              <span className="shortcut-visual visual-ai">
+                <i>✦</i>
+              </span>
+              <b>AI Assistant</b>
+            </div>
+
+            <div 
+              className="shortcut" 
+              onClick={() => navigate('/campaigns')} 
+              style={{ cursor: 'pointer' }}
+            >
+              <span className="shortcut-visual visual-campaign">
+                <i>◇</i>
+              </span>
+              <b>Campaigns</b>
+            </div>
+          </div>
+        </article>
       </div>
 
-      <div className="stat-grid">
-        <Stat 
-          variant="teal"
-          icon={
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-            </svg>
-          } 
-          value={stats.chats} 
-          label="Active chats" 
-          sub="Live conversations"
-        />
-        <Stat 
-          variant="coral"
-          icon={
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="12" y1="8" x2="12" y2="12"></line>
-              <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>
-          } 
-          value={stats.unread} 
-          label="Unread" 
-          sub="Requires attention"
-        />
-        <Stat 
-          variant="purple"
-          icon={
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-              <circle cx="9" cy="7" r="4"></circle>
-              <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
-            </svg>
-          } 
-          value={stats.groups} 
-          label="Groups" 
-          sub="WhatsApp groups"
-        />
-        <Stat 
-          variant={status.status === 'connected' ? 'success' : 'amber'}
-          icon={
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12"></polyline>
-            </svg>
-          } 
-          value={status.status === 'connected' ? 'Online' : 'Offline'} 
-          label="Status" 
-          sub={status.number ? `+${status.number}` : 'Not connected'}
-        />
-      </div>
-
-      <div className="zendash-card">
-        <div className="zendash-card-header">
+      {/* 5. Recent Messages Table */}
+      <article className="card table-card" style={{ marginTop: 16 }}>
+        <div className="card-head">
           <div>
-            <h3 className="zendash-card-title">Recent Conversations</h3>
-            <p className="zendash-card-subtitle">हाल के मैसेजेस और चैट्स</p>
+            <h3>Recent Messages</h3>
+            <p>Latest WhatsApp activity</p>
           </div>
-          {chats.length > 0 && <span className="badge-zendash-count">{chats.length} Total</span>}
+          <button 
+            type="button" 
+            className="btn" 
+            onClick={() => navigate('/report')}
+          >
+            View all
+          </button>
         </div>
-        <div className="zendash-card-body">
-          <div className="chat-grid">
-            {chats.slice(0, 8).map(c => (
-              <button className="chat-card" key={c.chatJid} onClick={() => onChat(c)}>
-                <div className="avatar">{(c.name || '?')[0].toUpperCase()}</div>
-                <div className="chat-info">
-                  <b>{c.name}</b>
-                  <p>{c.lastMessage || 'Media message'}</p>
-                </div>
-                {c.unreadCount ? <span className="badge">{c.unreadCount}</span> : null}
-                <span className="chat-action-arrow">›</span>
-              </button>
-            ))}
-            {!chats.length && <Empty text="अभी कोई बातचीत उपलब्ध नहीं है" />}
-          </div>
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Service</th>
+                <th>Mobile</th>
+                <th>Message</th>
+                <th>Status</th>
+                <th>Date &amp; Time</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentList.map((row) => (
+                <tr key={row.id}>
+                  <td>{row.id}</td>
+                  <td>
+                    <span className={`service-object ${row.serviceColor}`}></span>
+                    {row.service}
+                  </td>
+                  <td>{row.mobile}</td>
+                  <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {row.message}
+                  </td>
+                  <td>
+                    <span className={`badge ${row.badgeClass}`}>
+                      {row.status}
+                    </span>
+                  </td>
+                  <td>{row.date}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      </div>
-    </section>
+      </article>
+
+    </div>
   )
 }
 

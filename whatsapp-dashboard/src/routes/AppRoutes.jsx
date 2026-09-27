@@ -6,6 +6,7 @@ import Layout from '../components/layout/Layout'
 // Page Components
 import LoginPage from '../pages/auth/LoginPage'
 import DashboardPage from '../pages/dashboard/DashboardPage'
+import DevicePage from '../pages/device/DevicePage'
 import SendPage from '../pages/send/SendPage'
 import GroupsPage from '../pages/groups/GroupsPage'
 import IncomingPage from '../pages/incoming/IncomingPage'
@@ -17,6 +18,9 @@ import UserPlansPage from '../pages/subscription/UserPlansPage'
 import ApiPage from '../pages/api/ApiPage'
 import SystemPage from '../pages/system/SystemPage'
 import SettingsPage from '../pages/admin/SettingsPage'
+import CampaignsPage from '../pages/campaigns/CampaignsPage'
+import TemplatesPage from '../pages/templates/TemplatesPage'
+import ContactsPage from '../pages/contacts/ContactsPage'
 
 function ProtectedRoute({ children }) {
   const { login } = useAuth()
@@ -71,14 +75,22 @@ export default function AppRoutes() {
       >
         <Route index element={<RootRedirect />} />
         <Route path="dashboard" element={<DashboardPage />} />
+        <Route path="device" element={<DevicePage />} />
         <Route path="send" element={<SendPage />} />
         <Route path="groups" element={<GroupsPage />} />
         <Route path="incoming" element={<IncomingPage />} />
+        <Route path="inbox" element={<Navigate to="/incoming" replace />} />
         <Route path="chat" element={<Navigate to="/incoming" replace />} />
         
         {/* Reports */}
         <Route path="report" element={<ReportsPage />} />
         <Route path="reports" element={<Navigate to="/report" replace />} />
+        <Route path="msg-report" element={<Navigate to="/report" replace />} />
+
+        {/* Campaigns & Templates & Contacts */}
+        <Route path="campaigns" element={<CampaignsPage />} />
+        <Route path="templates" element={<TemplatesPage />} />
+        <Route path="contacts" element={<ContactsPage />} />
 
         {/* User Pricing & Plans */}
         <Route path="plans" element={<UserPlansPage />} />
@@ -119,13 +131,13 @@ export default function AppRoutes() {
 
         {/* API & System & Settings */}
         <Route path="api" element={<ApiPage />} />
-        <Route path="system" element={<SettingsPage defaultTab="system" />} />
-        <Route path="settings" element={<SettingsPage defaultTab="company" />} />
+        <Route path="system" element={<SettingsPage defaultTab="security" />} />
+        <Route path="settings" element={<SettingsPage defaultTab="api" />} />
         <Route 
           path="admin/settings" 
           element={
             <AdminRoute>
-              <SettingsPage defaultTab="company" />
+              <SettingsPage defaultTab="api" />
             </AdminRoute>
           } 
         />

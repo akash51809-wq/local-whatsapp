@@ -35,6 +35,23 @@ export function AuthProvider({ children }) {
   const [toast, setToast] = useState('')
   const [connecting, setConnecting] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('sidebar_collapsed') === '1'
+    } catch {
+      return false
+    }
+  })
+
+  const toggleSidebarCollapsed = useCallback(() => {
+    setSidebarCollapsed(prev => {
+      const next = !prev
+      try {
+        localStorage.setItem('sidebar_collapsed', next ? '1' : '0')
+      } catch {}
+      return next
+    })
+  }, [])
 
   // Chat & Reports global caches
   const [chats, setChats] = useState([])
@@ -377,6 +394,9 @@ export function AuthProvider({ children }) {
     sidebarOpen,
     setSidebarOpen,
     toggleSidebar,
+    sidebarCollapsed,
+    setSidebarCollapsed,
+    toggleSidebarCollapsed,
     chats,
     setChats,
     loadChats,

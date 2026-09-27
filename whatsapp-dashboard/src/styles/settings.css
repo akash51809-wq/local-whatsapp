@@ -1,0 +1,312 @@
+@import url("./app-shell.css");
+
+/* ── Settings Sub-Nav ─────────────────────────────────────────────── */
+.settings-subnav {
+  display: flex;
+  gap: 9px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.settings-subnav a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: 11px;
+  border: 1px solid rgba(30,58,45,.10);
+  background: #fff;
+  color: #60766c;
+  font-size: 14px;
+  font-weight: 900;
+  text-decoration: none;
+  transition: all .18s;
+  white-space: nowrap;
+}
+.settings-subnav a:hover,
+.settings-subnav a.active {
+  color: #17613f;
+  border-color: rgba(22,167,101,.18);
+  background: rgba(22,167,101,.08);
+}
+.settings-subnav span { margin-right: 2px; color: #15965e; }
+
+/* ── Card ─────────────────────────────────────────────────────────── */
+.scard-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(30,58,45,.07);
+}
+.scard-head h3 {
+  font-size: 17px !important;
+  font-weight: 900 !important;
+  color: #183126;
+  margin: 0 0 3px;
+}
+.scard-head p {
+  font-size: 12px !important;
+  color: #718078;
+  margin: 0;
+}
+
+/* ── API Setting card ─────────────────────────────────────────────── */
+.api-settings-card { max-width: 900px; }
+.api-form {
+  padding: 18px 20px 22px;
+  display: grid;
+  grid-template-columns: 1fr 1.4fr auto;
+  gap: 16px;
+  align-items: end;
+}
+.api-field label {
+  display: block;
+  margin: 0 0 7px;
+  color: #183126;
+  font-size: 13px;
+  font-weight: 900;
+}
+.api-field input {
+  width: 100%;
+  height: 46px;
+  padding: 0 13px;
+  border: 1px solid rgba(30,58,45,.14);
+  border-radius: 11px;
+  background: rgba(255,255,255,.92);
+  color: #183126;
+  font-size: 13px;
+  font-weight: 700;
+  outline: none;
+  box-sizing: border-box;
+  box-shadow: inset 0 1px 2px rgba(20,60,40,.04);
+}
+.api-field input:focus {
+  border-color: rgba(22,167,101,.5);
+  box-shadow: 0 0 0 3px rgba(22,167,101,.09);
+}
+.api-field input::placeholder { color: #98a8a1; font-weight: 600; }
+.save-api-btn {
+  height: 46px;
+  padding: 0 28px;
+  border: 0;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #159f67, #0b7950);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(21,159,103,.22);
+}
+.save-api-btn:hover { transform: translateY(-1px); box-shadow: 0 10px 22px rgba(21,159,103,.28); }
+.save-api-btn:disabled { opacity: .7; cursor: not-allowed; transform: none; }
+
+/* ── WhatsApp Setting card ────────────────────────────────────────── */
+.wa-setting-card { max-width: 900px; }
+.wa-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 16px;
+  align-items: end;
+  padding: 18px 20px 22px;
+}
+.wa-form-row.image-row { grid-template-columns: 1fr 1.4fr auto; }
+.wa-field label {
+  display: block;
+  margin: 0 0 7px;
+  color: #183126;
+  font-size: 12px;
+  font-weight: 900;
+}
+.wa-field input,
+.wa-field .sinput {
+  width: 100%;
+  height: 46px;
+  padding: 0 13px;
+  border: 1px solid rgba(30,58,45,.14);
+  border-radius: 11px;
+  background: rgba(255,255,255,.92);
+  color: #183126;
+  font-size: 13px;
+  font-weight: 700;
+  outline: none;
+  box-sizing: border-box;
+}
+.wa-field input:focus,
+.wa-field .sinput:focus {
+  border-color: rgba(22,167,101,.5);
+  box-shadow: 0 0 0 3px rgba(22,167,101,.09);
+}
+.wa-field input::placeholder { color: #98a8a1; font-weight: 600; }
+.wa-save-btn {
+  height: 46px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #159f67, #0b7950);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(21,159,103,.22);
+  white-space: nowrap;
+}
+.wa-save-btn:hover { transform: translateY(-1px); }
+.wa-save-btn:disabled { opacity: .7; cursor: not-allowed; transform: none; }
+
+/* compact toggle (Auto Send Image card head) */
+.compact-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border-radius: 9px;
+  border: 1px solid rgba(30,58,45,.14);
+  background: rgba(255,255,255,.86);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 900;
+  transition: all .18s;
+}
+.compact-toggle span {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: #c5cec9;
+  display: inline-block;
+}
+.compact-toggle.on { background: rgba(22,167,101,.10); border-color: rgba(22,167,101,.3); color: #17613f; }
+.compact-toggle.on span { background: #15965e; }
+.compact-toggle.off { color: #718078; }
+
+/* ── Security card ────────────────────────────────────────────────── */
+.security-card { max-width: 560px; }
+.security-form { padding: 18px 20px 22px; display: flex; flex-direction: column; gap: 14px; }
+.security-field label {
+  display: block;
+  margin: 0 0 7px;
+  color: #183126;
+  font-size: 12px;
+  font-weight: 900;
+}
+.security-field input {
+  width: 100%;
+  height: 46px;
+  padding: 0 13px;
+  border: 1px solid rgba(30,58,45,.14);
+  border-radius: 11px;
+  background: rgba(255,255,255,.92);
+  color: #183126;
+  font-size: 13px;
+  font-weight: 700;
+  outline: none;
+  box-sizing: border-box;
+}
+.security-field input:focus {
+  border-color: rgba(22,167,101,.5);
+  box-shadow: 0 0 0 3px rgba(22,167,101,.09);
+}
+.security-field input::placeholder { color: #98a8a1; font-weight: 600; }
+.security-actions { display: flex; }
+.security-save-btn {
+  height: 46px;
+  padding: 0 32px;
+  border: 0;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #159f67, #0b7950);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(21,159,103,.22);
+}
+.security-save-btn:hover { transform: translateY(-1px); }
+.security-save-btn:disabled { opacity: .7; cursor: not-allowed; transform: none; }
+
+/* ── Gemini card ──────────────────────────────────────────────────── */
+.settings-form { max-width: 900px; }
+.card-body { padding: 18px 20px 22px; }
+.gemini-keys { display: flex; flex-direction: column; gap: 12px; margin-bottom: 14px; }
+.gemini-row {
+  display: grid;
+  grid-template-columns: 1fr 200px auto;
+  gap: 12px;
+  align-items: end;
+  padding: 14px;
+  border: 1px solid rgba(30,58,45,.09);
+  border-radius: 12px;
+  background: rgba(250,252,250,.8);
+}
+.gemini-row .field label {
+  display: block;
+  margin: 0 0 7px;
+  font-size: 12px;
+  font-weight: 900;
+  color: #183126;
+}
+.gemini-row .input,
+.gemini-row .select,
+.gemini-row .sinput {
+  width: 100%;
+  height: 46px;
+  padding: 0 13px;
+  border: 1px solid rgba(30,58,45,.14);
+  border-radius: 11px;
+  background: rgba(255,255,255,.92);
+  color: #183126;
+  font-size: 13px;
+  font-weight: 700;
+  outline: none;
+  box-sizing: border-box;
+}
+.gemini-row .input:focus,
+.gemini-row .sinput:focus {
+  border-color: rgba(22,167,101,.5);
+  box-shadow: 0 0 0 3px rgba(22,167,101,.09);
+}
+.remove-key {
+  width: 38px;
+  height: 46px;
+  border: 1px solid rgba(200,50,50,.2);
+  border-radius: 10px;
+  background: rgba(255,240,240,.8);
+  color: #c0392b;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .15s;
+  flex-shrink: 0;
+}
+.remove-key:hover { background: rgba(255,200,200,.9); }
+.remove-key:disabled { opacity: .3; cursor: not-allowed; }
+.actions-row { display: flex; gap: 10px; }
+
+/* ── shared sinput ────────────────────────────────────────────────── */
+.sinput {
+  width: 100%;
+  height: 46px;
+  padding: 0 13px;
+  border: 1px solid rgba(30,58,45,.14);
+  border-radius: 11px;
+  background: rgba(255,255,255,.92);
+  color: #183126;
+  font-size: 13px;
+  font-weight: 700;
+  outline: none;
+  box-sizing: border-box;
+  box-shadow: inset 0 1px 2px rgba(20,60,40,.04);
+}
+.sinput:focus { border-color: rgba(22,167,101,.5); box-shadow: 0 0 0 3px rgba(22,167,101,.09); }
+.sinput::placeholder { color: #98a8a1; font-weight: 600; }
+.sinput[type="file"] { padding: 8px 13px; height: auto; }
+
+/* ── Responsive ───────────────────────────────────────────────────── */
+@media (max-width: 760px) {
+  .settings-subnav a { font-size: 12px; padding: 9px 11px; }
+  .api-form,
+  .wa-form-row { grid-template-columns: 1fr; }
+  .api-actions,
+  .wa-save-btn { align-self: flex-start; }
+  .gemini-row { grid-template-columns: 1fr 1fr auto; }
+}

@@ -2,11 +2,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { useAuth } from '../../context/AuthContext'
 import api from '../../services/api'
+import '../../styles/send-msg.css'
 
 export const QUICK_EMOJIS = [
-  '🙏', '✅', '❤️', '😊', '👍', '🔥', '🎉', '💐', '💼', '📌',
-  '💼', '📢', '🚀', '⭐', '🤝', '💯', '👋', '🔔', '💬', '✨',
-  '🎯', '📍', '💰', '🎁', '💐', '🇮🇳', '👌', '👇', '👉', '⚡'
+  '😀', '😊', '😍', '🎉', '🔥',
+  '👍', '❤️', '✅', '📢', '💰',
+  '🚀', '🙏', '🎯', '⭐', '💬'
 ]
 
 export const VOICE_LANGUAGES = [
@@ -60,7 +61,7 @@ export function parseNumbers(rawText) {
 }
 
 export function SendPage() {
-  const { notify } = useAuth()
+  const { notify, status: globalStatus } = useAuth()
   const [sessions, setSessions] = useState([])
   const [selectedSession, setSelectedSession] = useState('')
   const [loadingSessions, setLoadingSessions] = useState(false)
@@ -68,6 +69,12 @@ export function SendPage() {
   const [msgText, setMsgText] = useState('')
   const [attachment, setAttachment] = useState(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+
+  // Sending Mode: 'now' or 'schedule'
+  const [sendingMode, setSendingMode] = useState('now')
+  const [scheduleDate, setScheduleDate] = useState('')
+  const [scheduleTime, setScheduleTime] = useState('')
+  const [countdownText, setCountdownText] = useState('00:00:00:00')
 
   // Voice Note (Google Text-to-Speech / gTTS) States
   const [voiceLang, setVoiceLang] = useState('hi')
@@ -116,8 +123,52 @@ export function SendPage() {
     loadSessions()
   }, [loadSessions])
 
-  // Compute number statistics in real-time
+  useEffect(() => {
+    const groupNumbers = sessionStorage.getItem('groupSelectedNumbers')
+    if (groupNumbers) {
+      setNumbersText(groupNumbers)
+      sessionStorage.removeItem('groupSelectedNumbers')
+    }
+
+    const templateMsg = sessionStorage.getItem('templateSelectedMessage')
+    if (templateMsg) {
+      setMsgText(templateMsg)
+      sessionStorage.removeItem('templateSelectedMessage')
+    }
+  }, [])
+
+  // Real-time number stats
   const numberStats = useMemo(() => parseNumbers(numbersText), [numbersText])
+
+  // Live countdown calculation for Schedule Mode
+  useEffect(() => {
+    if (sendingMode !== 'schedule' || !scheduleDate || !scheduleTime) {
+      setCountdownText('00:00:00:00')
+      return
+    }
+
+    const interval = setInterval(() => {
+      const target = new Date(`${scheduleDate}T${scheduleTime}`).getTime()
+      const now = Date.now()
+      const diff = target - now
+
+      if (diff <= 0) {
+        setCountdownText('00:00:00:00')
+        clearInterval(interval)
+        return
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+      const hours = Math.floor((diff / (1000 * 60 * 60)) % 24)
+      const minutes = Math.floor((diff / (1000 * 60)) % 60)
+      const seconds = Math.floor((diff / 1000) % 60)
+
+      const pad = (n) => String(n).padStart(2, '0')
+      setCountdownText(`${pad(days)}:${pad(hours)}:${pad(minutes)}:${pad(seconds)}`)
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [sendingMode, scheduleDate, scheduleTime])
 
   // 1. Download Sample Excel template
   const downloadSampleExcel = () => {
@@ -131,9 +182,9 @@ export function SendPage() {
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Contacts')
       XLSX.writeFile(wb, 'sample_whatsapp_contacts.xlsx')
-      if (notify) notify('Sample Excel सफलतापूर्वक डाउनलोड हो गया!')
+      if (notify) notify('Sample Excel downloaded successfully!')
     } catch (err) {
-      if (notify) notify('Sample Excel डाउनलोड करने में समस्या: ' + err.message)
+      if (notify) notify('Error downloading sample Excel: ' + err.message)
     }
   }
 
@@ -152,7 +203,7 @@ export function SendPage() {
         const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' })
 
         if (!rows || rows.length === 0) {
-          if (notify) notify('चयनित Excel शीट खाली है।')
+          if (notify) notify('Selected Excel sheet is empty.')
           return
         }
 
@@ -195,7 +246,7 @@ export function SendPage() {
         }
 
         if (extracted.length === 0) {
-          if (notify) notify('Excel शीट में कोई वैध 10-अंकीय नंबर नहीं मिला। कृपया "Number" कॉलम जांचें।')
+          if (notify) notify('No valid 10-digit numbers found in Excel sheet. Check the "Number" column.')
           return
         }
 
@@ -204,9 +255,9 @@ export function SendPage() {
         const combined = Array.from(existingUnique).join(', ')
         setNumbersText(combined)
 
-        if (notify) notify(`✓ Excel से ${extracted.length} नंबर सफलतापूर्वक जोड़े गए!`)
+        if (notify) notify(`✓ ${extracted.length} numbers imported from Excel!`)
       } catch (err) {
-        if (notify) notify('Excel फ़ाइल पढ़ने में त्रुटि: ' + err.message)
+        if (notify) notify('Error reading Excel file: ' + err.message)
       }
     }
     reader.readAsArrayBuffer(file)
@@ -216,13 +267,13 @@ export function SendPage() {
   const handleRemoveDuplicates = () => {
     const { unique, total } = parseNumbers(numbersText)
     if (unique.length === 0) {
-      if (notify) notify('हटाने के लिए कोई वैध नंबर नहीं मिला।')
+      if (notify) notify('No valid numbers found to deduplicate.')
       return
     }
     const deduplicated = unique.join(', ')
     setNumbersText(deduplicated)
     const removedCount = total - unique.length
-    if (notify) notify(`✓ Duplicates हटा दिए गए! ${unique.length} यूनिक 10-अंकीय नंबर शेष हैं (${removedCount} हटाए गए)।`)
+    if (notify) notify(`✓ Duplicates removed! ${unique.length} unique numbers remaining (${removedCount} duplicates removed).`)
   }
 
   // 4. Handle Attachment
@@ -230,7 +281,7 @@ export function SendPage() {
     const file = e.target.files?.[0]
     if (!file) return
     if (file.size > 15 * 1024 * 1024) {
-      if (notify) notify('फ़ाइल का आकार 15 MB से कम होना चाहिए।')
+      if (notify) notify('File size must be less than 15 MB.')
       return
     }
     const reader = new FileReader()
@@ -241,7 +292,7 @@ export function SendPage() {
         size: (file.size / 1024).toFixed(1) + ' KB',
         data: reader.result
       })
-      if (notify) notify(`फ़ाइल संलग्न की गई: ${file.name}`)
+      if (notify) notify(`File attached: ${file.name}`)
     }
     reader.readAsDataURL(file)
   }
@@ -249,12 +300,13 @@ export function SendPage() {
   // 5. Add Emoji
   const handleAddEmoji = (emoji) => {
     setMsgText(prev => prev + emoji)
+    setShowEmojiPicker(false)
   }
 
   // 6. Preview Voice (Google Text-to-Speech / gTTS -> MP3)
   const handlePreviewVoice = async () => {
     if (!msgText.trim()) {
-      if (notify) notify('वॉइस सुनने के लिए पहले मैसेज बॉक्स में टेक्स्ट लिखें।')
+      if (notify) notify('Please write some message text before converting to voice.')
       return
     }
     setConvertingVoice(true)
@@ -268,7 +320,7 @@ export function SendPage() {
       })
       if (res.success && res.audioUrl) {
         setPreviewAudio({ url: res.audioUrl, fileName: res.fileName })
-        if (notify) notify('✓ टेक्स्ट को MP3 वॉइस में बदल दिया गया! नीचे ऑडियो प्ले करके सुनें।')
+        if (notify) notify('✓ Converted to MP3 voice note! Listen below.')
         setTimeout(() => {
           if (audioPlayerRef.current) {
             audioPlayerRef.current.play().catch(() => {})
@@ -288,21 +340,24 @@ export function SendPage() {
   const handleSendMessages = async (asVoice = false) => {
     const targets = numberStats.unique
     if (targets.length === 0) {
-      if (notify) notify('कम से कम एक वैध 10-अंकीय मोबाइल नंबर दर्ज करें।')
+      if (notify) notify('Please enter at least one valid 10-digit mobile number.')
       return
     }
     if (!msgText.trim() && !attachment && !asVoice) {
-      if (notify) notify('मैसेज टेक्स्ट लिखें या कोई अटैचमेंट फ़ाइल जोड़ें।')
+      if (notify) notify('Please enter a message or attach a file.')
       return
     }
     if (asVoice && !msgText.trim()) {
-      if (notify) notify('वॉइस मैसेज भेजने के लिए मैसेज बॉक्स में टेक्स्ट लिखना आवश्यक है।')
+      if (notify) notify('Message text is required for voice note conversion.')
       return
     }
 
-    const currentSessionObj = sessions.find(s => s.id === selectedSession || s.sessionId === selectedSession)
-    if (currentSessionObj && currentSessionObj.status !== 'connected') {
-      if (notify) notify('चयनित WhatsApp कनेक्टेड नहीं है। कृपया पहले Dashboard से QR कोड स्कैन करें।')
+    if (sendingMode === 'schedule') {
+      if (!scheduleDate || !scheduleTime) {
+        if (notify) notify('Please select both schedule date and time.')
+        return
+      }
+      if (notify) notify(`✓ Message scheduled for ${scheduleDate} at ${scheduleTime} for ${targets.length} recipients!`)
       return
     }
 
@@ -312,7 +367,7 @@ export function SendPage() {
       current: 0,
       total: targets.length,
       currentNumber: '',
-      statusText: asVoice ? 'वॉइस (MP3) में बदला जा रहा है...' : 'भेजना शुरू हो रहा है...',
+      statusText: asVoice ? 'Converting to MP3 voice note...' : 'Starting delivery...',
       sentCount: 0,
       failCount: 0
     })
@@ -323,7 +378,7 @@ export function SendPage() {
 
     for (let i = 0; i < targets.length; i++) {
       if (cancelSendingRef.current) {
-        if (notify) notify('मैसेज भेजना रोक दिया गया।')
+        if (notify) notify('Sending stopped by user.')
         break
       }
 
@@ -333,8 +388,8 @@ export function SendPage() {
         current: i + 1,
         currentNumber: num,
         statusText: asVoice 
-          ? `वॉइस नोट भेजा जा रहा है (${i + 1}/${targets.length}): +91 ${num}`
-          : `भेजा जा रहा है (${i + 1}/${targets.length}): +91 ${num}`
+          ? `Sending voice note (${i + 1}/${targets.length}): +91 ${num}`
+          : `Sending message (${i + 1}/${targets.length}): +91 ${num}`
       }))
 
       try {
@@ -362,7 +417,6 @@ export function SendPage() {
         failCount: failed
       }))
 
-      // 1.2s delay between messages to protect account from anti-spam limits
       if (i < targets.length - 1 && !cancelSendingRef.current) {
         await new Promise(res => setTimeout(res, 1200))
       }
@@ -371,412 +425,440 @@ export function SendPage() {
     setSendingProgress(prev => ({
       ...prev,
       active: false,
-      statusText: `पूरा हुआ! ${asVoice ? 'वॉइस मैसेज' : 'मैसेज'} भेजे गए: ${sent}, विफल: ${failed}`
+      statusText: `Completed! Sent: ${sent}, Failed: ${failed}`
     }))
 
     if (sent > 0) {
-      if (notify) notify(`✓ ${sent} ${asVoice ? 'वॉइस मैसेज (MP3)' : 'संदेश'} सफलतापूर्वक भेज दिए गए!`)
+      if (notify) notify(`✓ ${sent} ${asVoice ? 'voice notes (MP3)' : 'messages'} delivered successfully!`)
     } else if (failed > 0) {
-      if (notify) notify(lastError ? `मैसेज भेजने में समस्या हुई: ${lastError}` : `मैसेज भेजने में समस्या हुई। कृपया WhatsApp कनेक्शन जांचें।`)
+      if (notify) notify(lastError ? `Sending failed: ${lastError}` : `Message delivery failed. Check your WhatsApp connection.`)
     }
   }
 
-  const handleStopSending = () => {
-    cancelSendingRef.current = true
-  }
+  const isConnected = globalStatus?.status === 'connected'
 
   return (
-    <section className="page-content">
-      <div className="send-page-container">
+    <div className="content send-content">
+      <div className="send-layout">
         
-        {/* Left Column: Send Form */}
-        <div className="send-main-card">
-          <span className="eyebrow">DIRECT / BULK WHATSAPP DISPATCH</span>
-          <h2 style={{ margin: '6px 0 4px', fontSize: 22 }}>Send WhatsApp Message</h2>
-          <p style={{ color: '#728498', fontSize: 12, margin: '0 0 20px' }}>
-            अपने स्कैन किए गए WhatsApp नंबर से सिंगल या मल्टीपल संदेश सुरक्षित तरीके से भेजें।
-          </p>
-
-          {/* 1. Choose WhatsApp Dropdown */}
-          <div className="field-group">
-            <div className="field-label">
-              <span>Choose WhatsApp Account (व्हाट्सएप चुनें)</span>
-              <button 
-                type="button" 
-                onClick={loadSessions} 
-                className="tool-btn" 
-                style={{ padding: '3px 9px', fontSize: 11 }}
-              >
-                {loadingSessions ? 'लोड हो रहा है...' : '↻ Refresh Accounts'}
-              </button>
+        {/* Left Column: Message Composer */}
+        <section className="composer-card card">
+          <div className="composer-head">
+            <div className="step-badge">01</div>
+            <div>
+              <h2>Message Composer</h2>
+              <p>Build your message in a few simple steps.</p>
             </div>
-            <select 
-              className="field-select" 
-              value={selectedSession} 
-              onChange={e => setSelectedSession(e.target.value)}
-            >
-              {sessions.length === 0 && <option value="">कोई WhatsApp अकाउंट उपलब्ध नहीं है</option>}
-              {sessions.map(s => (
-                <option key={s.id || s.sessionId} value={s.id || s.sessionId}>
-                  {s.display || s.name} {s.status === 'connected' ? '✓' : '(Offline / Not Connected)'}
-                </option>
-              ))}
-            </select>
+            <span className="secure-chip">
+              <i style={{ background: isConnected ? '#16a765' : '#e85b63' }}></i>
+              {isConnected ? 'Session Connected' : 'Not Connected'}
+            </span>
           </div>
 
-          {/* 2. Type Number & Upload Excel Toolbar */}
-          <div className="field-group">
-            <div className="field-label">
-              <span>Type Number / Mobile Numbers (मोबाइल नंबर)</span>
-              <small>सिंगल या कॉमा (,) लगाकर मल्टीपल नंबर दर्ज करें</small>
-            </div>
+          <div className="composer-body">
+            {/* Top row: Account & Mode */}
+            <div className="quick-grid compact-top-grid">
+              <div className="field account-field">
+                <label>WHATSAPP ACCOUNT</label>
+                <select 
+                  className="select compact-select"
+                  value={selectedSession}
+                  onChange={e => setSelectedSession(e.target.value)}
+                >
+                  {sessions.length === 0 && (
+                    <option value="default">
+                      {globalStatus?.profileName || 'Primary WhatsApp'} · {globalStatus?.number ? `+${globalStatus.number}` : (isConnected ? 'Online' : 'Not Connected')}
+                    </option>
+                  )}
+                  {sessions.map(s => (
+                    <option key={s.id || s.sessionId} value={s.id || s.sessionId}>
+                      {s.display || s.name || s.profileName} {s.status === 'connected' ? '✓' : '(Offline)'}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div className="numbers-toolbar">
-              {/* Sample Excel Button */}
-              <button 
-                type="button" 
-                className="tool-btn" 
-                onClick={downloadSampleExcel}
-                title="Download Sample Excel template with Number column"
-              >
-                📥 Sample Excel
-              </button>
+              <div className="field mode-field">
+                <label>SENDING MODE</label>
+                <select 
+                  className="select compact-select"
+                  id="sendingMode"
+                  value={sendingMode}
+                  onChange={e => setSendingMode(e.target.value)}
+                >
+                  <option value="now">Send Now</option>
+                  <option value="schedule">Schedule Message</option>
+                </select>
+              </div>
 
-              {/* Upload Excel Button */}
-              <input 
-                type="file" 
-                ref={excelInputRef} 
-                accept=".xlsx, .xls, .csv" 
-                hidden 
-                onChange={handleExcelUpload} 
-              />
-              <button 
-                type="button" 
-                className="tool-btn primary-tool" 
-                onClick={() => excelInputRef.current?.click()}
-                title="Upload Excel or CSV file containing Number column"
-              >
-                📁 Upload Excel / CSV
-              </button>
-
-              {/* Remove Duplicates Button */}
-              <button 
-                type="button" 
-                className="tool-btn danger-tool" 
-                onClick={handleRemoveDuplicates}
-                title="Remove duplicate numbers and invalid entries"
-              >
-                🗑️ Remove Duplicates
-              </button>
-
-              {/* Counter Badge */}
-              <span className="numbers-stat-badge">
-                Total: {numberStats.total} | Unique: {numberStats.unique.length}
-              </span>
-            </div>
-
-            <textarea 
-              className="field-textarea" 
-              rows={4}
-              placeholder="यहाँ 10 अंकों का मोबाइल नंबर डालें (Single या Comma/Enter लगाकर Multiple, जैसे: 9876543210, 9123456789)..."
-              value={numbersText}
-              onChange={e => setNumbersText(e.target.value)}
-            />
-            {numberStats.invalid.length > 0 && (
-              <small style={{ display: 'block', color: '#d32f2f', fontSize: 11, marginTop: 4 }}>
-                ⚠ {numberStats.invalid.length} अमान्य प्रविष्टियां हैं (जैसे: {numberStats.invalid.slice(0, 3).join(', ')})। इन्हें हटाने के लिए "Remove Duplicates" दबाएं।
-              </small>
-            )}
-          </div>
-
-          {/* 3. Type Message Box with compact Attachment, Emoji, Send button at bottom */}
-          <div className="field-group" style={{ marginBottom: 10 }}>
-            <div className="field-label">
-              <span>Type Message (संदेश लिखें)</span>
-              <small>{msgText.length} characters</small>
-            </div>
-
-            <div className="message-box-wrap">
-              {/* Attachment chip if file selected */}
-              {attachment && (
-                <div className="attachment-tag">
-                  <span>📎 {attachment.name} ({attachment.size})</span>
-                  <button type="button" onClick={() => setAttachment(null)}>×</button>
+              {/* Schedule Panel */}
+              <div className="schedule-panel compact-schedule" id="schedulePanel" hidden={sendingMode !== 'schedule'}>
+                <div className="schedule-mini-head"><span>◷</span><label>SCHEDULE DATE &amp; TIME</label></div>
+                <div className="schedule-mini-fields">
+                  <input 
+                    className="input compact-input" 
+                    id="scheduleDate" 
+                    type="date" 
+                    aria-label="Schedule date"
+                    value={scheduleDate}
+                    onChange={e => setScheduleDate(e.target.value)}
+                  />
+                  <input 
+                    className="input compact-input" 
+                    id="scheduleTime" 
+                    type="time" 
+                    aria-label="Schedule time"
+                    value={scheduleTime}
+                    onChange={e => setScheduleTime(e.target.value)}
+                  />
                 </div>
-              )}
+                <small id="scheduleLabel">{scheduleDate && scheduleTime ? `${scheduleDate} ${scheduleTime}` : 'Choose date & time'}</small>
+                <strong id="countdown">{countdownText}</strong>
+              </div>
+            </div>
 
-              {/* Voice Note (Google TTS) Controls Banner */}
-              {(showVoiceOptions || previewAudio) && (
-                <div className="voice-options-bar">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: '#705ec8' }}>
-                      🎙️ Google Voice (TTS):
-                    </span>
-                    <select
-                      value={voiceLang}
-                      onChange={e => {
-                        setVoiceLang(e.target.value)
-                        setPreviewAudio(null)
-                      }}
-                      style={{
-                        height: 28,
-                        fontSize: 12,
-                        padding: '2px 8px',
-                        borderRadius: 6,
-                        border: '1px solid #cbd5e1',
-                        background: '#fff'
-                      }}
+            {/* Recipient Numbers Field */}
+            <div className="field recipient-field">
+              <div className="field-row recipient-head">
+                <div>
+                  <label>RECIPIENT NUMBERS</label>
+                  <span className="recipient-note">Enter single or multiple numbers separated by commas (,)</span>
+                </div>
+                <div className="recipient-tools">
+                  <button 
+                    type="button" 
+                    className="round-tool sample-btn" 
+                    id="sampleExcel"
+                    onClick={downloadSampleExcel}
+                    title="Download sample Excel"
+                  >
+                    ⇩<span>Sample</span>
+                  </button>
+
+                  <label className="round-tool upload-btn" title="Upload Excel">
+                    ⇧<span>Upload</span>
+                    <input 
+                      id="excelUpload"
+                      type="file" 
+                      ref={excelInputRef} 
+                      accept=".xlsx,.xls,.csv" 
+                      onChange={handleExcelUpload} 
+                      hidden 
+                    />
+                  </label>
+
+                  <button 
+                    type="button" 
+                    className="round-tool duplicate-btn" 
+                    id="removeDuplicates"
+                    onClick={handleRemoveDuplicates}
+                    title="Remove duplicates"
+                  >
+                    ⧉<span>Unique</span>
+                  </button>
+                </div>
+              </div>
+
+              <textarea 
+                className="textarea recipient-area" 
+                id="recipientNumbers"
+                placeholder="+91 98765 43210, +91 98123 45678"
+                value={numbersText}
+                onChange={e => setNumbersText(e.target.value)}
+              ></textarea>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 700, color: '#718078', marginTop: 4 }}>
+                <span>Valid: <strong style={{ color: '#16a765' }}>{numberStats.unique.length}</strong> unique numbers</span>
+                {numberStats.invalid.length > 0 && (
+                  <span style={{ color: '#e85b63' }}>Invalid: {numberStats.invalid.length} entries</span>
+                )}
+              </div>
+            </div>
+
+            {/* Message Area */}
+            <div className="field">
+              <div className="field-row">
+                <label>MESSAGE</label>
+                <span className="field-hint" id="charCount">
+                  {msgText.length} / 1000
+                </span>
+              </div>
+
+              <div className="message-box">
+                <textarea 
+                  className="textarea message-area" 
+                  id="messageText"
+                  maxLength={1000}
+                  placeholder="Write your WhatsApp message here..."
+                  value={msgText}
+                  onChange={e => setMsgText(e.target.value)}
+                ></textarea>
+
+                <div className="message-tools">
+                  {/* Emoji Button */}
+                  <div className="emoji-wrap">
+                    <button 
+                      type="button" 
+                      className="tool-btn" 
+                      id="emojiBtn" 
+                      aria-label="Add emoji"
+                      onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                     >
-                      {VOICE_LANGUAGES.map(l => (
-                        <option key={l.code} value={l.code}>{l.label}</option>
+                      ☺ <span>Emoji</span>
+                    </button>
+                    {showEmojiPicker && (
+                      <div className="emoji-popover show" id="emojiPopover">
+                        {QUICK_EMOJIS.map((em, idx) => (
+                          <button key={idx} type="button" onClick={() => handleAddEmoji(em)}>
+                            {em}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <span className="tool-divider"></span>
+
+                  {/* Voice Button */}
+                  <button 
+                    type="button" 
+                    className={`tool-btn voice-tool ${showVoiceOptions ? 'active' : ''}`}
+                    id="voiceBtn"
+                    onClick={() => setShowVoiceOptions(!showVoiceOptions)}
+                  >
+                    🎙 <span>{showVoiceOptions ? 'Voice On' : 'Voice'}</span>
+                  </button>
+
+                  <span className="tool-divider"></span>
+
+                  {/* Clear Button */}
+                  <button 
+                    type="button" 
+                    className="tool-btn" 
+                    id="clearMessage"
+                    onClick={() => { setMsgText(''); setAttachment(null); setPreviewAudio(null) }}
+                  >
+                    ⌫ <span>Clear</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Voice Note Options Bar */}
+              {showVoiceOptions && (
+                <div style={{
+                  marginTop: 10,
+                  padding: '10px 14px',
+                  borderRadius: 13,
+                  background: 'linear-gradient(145deg, #fdfaff, #f3eafb)',
+                  border: '1px solid rgba(154,88,232,0.22)',
+                  boxShadow: '0 6px 16px rgba(107,47,192,0.06), inset 0 1px #fff'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <label style={{ fontSize: 10, fontWeight: 900, color: '#6b2fc0', letterSpacing: 0.5 }}>VOICE LANGUAGE:</label>
+                    <select 
+                      className="select compact-select" 
+                      value={voiceLang} 
+                      onChange={e => setVoiceLang(e.target.value)}
+                      style={{ maxWidth: 220, height: 34, fontSize: 11, fontWeight: 700 }}
+                    >
+                      {VOICE_LANGUAGES.map(v => (
+                        <option key={v.code} value={v.code}>{v.label}</option>
                       ))}
                     </select>
 
-                    <button
-                      type="button"
+                    <button 
+                      type="button" 
+                      className="btn" 
                       onClick={handlePreviewVoice}
-                      disabled={convertingVoice || !msgText.trim()}
-                      className="tool-btn"
-                      style={{
-                        padding: '3px 10px',
-                        fontSize: 11,
-                        background: '#ede9fe',
-                        borderColor: '#c4b5fd',
-                        color: '#6d28d9',
-                        fontWeight: 600
-                      }}
-                      title="टेक्स्ट को MP3 में बदलकर प्रीव्यू सुनें"
+                      disabled={convertingVoice}
+                      style={{ padding: '6px 14px', fontSize: 11, fontWeight: 800 }}
                     >
-                      {convertingVoice ? '⏳ कन्वर्ट हो रहा है...' : '🔊 Listen / Preview Voice'}
+                      {convertingVoice ? 'Converting...' : '🔊 Preview Audio'}
                     </button>
                   </div>
 
                   {previewAudio && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <audio
-                        ref={audioPlayerRef}
-                        controls
-                        src={previewAudio.url}
-                        style={{ height: 28, maxWidth: 220 }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setPreviewAudio(null)}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: '#dc2626',
-                          fontSize: 14,
-                          cursor: 'pointer'
-                        }}
-                        title="हटाएं"
-                      >
-                        ✕
-                      </button>
+                    <div style={{ marginTop: 10 }}>
+                      <audio ref={audioPlayerRef} src={previewAudio.url} controls style={{ width: '100%', height: 32 }} />
                     </div>
                   )}
                 </div>
               )}
+            </div>
 
-              <textarea 
-                className="main-msg-textarea"
-                rows={4}
-                placeholder="यहाँ अपना मैसेज लिखें (Type your message here)... आप इसे 'Send as Voice' से सीधे MP3 में भी भेज सकते हैं!"
-                value={msgText}
-                onChange={e => setMsgText(e.target.value)}
-              />
+            {/* Attachment preview if any */}
+            {attachment && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '8px 12px',
+                background: 'rgba(22,167,101,0.08)',
+                border: '1px solid rgba(22,167,101,0.2)',
+                borderRadius: 10,
+                marginTop: 10
+              }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#17613f' }}>📎 {attachment.name} ({attachment.size})</span>
+                <button 
+                  type="button" 
+                  onClick={() => setAttachment(null)}
+                  style={{ border: 'none', background: 'transparent', color: '#e85b63', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
 
-              {/* Compact bottom action bar: Attachment, Emoji, Voice, Send buttons */}
-              <div className="msg-action-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center' }}>
-                <div className="msg-tools-group" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  {/* Attachment Button */}
+            {/* Action Row */}
+            <div className="action-row">
+              <div className="secondary-actions">
+                <label className="btn compact-btn" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  📎 <span>Attachment</span>
                   <input 
                     type="file" 
                     ref={fileInputRef} 
-                    hidden 
                     onChange={handleAttachment} 
+                    hidden 
                   />
+                </label>
+
+                {showVoiceOptions && (
                   <button 
                     type="button" 
-                    className="tool-icon-btn" 
-                    onClick={() => fileInputRef.current?.click()}
-                    title="Attach Image, Video, or Document"
-                  >
-                    📎 Attach
-                  </button>
-
-                  {/* Emoji Picker Button */}
-                  <button 
-                    type="button" 
-                    className="tool-icon-btn" 
-                    onClick={() => setShowEmojiPicker(prev => !prev)}
-                    title="Insert Emojis"
-                  >
-                    😊 Emoji
-                  </button>
-
-                  {/* Voice Options Toggle Button */}
-                  <button
-                    type="button"
-                    className={`tool-icon-btn ${showVoiceOptions ? 'active' : ''}`}
-                    onClick={() => setShowVoiceOptions(prev => !prev)}
-                    title="Google Text-to-Speech (gTTS) Voice Settings"
+                    className="btn compact-btn" 
+                    onClick={() => handleSendMessages(true)}
+                    disabled={sendingProgress.active}
                     style={{
-                      background: showVoiceOptions ? '#ede9fe' : undefined,
-                      borderColor: showVoiceOptions ? '#c4b5fd' : undefined,
-                      color: showVoiceOptions ? '#6d28d9' : undefined,
-                      fontWeight: showVoiceOptions ? 600 : undefined
+                      background: 'linear-gradient(145deg, #9a58e8, #6b2fc0)',
+                      color: '#fff',
+                      border: '1px solid rgba(107, 47, 192, 0.3)',
+                      boxShadow: '0 4px 0 #56239e, 0 8px 16px rgba(107, 47, 192, 0.25), inset 0 1px rgba(255,255,255,.4)'
                     }}
                   >
-                    🎙️ Voice Options {showVoiceOptions ? '▲' : '▼'}
+                    🎙 <span>Send as Voice</span>
                   </button>
+                )}
+              </div>
 
-                  {/* Emoji Popover */}
-                  {showEmojiPicker && (
-                    <div className="emoji-popover-box">
-                      {QUICK_EMOJIS.map(emoji => (
-                        <button 
-                          type="button" 
-                          key={emoji} 
-                          className="single-emoji-btn" 
-                          onClick={() => { handleAddEmoji(emoji); }}
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+              <button 
+                type="button" 
+                className="btn primary send-btn" 
+                id="sendBtn"
+                onClick={() => handleSendMessages(false)}
+                disabled={sendingProgress.active}
+              >
+                <span id="sendBtnText">➤ {sendingMode === 'schedule' ? 'Schedule Message' : 'Send Message'}</span>
+              </button>
+            </div>
 
-                {/* Right Action Buttons: Voice Send + Text Send */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  {/* Voice Button (Google Text-to-Speech gTTS -> MP3) */}
-                  <button
-                    type="button"
-                    className="btn-voice-send"
-                    disabled={sendingProgress.active || numberStats.unique.length === 0 || !msgText.trim()}
-                    onClick={() => handleSendMessages(true)}
-                    title="टाइप किए गए टेक्स्ट को Google TTS द्वारा MP3 ऑडियो में बदलकर भेजें"
-                  >
-                    {sendingProgress.active ? 'Sending...' : `🎙️ Send as Voice (${numberStats.unique.length})`}
-                  </button>
-
-                  {/* Regular Send Button */}
+            {/* Progress Bar during active sending */}
+            {sendingProgress.active && (
+              <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: 'rgba(22,167,101,0.06)', border: '1px solid rgba(22,167,101,0.2)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
+                  <span>{sendingProgress.statusText}</span>
                   <button 
                     type="button" 
-                    className="btn-send-main"
-                    disabled={sendingProgress.active || numberStats.unique.length === 0 || (!msgText.trim() && !attachment)}
-                    onClick={() => handleSendMessages(false)}
+                    onClick={() => { cancelSendingRef.current = true }}
+                    style={{ background: '#e85b63', color: '#fff', border: 'none', borderRadius: 6, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}
                   >
-                    {sendingProgress.active ? 'Sending...' : `🚀 Send Message (${numberStats.unique.length})`}
+                    Stop
                   </button>
                 </div>
+                <div style={{ height: 6, width: '100%', background: '#e0e7e3', borderRadius: 10, overflow: 'hidden' }}>
+                  <div 
+                    style={{ 
+                      height: '100%', 
+                      background: 'linear-gradient(90deg, #35cb89, #129e65)', 
+                      width: `${(sendingProgress.current / (sendingProgress.total || 1)) * 100}%`,
+                      transition: 'width 0.3s ease'
+                    }} 
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 14, fontSize: 11, marginTop: 6, color: '#718078' }}>
+                  <span>Sent: <strong style={{ color: '#16a765' }}>{sendingProgress.sentCount}</strong></span>
+                  <span>Failed: <strong style={{ color: '#e85b63' }}>{sendingProgress.failCount}</strong></span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
-          {/* Sequential Live Sending Progress */}
-          {sendingProgress.active && (
-            <div className="sending-progress-container">
-              <div className="progress-header-row">
-                <span>{sendingProgress.statusText}</span>
-                <button type="button" className="btn-stop-sending" onClick={handleStopSending}>
-                  ⏹ Cancel / Stop
-                </button>
-              </div>
-              <div className="progress-bar-track">
-                <div 
-                  className="progress-bar-fill" 
-                  style={{ width: `${Math.round((sendingProgress.current / sendingProgress.total) * 100)}%` }} 
-                />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#0b694e', marginTop: 6 }}>
-                <span>Sent: {sendingProgress.sentCount} | Failed: {sendingProgress.failCount}</span>
-                <span>{Math.round((sendingProgress.current / sendingProgress.total) * 100)}%</span>
-              </div>
-            </div>
-          )}
-
-        </div>
+          <div className="composer-footer">
+            <span>Tip: Upload an Excel file for large recipient lists.</span>
+            <span>Max message length <b>1000</b> characters</span>
+          </div>
+        </section>
 
         {/* Right Column: How to Use Guide */}
-        <div className="how-to-guide-card">
-          <div className="how-to-header">
-            <span style={{ fontSize: 22 }}>📖</span>
+        <aside className="guide-card card">
+          <div className="guide-head">
+            <div className="guide-icon">✦</div>
             <div>
-              <h3>How to Use</h3>
-              <small style={{ color: '#7e8e9f' }}>उपयोग करने का पूरा तरीका (Step-by-Step)</small>
+              <h2>How to Use</h2>
+              <p>Follow these steps to send messages quickly and safely.</p>
             </div>
           </div>
-
-          <div className="how-to-steps">
-            
-            <div className="how-step">
-              <div className="step-num-badge">1</div>
-              <div className="step-content">
-                <strong>Choose WhatsApp (व्हाट्सएप चुनें)</strong>
-                Dropdown सूची से अपना कनेक्टेड WhatsApp अकाउंट सेलेक्ट करें। (यदि कोई कनेक्ट नहीं है, तो पहले Dashboard टैब में जाकर अपना QR कोड स्कैन करें)।
+          <div className="guide-list">
+            <div className="guide-step">
+              <span className="guide-num">01</span>
+              <div>
+                <h3>Choose WhatsApp</h3>
+                <p>Select your connected WhatsApp account from the dropdown.</p>
               </div>
             </div>
-
-            <div className="how-step">
-              <div className="step-num-badge">2</div>
-              <div className="step-content">
-                <strong>Type Number (नंबर दर्ज करें)</strong>
-                मोबाइल नंबर बॉक्स में 10 अंकों का नंबर टाइप करें। आप एक नंबर या कॉमा (,) लगाकर एक साथ कई नंबर डाल सकते हैं।
+            <div className="guide-step">
+              <span className="guide-num">02</span>
+              <div>
+                <h3>Type Number</h3>
+                <p>Enter 10-digit mobile numbers separated by commas.</p>
               </div>
             </div>
-
-            <div className="how-step">
-              <div className="step-num-badge">3</div>
-              <div className="step-content">
-                <strong>Upload Excel & Sample (एक्सेल अपलोड)</strong>
-                <b>Sample Excel</b> बटन दबाकर सही फ़ाइल फॉर्मेट देखें। <b>Upload Excel / CSV</b> से अपनी फ़ाइल अपलोड करें — सिस्टम शीट में से केवल "Number" वाले कॉलम को अपने आप पहचानकर नंबर निकाल लेगा।
+            <div className="guide-step">
+              <span className="guide-num">03</span>
+              <div>
+                <h3>Upload Excel &amp; Sample</h3>
+                <p>Use <b>Sample Excel</b> to verify format, then upload Excel/CSV.</p>
               </div>
             </div>
-
-            <div className="how-step">
-              <div className="step-num-badge">4</div>
-              <div className="step-content">
-                <strong>Remove Duplicates (डुप्लिकेट हटाएं)</strong>
-                <b>Remove Duplicates</b> बटन पर क्लिक करें। इससे बार-बार आने वाले और अमान्य नंबर तुरंत हट जाएंगे और केवल सही 10-अंकीय यूनिक नंबर बचेंगे।
+            <div className="guide-step">
+              <span className="guide-num">04</span>
+              <div>
+                <h3>Remove Duplicates</h3>
+                <p>Click <b>Unique</b> to remove repeated and invalid numbers.</p>
               </div>
             </div>
-
-            <div className="how-step">
-              <div className="step-num-badge">5</div>
-              <div className="step-content">
-                <strong>Message, Emoji & Attachment</strong>
-                मैसेज बॉक्स में अपना टेक्स्ट लिखें। नीचे दिए गए <b>😊 Emoji</b> बटन से इमोजी लगाएं और <b>📎 Attach</b> बटन से फ़ोटो, PDF या कोई भी डॉक्यूमेंट जोड़ें।
+            <div className="guide-step">
+              <span className="guide-num">05</span>
+              <div>
+                <h3>Emoji &amp; Attachment</h3>
+                <p>Add emojis with <b>Emoji</b> and attach photos or PDFs.</p>
               </div>
             </div>
-
-            <div className="how-step">
-              <div className="step-num-badge">6</div>
-              <div className="step-content">
-                <strong>Google Voice (gTTS MP3 वॉइस नोट)</strong>
-                मैसेज बॉक्स में लिखे टेक्स्ट को <b>🎙️ Send as Voice</b> बटन दबाकर सीधे MP3 वॉइस नोट के रूप में भेजें। <b>🎙️ Voice Options</b> से अपनी भाषा (जैसे हिन्दी 🇮🇳, English 🇺🇸) चुनें और भेजने से पहले <b>🔊 Listen / Preview</b> करके सुन भी सकते हैं।
+            <div className="guide-step">
+              <span className="guide-num">06</span>
+              <div>
+                <h3>Voice Message</h3>
+                <p>Convert your message into an MP3 voice note with <b>Voice Note</b>.</p>
               </div>
             </div>
-
-            <div className="how-step">
-              <div className="step-num-badge">7</div>
-              <div className="step-content">
-                <strong>Send Message (1-by-1 सुरक्षित डिलीवरी)</strong>
-                <b>🚀 Send Message</b> या <b>🎙️ Send as Voice</b> बटन दबाएं। सिस्टम हर नंबर पर सुरक्षित 1.2 सेकंड के अंतराल से 1-by-1 मैसेज भेजेगा ताकि आपका व्हाट्सएप अकाउंट सुरक्षित रहे।
+            <div className="guide-step">
+              <span className="guide-num">07</span>
+              <div>
+                <h3>Send Message</h3>
+                <p>Click <b>Send Message</b> for sequential safe delivery.</p>
               </div>
             </div>
-
           </div>
-
-          <div className="guide-tip-box">
-            💡 <b>सुरक्षा टिप:</b> बल्क मैसेजिंग के दौरान 1-by-1 सुरक्षित डिलीवरी और वैध 10-अंकीय भारतीय मोबाइल नंबरों का ही उपयोग करें। स्टेटस देखने के लिए <b>Message Reports</b> टैब देखें।
+          <div className="guide-tip">
+            <span>◆</span>
+            <div>
+              <strong>Safety Tip</strong>
+              <small>Use valid 10-digit Indian numbers and follow WhatsApp messaging rules.</small>
+            </div>
           </div>
-
-        </div>
+        </aside>
 
       </div>
-    </section>
+    </div>
   )
 }
 

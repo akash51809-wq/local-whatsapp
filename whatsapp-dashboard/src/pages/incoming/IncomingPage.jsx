@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import api, { getToken } from '../../services/api'
-import './IncomingPage.css'
+import '../../styles/inbox.css'
 
-/* ─── helpers ─────────────────────────────────────────────────────── */
+/* ─── Helpers ─────────────────────────────────────────────────────── */
 function fmtTime(ts) {
   if (!ts) return ''
   const d = new Date(ts)
@@ -14,7 +14,8 @@ function fmtDate(ts) {
   if (!ts) return ''
   const d = new Date(ts)
   const now = new Date()
-  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1)
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
   if (d.toDateString() === now.toDateString()) return 'Today'
   if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
   return d.toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' })
@@ -38,9 +39,8 @@ function initials(name) {
 }
 
 const AVATAR_COLORS = [
-  '#e57373','#f06292','#ba68c8','#9575cd','#7986cb',
-  '#64b5f6','#4dd0e1','#4db6ac','#81c784','#dce775',
-  '#ffb74d','#ff8a65','#a1887f','#90a4ae'
+  '#2a9d8f', '#e76f51', '#264653', '#f4a261', '#16a765',
+  '#4361ee', '#3a0ca3', '#7209b7', '#f72585', '#4895ef'
 ]
 
 function avatarColor(name = '') {
@@ -50,12 +50,12 @@ function avatarColor(name = '') {
 }
 
 function mediaPrev(m) {
-  if (m.mediaType === 'image') return '📷 Photo'
-  if (m.mediaType === 'video') return '📹 Video'
-  if (m.mediaType === 'audio' || m.mediaType === 'ptt') return '🎤 Audio'
-  if (m.mediaType === 'document') return `📄 ${m.fileName || 'Document'}`
-  if (m.mediaType === 'sticker') return '😊 Sticker'
-  return m.message || ''
+  if (m?.mediaType === 'image') return '📷 Photo'
+  if (m?.mediaType === 'video') return '📹 Video'
+  if (m?.mediaType === 'audio' || m?.mediaType === 'ptt') return '🎤 Audio'
+  if (m?.mediaType === 'document') return `📄 ${m.fileName || 'Document'}`
+  if (m?.mediaType === 'sticker') return '😊 Sticker'
+  return m?.message || ''
 }
 
 function fmtBytes(b) {
@@ -65,24 +65,67 @@ function fmtBytes(b) {
   return (b / 1048576).toFixed(1) + ' MB'
 }
 
-/* ─── Avatar ──────────────────────────────────────────────────────── */
-function Avatar({ name, size = 40, src }) {
-  if (src) return <img className="wa-avatar" style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover' }} src={src} alt="" />
+const AVATAR_GRADIENTS = [
+  'linear-gradient(145deg, #f0b24e, #ef7e51)',
+  'linear-gradient(145deg, #35cb89, #129e65)',
+  'linear-gradient(145deg, #2fa373, #157952)',
+  'linear-gradient(145deg, #4facfe, #00c6fb)',
+  'linear-gradient(145deg, #f39c12, #d35400)',
+  'linear-gradient(145deg, #e67e22, #c0392b)',
+  'linear-gradient(145deg, #1abc9c, #16a085)'
+]
+
+function avatarGradient(name = '') {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffff
+  return AVATAR_GRADIENTS[Math.abs(h) % AVATAR_GRADIENTS.length]
+}
+
+/* ─── Avatar Component ────────────────────────────────────────────── */
+function Avatar({ name, size = 36, src, className = '', isBig = false }) {
+  const radius = isBig ? '14px' : '10px'
+  if (src) {
+    return (
+      <img
+        className={`avatar ${className} ${isBig ? 'big' : ''}`}
+        style={{
+          width: size,
+          height: size,
+          minWidth: size,
+          borderRadius: radius,
+          objectFit: 'cover',
+          display: 'block'
+        }}
+        src={src}
+        alt=""
+      />
+    )
+  }
   return (
-    <div className="wa-avatar" style={{
-      width: size, height: size, borderRadius: '50%',
-      background: avatarColor(name || ''),
-      color: '#fff', fontWeight: 700,
-      fontSize: Math.max(12, size * 0.38),
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      flexShrink: 0, userSelect: 'none'
-    }}>
+    <span
+      className={`avatar ${className} ${isBig ? 'big' : ''}`}
+      style={{
+        width: size,
+        height: size,
+        minWidth: size,
+        borderRadius: radius,
+        background: avatarGradient(name || ''),
+        color: '#ffffff',
+        fontWeight: 800,
+        fontSize: isBig ? 15 : 12,
+        display: 'grid',
+        placeItems: 'center',
+        flexShrink: 0,
+        userSelect: 'none',
+        boxShadow: isBig ? '0 6px 16px rgba(0, 0, 0, 0.12)' : '0 4px 10px rgba(0, 0, 0, 0.10)'
+      }}
+    >
       {initials(name)}
-    </div>
+    </span>
   )
 }
 
-/* ─── MediaBubble ─────────────────────────────────────────────────── */
+/* ─── MediaBubble Component ───────────────────────────────────────── */
 function MediaBubble({ m, token }) {
   const src = m.mediaUrl
     ? `${m.mediaUrl}${m.mediaUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`
@@ -92,19 +135,19 @@ function MediaBubble({ m, token }) {
 
   if (m.mediaType === 'image' || m.mediaType === 'sticker') {
     return (
-      <a href={src} target="_blank" rel="noopener noreferrer" className="wa-media-img-wrap">
-        <img src={src} alt="media" className="wa-media-img" />
+      <a href={src} target="_blank" rel="noopener noreferrer" className="media-img-wrap">
+        <img src={src} alt="media" className="media-img" loading="lazy" />
       </a>
     )
   }
   if (m.mediaType === 'video') {
     return (
-      <video src={src} controls className="wa-media-video" preload="metadata" />
+      <video src={src} controls className="media-video" preload="metadata" />
     )
   }
   if (m.mediaType === 'audio' || m.mediaType === 'ptt') {
     return (
-      <div className="wa-media-audio">
+      <div className="media-audio">
         <span>🎤</span>
         <audio src={src} controls preload="metadata" style={{ flex: 1, height: 32 }} />
       </div>
@@ -112,97 +155,104 @@ function MediaBubble({ m, token }) {
   }
   if (m.mediaType === 'document') {
     return (
-      <a href={src} target="_blank" rel="noopener noreferrer" className="wa-media-doc">
-        <span className="wa-doc-icon">📄</span>
-        <div className="wa-doc-info">
-          <div className="wa-doc-name">{m.fileName || 'Document'}</div>
-          {m.fileSize && <div className="wa-doc-size">{fmtBytes(m.fileSize)}</div>}
+      <a href={src} target="_blank" rel="noopener noreferrer" className="media-doc">
+        <span className="media-doc-icon">📄</span>
+        <div className="media-doc-info">
+          <div className="media-doc-name">{m.fileName || 'Document'}</div>
+          {m.fileSize && <div className="media-doc-size">{fmtBytes(m.fileSize)}</div>}
         </div>
-        <span className="wa-doc-dl">⬇</span>
+        <span className="media-doc-dl">⬇</span>
       </a>
     )
   }
   return null
 }
 
-/* ─── MessageBubble ───────────────────────────────────────────────── */
+/* ─── MessageBubble Component ─────────────────────────────────────── */
 function MessageBubble({ m, showSender, isGroup }) {
   const token = getToken()
   const hasMedia = !!m.mediaUrl
 
   return (
-    <div className={`wa-msg-row ${m.fromMe ? 'wa-out' : 'wa-in'}`}>
-      <div className={`wa-bubble ${m.fromMe ? 'wa-bubble-out' : 'wa-bubble-in'}`}>
-        {/* group sender name */}
-        {isGroup && !m.fromMe && showSender && m.pushName && (
-          <div className="wa-sender-name" style={{ color: avatarColor(m.pushName) }}>
-            {m.pushName}
-          </div>
-        )}
-        {/* quoted / reply */}
-        {m.quotedText && (
-          <div className="wa-quote">
-            {m.quotedParticipant && (
-              <span className="wa-quote-author">{m.quotedParticipant.split('@')[0]}</span>
-            )}
-            <span className="wa-quote-text">{m.quotedText}</span>
-          </div>
-        )}
-        {/* media */}
-        {hasMedia && <MediaBubble m={m} token={token} />}
-        {/* text */}
-        {m.message && <div className="wa-msg-text">{m.message}</div>}
-        {!m.message && !hasMedia && (
-          <div className="wa-msg-text wa-msg-muted">[{m.mediaType || 'message'}]</div>
-        )}
-        {/* footer */}
-        <div className="wa-msg-foot">
-          <span className="wa-msg-time">{fmtTime(m.date)}</span>
-          {m.fromMe && (
-            <span className={`wa-ticks ${m.isRead ? 'wa-ticks-read' : ''}`}>✓✓</span>
-          )}
+    <div className={`bubble ${m.fromMe ? 'out' : 'in'}`}>
+      {/* Group Sender Name */}
+      {isGroup && !m.fromMe && showSender && m.pushName && (
+        <div className="bubble-sender" style={{ color: avatarColor(m.pushName) }}>
+          {m.pushName}
         </div>
+      )}
+
+      {/* Quoted Message */}
+      {m.quotedText && (
+        <div className="bubble-quote">
+          {m.quotedParticipant && (
+            <span style={{ display: 'block', fontWeight: 800, fontSize: 11, marginBottom: 2 }}>
+              {m.quotedParticipant.split('@')[0]}
+            </span>
+          )}
+          <span>{m.quotedText}</span>
+        </div>
+      )}
+
+      {/* Media Attachment */}
+      {hasMedia && <MediaBubble m={m} token={token} />}
+
+      {/* Text Message */}
+      {m.message && <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.message}</div>}
+      {!m.message && !hasMedia && (
+        <div style={{ fontStyle: 'italic', opacity: 0.7 }}>[{m.mediaType || 'message'}]</div>
+      )}
+
+      {/* Time & Read Status Ticks */}
+      <div className="bubble-footer">
+        <small>{fmtTime(m.date)}</small>
+        {m.fromMe && (
+          <span className="bubble-ticks" title={m.isRead ? 'Read' : 'Delivered'}>
+            ✓✓
+          </span>
+        )}
       </div>
     </div>
   )
 }
 
-/* ─── DateSeparator ───────────────────────────────────────────────── */
-function DateSeparator({ label }) {
-  return (
-    <div className="wa-date-sep">
-      <span>{label}</span>
-    </div>
-  )
-}
-
-/* ─── ChatItem ────────────────────────────────────────────────────── */
+/* ─── ChatItem Component ──────────────────────────────────────────── */
 function ChatItem({ c, active, onClick }) {
   const preview = c.lastMessage || mediaPrev({ mediaType: c.mediaType })
+  const name = c.name || c.pushName || c.from || 'Unknown'
+
   return (
-    <button className={`wa-chat-item ${active ? 'wa-chat-item-active' : ''}`} onClick={onClick}>
-      <Avatar name={c.name || c.pushName || c.from} size={46} />
-      <div className="wa-ci-body">
-        <div className="wa-ci-top">
-          <span className="wa-ci-name">{c.name || c.pushName || c.from || 'Unknown'}</span>
-          <span className="wa-ci-time">{chatTimestamp(c.lastTimestamp)}</span>
+    <div
+      className={`chat-item ${active ? 'active' : ''}`}
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick()
+        }
+      }}
+    >
+      <Avatar name={name} size={36} />
+      <div className="chat-item-body">
+        <div className="chat-item-head">
+          <strong>{name}</strong>
+          <time>{chatTimestamp(c.lastTimestamp)}</time>
         </div>
-        <div className="wa-ci-bottom">
-          <span className="wa-ci-preview">
-            {c.isGroup && c.lastFromMe === false ? '' : ''}
-            {preview || '\u00A0'}
-          </span>
+        <div className="chat-item-sub">
+          <small>{preview || '\u00A0'}</small>
           {c.unreadCount > 0 && (
-            <span className="wa-unread-badge">{c.unreadCount > 99 ? '99+' : c.unreadCount}</span>
+            <span className="unread-badge">{c.unreadCount > 99 ? '99+' : c.unreadCount}</span>
           )}
         </div>
       </div>
-    </button>
+    </div>
   )
 }
 
-/* ─── Composer ────────────────────────────────────────────────────── */
-function Composer({ onSend, chatJid }) {
+/* ─── Composer Component ──────────────────────────────────────────── */
+function Composer({ chatJid }) {
   const [text, setText] = useState('')
   const [attachment, setAttachment] = useState(null)
   const [sending, setSending] = useState(false)
@@ -213,9 +263,17 @@ function Composer({ onSend, chatJid }) {
   const onFile = (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 10 * 1024 * 1024) { setError('File must be < 10 MB'); return }
+    if (file.size > 10 * 1024 * 1024) {
+      setError('File must be smaller than 10 MB')
+      return
+    }
     const reader = new FileReader()
-    reader.onload = () => setAttachment({ name: file.name, type: file.type || 'application/octet-stream', data: reader.result })
+    reader.onload = () =>
+      setAttachment({
+        name: file.name,
+        type: file.type || 'application/octet-stream',
+        data: reader.result
+      })
     reader.readAsDataURL(file)
   }
 
@@ -241,10 +299,13 @@ function Composer({ onSend, chatJid }) {
   }
 
   const onKey = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      send()
+    }
   }
 
-  // auto-resize textarea
+  // Auto-resize textarea
   useEffect(() => {
     const el = textareaRef.current
     if (!el) return
@@ -253,36 +314,63 @@ function Composer({ onSend, chatJid }) {
   }, [text])
 
   return (
-    <div className="wa-composer">
+    <>
       {attachment && (
-        <div className="wa-attachment-preview">
-          📎 <span>{attachment.name}</span>
-          <button onClick={() => { setAttachment(null); if (fileRef.current) fileRef.current.value = '' }}>✕</button>
+        <div className="attach-preview-bar">
+          <span>📎 {attachment.name}</span>
+          <button
+            type="button"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              fontWeight: 800,
+              color: '#17613f',
+              fontSize: 14
+            }}
+            onClick={() => {
+              setAttachment(null)
+              if (fileRef.current) fileRef.current.value = ''
+            }}
+          >
+            ✕
+          </button>
         </div>
       )}
-      <div className="wa-composer-row">
-        <button className="wa-comp-btn" title="Attach" onClick={() => fileRef.current?.click()}>📎</button>
+      <div className="reply">
         <input type="file" ref={fileRef} hidden onChange={onFile} />
+        <button
+          type="button"
+          className="attach-btn"
+          title="Attach file"
+          onClick={() => fileRef.current?.click()}
+        >
+          📎
+        </button>
         <textarea
           ref={textareaRef}
-          className="wa-composer-input"
+          className="input"
+          rows={1}
           placeholder="Type a message"
           value={text}
           onChange={e => setText(e.target.value)}
           onKeyDown={onKey}
-          rows={1}
         />
-        <button className={`wa-send-btn ${sending ? 'wa-sending' : ''}`} onClick={send} disabled={sending} title="Send">
-          {sending
-            ? <span className="wa-spinner" />
-            : <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M1.101 21.757 23.8 12.028 1.101 2.3l.011 7.912 13.623 1.816-13.623 1.817-.011 7.912z" /></svg>}
+        <button
+          type="button"
+          className="reply-btn"
+          onClick={send}
+          disabled={sending || (!text.trim() && !attachment)}
+          title="Send"
+        >
+          {sending ? <span className="inbox-spinner" /> : '➤'}
         </button>
       </div>
-    </div>
+    </>
   )
 }
 
-/* ─── Main Page ───────────────────────────────────────────────────── */
+/* ─── Main IncomingPage Component ─────────────────────────────────── */
 export function IncomingPage() {
   const {
     chats,
@@ -295,6 +383,7 @@ export function IncomingPage() {
     setChatFilter,
     search,
     setSearch,
+    notify
   } = useAuth()
 
   const [syncing, setSyncing] = useState(false)
@@ -302,13 +391,17 @@ export function IncomingPage() {
   const [historyMsg, setHistoryMsg] = useState('')
   const messagesEndRef = useRef(null)
 
-  useEffect(() => { loadChats() }, [loadChats])
+  useEffect(() => {
+    loadChats()
+  }, [loadChats])
 
   useEffect(() => {
-    if (selected?.chatJid) loadMessages(selected.chatJid)
+    if (selected?.chatJid) {
+      loadMessages(selected.chatJid)
+    }
   }, [selected, loadMessages])
 
-  // scroll to bottom when new messages
+  // Scroll to bottom when messages update
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
@@ -328,8 +421,7 @@ export function IncomingPage() {
     setHistoryMsg('')
     try {
       const res = await api('/api/incoming/request-history', { method: 'POST' })
-      setHistoryMsg(res.message || 'Reconnecting...')
-      // After 8 seconds, auto-refresh chats
+      setHistoryMsg(res.message || 'Reconnecting WhatsApp history...')
       setTimeout(async () => {
         await loadChats()
         setHistoryMsg('✅ Done! Chats refreshed.')
@@ -337,12 +429,12 @@ export function IncomingPage() {
         setHistoryLoading(false)
       }, 8000)
     } catch (e) {
-      setHistoryMsg('❌ ' + (e.message || 'Error'))
+      setHistoryMsg('❌ ' + (e.message || 'Error syncing history'))
       setHistoryLoading(false)
     }
   }
 
-  // group messages by date for separators
+  // Group messages by date
   const groupedMessages = useMemo(() => {
     const groups = []
     let lastDate = null
@@ -357,225 +449,284 @@ export function IncomingPage() {
     return groups
   }, [messages])
 
-  // detect consecutive messages from same sender (for group name display)
+  // Detect consecutive messages from same sender for group display
   const senderChangeIdx = useMemo(() => {
     const set = new Set()
     messages.forEach((m, i) => {
       const prev = messages[i - 1]
-      if (!prev || prev.from !== m.from || prev.fromMe !== m.fromMe) set.add(m.id || m.date)
+      if (!prev || prev.from !== m.from || prev.fromMe !== m.fromMe) {
+        set.add(m.id || m.date)
+      }
     })
     return set
   }, [messages])
 
+  const contactName = selected?.name || selected?.pushName || selected?.from || 'Unknown'
+  const rawPhone = selected?.from ? selected.from.replace(/\D/g, '') : ''
+  const displayPhone = rawPhone ? `+${rawPhone}` : '—'
   const totalMessages = selected?.messages?.length || messages.length
 
-  return (
-    <div className="wa-shell">
-      {/* ── Left: Chat list ── */}
-      <aside className="wa-sidebar">
-        {/* Header */}
-        <div className="wa-sidebar-head">
-          <span className="wa-sidebar-title">Chats</span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            <button
-              className="wa-head-icon-btn"
-              onClick={handleRequestHistory}
-              disabled={historyLoading}
-              title="Sync full history from WhatsApp (no rescan needed)"
-              style={{ fontSize: 14, width: 'auto', borderRadius: 8, padding: '4px 10px', gap: 5, display: 'flex', alignItems: 'center' }}
-            >
-              {historyLoading
-                ? <span className="wa-spinner" style={{ borderColor: 'rgba(0,168,132,0.3)', borderTopColor: '#00a884', width: 14, height: 14 }} />
-                : '⬇'}
-              <span style={{ fontSize: 11, fontWeight: 600 }}>Full Sync</span>
-            </button>
-            <button className="wa-head-icon-btn" onClick={handleSync} disabled={syncing} title="Refresh chats">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style={{ opacity: syncing ? 0.5 : 1 }}>
-                <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
-              </svg>
-            </button>
-          </div>
-        </div>
-        {historyMsg && (
-          <div style={{
-            background: historyMsg.startsWith('✅') ? '#e6f9f2' : historyMsg.startsWith('❌') ? '#fdecea' : '#e8f4fd',
-            color: historyMsg.startsWith('✅') ? '#0b7a52' : historyMsg.startsWith('❌') ? '#c0392b' : '#1565c0',
-            fontSize: 11.5, padding: '8px 14px', borderBottom: '1px solid rgba(0,0,0,0.06)',
-            display: 'flex', alignItems: 'center', gap: 6
-          }}>
-            {historyLoading && !historyMsg.startsWith('✅') && !historyMsg.startsWith('❌') &&
-              <span className="wa-spinner" style={{ borderColor: 'rgba(21,101,192,0.3)', borderTopColor: '#1565c0', width: 12, height: 12, flexShrink: 0 }} />
-            }
-            {historyMsg}
-          </div>
-        )}
+  const copyPhone = () => {
+    if (rawPhone) {
+      navigator.clipboard.writeText(`+${rawPhone}`)
+      notify('Phone number copied to clipboard!')
+    }
+  }
 
-        {/* Search */}
-        <div className="wa-search-wrap">
-          <div className="wa-search-box">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-            </svg>
+  return (
+    <div className="content inbox-content">
+      <div className={`inbox ${selected ? 'has-selected' : ''}`}>
+        {/* ── Left Column: Chat List ── */}
+        <aside className="chat-list">
+          <div className="chat-head">
+            <div>
+              <span className="eyebrow">LIVE INBOX</span>
+              <h3>Chats</h3>
+            </div>
+            <div className="chat-head-actions">
+              <button
+                type="button"
+                className="chat-head-btn"
+                onClick={handleRequestHistory}
+                disabled={historyLoading}
+                title="Sync full history from WhatsApp"
+              >
+                {historyLoading ? <span className="inbox-spinner" style={{ borderColor: 'rgba(22,167,101,0.3)', borderTopColor: '#16a765' }} /> : '⬇'}
+                <span>Full Sync</span>
+              </button>
+              <button
+                type="button"
+                className="chat-head-btn"
+                onClick={handleSync}
+                disabled={syncing}
+                title="Refresh chats"
+              >
+                <span style={{ display: 'inline-block', transform: syncing ? 'rotate(180deg)' : 'none', transition: 'transform 0.4s' }}>↻</span>
+                <span>Refresh</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Sync notification message */}
+          {historyMsg && (
+            <div className="history-alert-bar">
+              {historyLoading && !historyMsg.startsWith('✅') && !historyMsg.startsWith('❌') && (
+                <span className="inbox-spinner" style={{ borderColor: 'rgba(22,167,101,0.3)', borderTopColor: '#16a765' }} />
+              )}
+              <span>{historyMsg}</span>
+            </div>
+          )}
+
+          {/* Search Input */}
+          <div className="chat-list-search">
             <input
-              className="wa-search-input"
-              placeholder="Search or start new chat"
+              className="input"
+              placeholder="Search chats or numbers..."
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
           </div>
-        </div>
 
-        {/* Filters */}
-        <div className="wa-filters">
-          {[['all', 'All'], ['unread', 'Unread'], ['group', 'Groups'], ['direct', 'Direct']].map(([v, l]) => (
-            <button
-              key={v}
-              className={`wa-filter-btn ${chatFilter === v ? 'wa-filter-active' : ''}`}
-              onClick={() => setChatFilter(v)}
-            >{l}</button>
-          ))}
-        </div>
+          {/* Filter Chips */}
+          <div className="chat-filters">
+            {[
+              ['all', 'All'],
+              ['unread', 'Unread'],
+              ['group', 'Groups'],
+              ['direct', 'Direct']
+            ].map(([val, label]) => (
+              <button
+                type="button"
+                key={val}
+                className={`filter-chip ${chatFilter === val ? 'active' : ''}`}
+                onClick={() => setChatFilter(val)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
-        {/* Chat list */}
-        <div className="wa-chat-list">
-          {chats.length === 0 && (
-            <div className="wa-empty-list">
-              <div className="wa-empty-icon">💬</div>
-              <p>No chats found</p>
-              <small>Messages will appear here once your WhatsApp is connected</small>
-            </div>
-          )}
-          {chats.map(c => (
-            <ChatItem
-              key={c.chatJid}
-              c={c}
-              active={selected?.chatJid === c.chatJid}
-              onClick={() => setSelected(c)}
-            />
-          ))}
-        </div>
-      </aside>
+          {/* Chat Items List */}
+          <div className="chat-items-wrap">
+            {chats.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 16px', color: '#718078' }}>
+                <div style={{ fontSize: 36, marginBottom: 8, opacity: 0.6 }}>💬</div>
+                <strong style={{ display: 'block', fontSize: 13, color: '#17372a', marginBottom: 4 }}>No chats found</strong>
+                <small style={{ fontSize: 11, color: '#718078' }}>Messages will appear once your WhatsApp is connected</small>
+              </div>
+            ) : (
+              chats.map(c => (
+                <ChatItem
+                  key={c.chatJid}
+                  c={c}
+                  active={selected?.chatJid === c.chatJid}
+                  onClick={() => setSelected(c)}
+                />
+              ))
+            )}
+          </div>
+        </aside>
 
-      {/* ── Center: Conversation ── */}
-      <main className="wa-conversation">
-        {selected ? (
-          <>
-            {/* Chat header */}
-            <div className="wa-conv-head">
-              <Avatar name={selected.name || selected.pushName || selected.from} size={40} />
-              <div className="wa-conv-head-info">
-                <div className="wa-conv-head-name">{selected.name || selected.pushName || selected.from}</div>
-                <div className="wa-conv-head-sub">
-                  {selected.isGroup
-                    ? `${selected.messages?.length || 0} messages · Group`
-                    : `+${(selected.from || '').replace(/\D/g, '')}`}
+        {/* ── Center Column: Conversation ── */}
+        <section className="conversation">
+          {selected ? (
+            <>
+              {/* Conversation Header */}
+              <div className="conversation-head">
+                <button
+                  type="button"
+                  className="conv-back-btn"
+                  onClick={() => setSelected(null)}
+                  title="Back to chats"
+                >
+                  ‹ Back
+                </button>
+                <Avatar name={contactName} size={38} />
+                <div className="conversation-head-info">
+                  <strong>{contactName}</strong>
+                  <small>
+                    <span className="online-dot" />
+                    <span>{selected.isGroup ? 'Group Chat' : 'WhatsApp Online'} · {displayPhone}</span>
+                  </small>
+                </div>
+                <div className="conversation-head-actions">
+                  <button
+                    type="button"
+                    className="chat-head-btn"
+                    title="Refresh messages"
+                    onClick={() => loadMessages(selected.chatJid)}
+                  >
+                    ↻ Refresh
+                  </button>
                 </div>
               </div>
-              <div className="wa-conv-head-actions">
-                <button className="wa-head-icon-btn" title="Refresh" onClick={() => loadMessages(selected.chatJid)}>
-                  <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                    <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
-                  </svg>
-                </button>
-              </div>
-            </div>
 
-            {/* Messages area */}
-            <div className="wa-messages-area">
-              <div className="wa-messages-inner">
-                {groupedMessages.length === 0 && (
-                  <div className="wa-no-msgs">No messages yet</div>
-                )}
-                {groupedMessages.map(item =>
-                  item.type === 'sep'
-                    ? <DateSeparator key={item.key} label={item.label} />
-                    : <MessageBubble
+              {/* Chat Wall (Messages) */}
+              <div className="chat-wall">
+                {groupedMessages.length === 0 ? (
+                  <div style={{ margin: 'auto', textAlign: 'center', color: '#718078', padding: '30px' }}>
+                    <div style={{ fontSize: 32, marginBottom: 6 }}>✉️</div>
+                    <p style={{ fontSize: 13, fontWeight: 700 }}>No messages yet in this conversation</p>
+                  </div>
+                ) : (
+                  groupedMessages.map(item =>
+                    item.type === 'sep' ? (
+                      <span key={item.key} className="day">
+                        {item.label.toUpperCase()}
+                      </span>
+                    ) : (
+                      <MessageBubble
                         key={item.key}
                         m={item.m}
                         isGroup={selected.isGroup}
                         showSender={senderChangeIdx.has(item.m.id || item.m.date)}
                       />
+                    )
+                  )
                 )}
                 <div ref={messagesEndRef} />
               </div>
-            </div>
 
-            {/* Composer */}
-            <Composer chatJid={selected.chatJid} />
-          </>
-        ) : (
-          <div className="wa-conv-empty">
-            <div className="wa-conv-empty-icon">
-              <svg viewBox="0 0 303 172" width="280" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="151" cy="86" r="86" fill="#2a3942" />
-                <path d="M151 50c-20 0-36 16-36 36s16 36 36 36 36-16 36-36-16-36-36-36zm0 64c-15.5 0-28-12.5-28-28s12.5-28 28-28 28 12.5 28 28-12.5 28-28 28z" fill="#3b4a54" />
-                <path d="M151 74a12 12 0 1 0 0 24 12 12 0 0 0 0-24z" fill="#00a884" />
+              {/* Message Composer */}
+              <Composer chatJid={selected.chatJid} />
+            </>
+          ) : (
+            <div className="conv-empty-splash">
+              <svg viewBox="0 0 24 24" width="70" height="70" fill="none" stroke="#16a765" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
               </svg>
+              <h2>WhatsApp Live Inbox</h2>
+              <p>
+                Select a conversation from the left panel to read and send messages in real-time.
+              </p>
+              <span className="conv-empty-badge">
+                🔒 End-to-end encrypted live chat
+              </span>
             </div>
-            <h2 className="wa-conv-empty-title">WhatsApp Web</h2>
-            <p className="wa-conv-empty-sub">
-              बाएं पैनल से कोई भी चैट चुनें
-              <br />और मैसेज का जवाब दें।
-            </p>
-            <div className="wa-conv-empty-note">
-              🔒 End-to-end encrypted conversations
-            </div>
-          </div>
-        )}
-      </main>
+          )}
+        </section>
 
-      {/* ── Right: Chat Details ── */}
-      <aside className="wa-details">
-        {selected ? (
-          <>
-            <div className="wa-det-header">Contact Info</div>
-            <div className="wa-det-avatar-wrap">
-              <Avatar name={selected.name || selected.pushName || selected.from} size={80} />
-            </div>
-            <div className="wa-det-name">{selected.name || selected.pushName || selected.from}</div>
-            <div className="wa-det-sub">
-              {selected.isGroup ? '👥 WhatsApp Group' : `📱 +${(selected.from || '').replace(/\D/g, '')}`}
-            </div>
+        {/* ── Right Column: Chat Details ── */}
+        <aside className="chat-details">
+          {selected ? (
+            <>
+              <span className="eyebrow">CHAT DETAILS</span>
+              <Avatar name={contactName} size={55} isBig={true} className="big" />
+              <h3>{contactName}</h3>
+              <p>{displayPhone}</p>
+              <span className="badge success">
+                ● {selected.isGroup ? 'Group Active' : 'Online Now'}
+              </span>
 
-            <div className="wa-det-stats">
-              <div className="wa-det-stat">
-                <div className="wa-det-stat-val">{totalMessages}</div>
-                <div className="wa-det-stat-lbl">Messages</div>
-              </div>
-              <div className="wa-det-stat">
-                <div className="wa-det-stat-val">{selected.unreadCount || 0}</div>
-                <div className="wa-det-stat-lbl">Unread</div>
-              </div>
-              <div className="wa-det-stat">
-                <div className="wa-det-stat-val">{selected.mediaCount || 0}</div>
-                <div className="wa-det-stat-lbl">Media</div>
-              </div>
-            </div>
+              <hr />
 
-            <div className="wa-det-rows">
-              {selected.isGroup && (
-                <div className="wa-det-row">
-                  <span className="wa-det-row-lbl">Type</span>
-                  <span className="wa-det-row-val">Group Chat</span>
+              {/* Stats Grid */}
+              <div className="chat-details-stats">
+                <div className="chat-details-stat-box">
+                  <strong>{totalMessages}</strong>
+                  <small>Messages</small>
                 </div>
-              )}
-              <div className="wa-det-row">
-                <span className="wa-det-row-lbl">Phone</span>
-                <span className="wa-det-row-val">{selected.from ? '+' + selected.from.replace(/\D/g, '') : '—'}</span>
+                <div className="chat-details-stat-box">
+                  <strong>{selected.unreadCount || 0}</strong>
+                  <small>Unread</small>
+                </div>
+                <div className="chat-details-stat-box">
+                  <strong>{selected.mediaCount || 0}</strong>
+                  <small>Media</small>
+                </div>
               </div>
-              <div className="wa-det-row">
-                <span className="wa-det-row-lbl">Last Active</span>
-                <span className="wa-det-row-val">{selected.lastTimestamp ? new Date(selected.lastTimestamp).toLocaleString() : '—'}</span>
+
+              {/* Quick Actions */}
+              <strong style={{ fontSize: 13, color: '#17372a', alignSelf: 'flex-start', margin: '8px 0 6px' }}>
+                Quick actions
+              </strong>
+              <div className="chat-details-actions">
+                {rawPhone && (
+                  <a className="chat-details-action-item" href={`tel:+${rawPhone}`}>
+                    <span>📞 Voice Call</span>
+                    <span>›</span>
+                  </a>
+                )}
+                {rawPhone && (
+                  <a
+                    className="chat-details-action-item"
+                    href={`https://wa.me/${rawPhone}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <span>↗ WhatsApp Web</span>
+                    <span>›</span>
+                  </a>
+                )}
+                {rawPhone && (
+                  <div className="chat-details-action-item" onClick={copyPhone} role="button" tabIndex={0}>
+                    <span>📋 Copy Phone</span>
+                    <span>›</span>
+                  </div>
+                )}
+                <div
+                  className="chat-details-action-item"
+                  onClick={() => setSelected(null)}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <span>✕ Close Details</span>
+                  <span>›</span>
+                </div>
               </div>
+            </>
+          ) : (
+            <div style={{ margin: 'auto', textAlign: 'center', color: '#718078', padding: '20px' }}>
+              <span className="eyebrow" style={{ display: 'block', marginBottom: 20 }}>CHAT DETAILS</span>
+              <div style={{ fontSize: 44, marginBottom: 12, opacity: 0.6 }}>👤</div>
+              <strong style={{ display: 'block', fontSize: 13, color: '#17372a', marginBottom: 6 }}>No Chat Selected</strong>
+              <small style={{ fontSize: 11.5, color: '#718078', lineHeight: 1.5, display: 'block' }}>
+                Click any chat on the left to view profile info, statistics, and quick actions.
+              </small>
             </div>
-          </>
-        ) : (
-          <div className="wa-det-empty">
-            <div style={{ fontSize: 40, marginBottom: 12 }}>💬</div>
-            <p>Select a chat to see contact details</p>
-          </div>
-        )}
-      </aside>
+          )}
+        </aside>
+      </div>
     </div>
   )
 }

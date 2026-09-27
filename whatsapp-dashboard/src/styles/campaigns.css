@@ -1,0 +1,221 @@
+@import url("./app-shell.css");
+
+/* =========================================================
+   CAMPAIGNS PAGE - 3D CERAMIC & LIGHT MODERN STYLING
+========================================================= */
+
+.campaigns-container {
+  width: 100%;
+}
+
+.table-card {
+  margin-top: 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(30, 58, 45, 0.10);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 243, 235, 0.96));
+  box-shadow: 0 18px 40px rgba(48, 62, 53, 0.10), 0 3px 10px rgba(48, 62, 53, 0.05), inset 0 1px rgba(255, 255, 255, 0.95);
+  overflow: hidden;
+}
+
+.table-card .card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(30, 58, 45, 0.08);
+}
+
+.table-card .card-head h3 {
+  font-size: 18px;
+  font-weight: 800;
+  color: #183126;
+  margin: 0 0 4px;
+}
+
+.table-card .card-head p {
+  font-size: 13px;
+  font-weight: 600;
+  color: #718078;
+  margin: 0;
+}
+
+/* Campaign Toolbar & Filter Controls */
+.campaign-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 24px;
+  background: rgba(246, 243, 235, 0.5);
+  border-bottom: 1px solid rgba(30, 58, 45, 0.06);
+  flex-wrap: wrap;
+}
+
+.campaign-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid rgba(30, 58, 45, 0.12);
+  border-radius: 10px;
+  padding: 6px 12px;
+  min-width: 260px;
+}
+
+.campaign-search-box input {
+  border: 0;
+  outline: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #183126;
+  width: 100%;
+  background: transparent;
+}
+
+.campaign-filter-pills {
+  display: flex;
+  gap: 6px;
+}
+
+.filter-pill {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(30, 58, 45, 0.10);
+  background: #fff;
+  color: #718078;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filter-pill:hover, .filter-pill.active {
+  background: #183126;
+  color: #fff;
+  border-color: #183126;
+}
+
+/* Campaign Table */
+.campaigns-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.campaigns-table th {
+  background: #f0ede5;
+  color: #718078;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 14px 24px;
+  text-align: left;
+  border-bottom: 1px solid rgba(30, 58, 45, 0.08);
+}
+
+.campaigns-table td {
+  padding: 16px 24px;
+  border-top: 1px solid rgba(30, 58, 45, 0.07);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #315044;
+  vertical-align: middle;
+}
+
+.campaigns-table tbody tr:hover td {
+  background: rgba(22, 167, 101, 0.035);
+}
+
+.campaign-title-cell {
+  font-weight: 800;
+  color: #183126;
+}
+
+/* Progress Cell */
+.progress-cell-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 140px;
+}
+
+.progress-track {
+  flex: 1;
+  height: 8px;
+  background: rgba(30, 58, 45, 0.08);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #35cb89, #129e65);
+  transition: width 0.3s ease;
+}
+
+.progress-percent-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: #183126;
+  width: 38px;
+  text-align: right;
+}
+
+/* Action Button */
+.btn-open-campaign {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 800;
+  border-radius: 9px;
+  background: linear-gradient(145deg, #ffffff, #eeeae0);
+  border: 1px solid rgba(30, 58, 45, 0.12);
+  color: #315044;
+  box-shadow: 0 4px 0 #d9d4c8, inset 0 1px #fff;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.btn-open-campaign:hover {
+  transform: translateY(-1px);
+  color: #17613f;
+  border-color: rgba(22, 167, 101, 0.3);
+}
+
+/* Status Badges */
+.badge.pending {
+  color: #b37d12;
+  background: rgba(228, 165, 28, 0.12);
+  border: 1px solid rgba(228, 165, 28, 0.25);
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 800;
+  display: inline-block;
+}
+
+.badge.success {
+  color: #138957;
+  background: rgba(22, 167, 101, 0.10);
+  border: 1px solid rgba(22, 167, 101, 0.20);
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 800;
+  display: inline-block;
+}
+
+@media (max-width: 768px) {
+  .table-card .card-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .campaign-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .campaign-search-box {
+    width: 100%;
+  }
+}
