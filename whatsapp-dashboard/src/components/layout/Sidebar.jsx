@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 
 export function Sidebar() {
@@ -14,6 +14,8 @@ export function Sidebar() {
     companySettings
   } = useAuth()
 
+  const location = useLocation()
+  const isReportsActive = location.pathname.startsWith('/report') || location.pathname === '/msg-report'
   const [reportsOpen, setReportsOpen] = useState(true)
   const closeMobile = () => setSidebarOpen(false)
 
@@ -33,21 +35,32 @@ export function Sidebar() {
       </button>
 
       {/* Brand Header */}
-      <NavLink className="brand" to={isAdmin ? "/admin" : "/dashboard"} onClick={closeMobile} data-title="Easy Recharge">
-        {companySettings?.logoUrl ? (
-          <img
-            src={companySettings.logoUrl}
-            alt={companySettings?.companyName || "Logo"}
-            style={{ maxHeight: 38, maxWidth: 120, objectFit: 'contain' }}
-          />
-        ) : (
-          <span className="brand-mark">⚡</span>
-        )}
-        <div>
-          <strong>{companySettings?.companyName || "Easy Recharge"}</strong>
-          <small>WhatsApp Automation</small>
-        </div>
-      </NavLink>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+        <NavLink className="brand" to={isAdmin ? "/admin" : "/dashboard"} onClick={closeMobile} data-title={companySettings?.companyName || "Easy Recharge"}>
+          {companySettings?.logoUrl ? (
+            <img
+              src={companySettings.logoUrl}
+              alt={companySettings?.companyName || "Logo"}
+              style={{ maxHeight: 38, maxWidth: 120, objectFit: 'contain' }}
+            />
+          ) : (
+            <span className="brand-mark">⚡</span>
+          )}
+          <div>
+            <strong>{companySettings?.companyName || "Easy Recharge"}</strong>
+            <small>WhatsApp Automation</small>
+          </div>
+        </NavLink>
+        <button 
+          type="button" 
+          className="mobile-close-btn" 
+          onClick={closeMobile} 
+          aria-label="Close sidebar"
+          title="Close sidebar"
+        >
+          ×
+        </button>
+      </div>
 
       {/* Navigation */}
       <nav className="nav">
@@ -113,9 +126,9 @@ export function Sidebar() {
         </NavLink>
 
         {/* Reports Nav Group */}
-        <div className={`nav-group ${reportsOpen ? 'is-open' : ''}`}>
+        <div className={`nav-group ${reportsOpen || isReportsActive ? 'is-open' : ''}`}>
           <div 
-            className="nav-parent" 
+            className={`nav-parent ${isReportsActive ? 'active' : ''}`}
             role="button" 
             tabIndex={0} 
             data-title="Reports"
@@ -203,8 +216,9 @@ export function Sidebar() {
 
         {isAdmin && (
           <>
-            <div style={{ margin: '14px 10px 4px', fontSize: 10, fontWeight: 800, color: '#708077', letterSpacing: 1.2 }}>
-              ADMINISTRATION
+            <div className="nav-section-title">
+              <span>ADMINISTRATION</span>
+              <hr className="nav-section-divider" />
             </div>
             <NavLink 
               to="/admin" 

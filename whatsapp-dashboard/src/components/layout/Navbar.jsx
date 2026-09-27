@@ -18,7 +18,9 @@ const pageMeta = {
   '/plans': { title: 'Plans', eyebrow: 'PLANS' },
   '/subscription': { title: 'Plans', eyebrow: 'PLANS' },
   '/api': { title: 'API Docs', eyebrow: 'DEVELOPER' },
+  '/api-docs': { title: 'API Docs', eyebrow: 'DEVELOPER' },
   '/settings': { title: 'Settings', eyebrow: 'SETTINGS' },
+  '/admin/settings': { title: 'Settings', eyebrow: 'SUPER ADMIN' },
   '/admin': { title: 'User Management', eyebrow: 'SUPER ADMIN' },
   '/admin/plans': { title: 'Plan Management', eyebrow: 'SUPER ADMIN' },
   '/payment/daybook': { title: 'Purchase Requests', eyebrow: 'SUPER ADMIN' }
@@ -52,7 +54,6 @@ export function Navbar() {
           className="icon-btn mobile-menu-btn" 
           onClick={() => setSidebarOpen(!sidebarOpen)}
           aria-label="Toggle mobile menu"
-          style={{ display: 'none' }}
         >
           ☰
         </button>
