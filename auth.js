@@ -976,35 +976,22 @@ router.post('/api/user/send', authRequired, async (req, res) => {
 
     if (req.user.role === 'admin') {
       const match = await findOrLoadSession(session || 'admin', req.user);
-      if (match && match.session?.status === 'connected' && match.session?.socket && Boolean(match.session.socket.user?.id)) {
+      if (match && match.session?.status === 'connected' && match.session?.socket && typeof match.session.socket.sendMessage === 'function') {
         activeSocket = match.session.socket;
         fromNumber = match.session.connectedNumber || match.userId;
         sessionName = String(fromNumber).replace(/\D/g, '').slice(-10);
       }
       if (!activeSocket) {
-        if (global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function' && Boolean(global.__waAdminSocket.user?.id)) {
+        if (typeof global.__getActiveAdminSocket === 'function') {
+          activeSocket = global.__getActiveAdminSocket();
+        }
+        if (!activeSocket && global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function') {
           activeSocket = global.__waAdminSocket;
-          fromNumber = activeSocket?.user?.id ? String(activeSocket.user.id).split(':')[0].replace(/\D/g, '') : 'Admin';
-          sessionName = 'admin';
-        } else {
-          // Check fallback: get active session for adminPhone or USR59396382
-          const { getSessionByPhoneOrUserId, sessions } = require('./userSessions');
-          const adminPhone = process.env.ADMIN_PHONE || '8840457632';
-          const phoneMatch = getSessionByPhoneOrUserId(adminPhone);
-          if (phoneMatch?.session?.socket && phoneMatch?.session?.status === 'connected' && Boolean(phoneMatch.session.socket.user?.id)) {
-            activeSocket = phoneMatch.session.socket;
-            global.__waAdminSocket = activeSocket;
-            fromNumber = phoneMatch.session.connectedNumber || adminPhone;
-            sessionName = String(fromNumber).replace(/\D/g, '').slice(-10);
-          } else {
-            const userS = sessions?.get('USR59396382');
-            if (userS?.socket && userS?.status === 'connected' && Boolean(userS.socket.user?.id)) {
-              activeSocket = userS.socket;
-              global.__waAdminSocket = activeSocket;
-              fromNumber = userS.connectedNumber || adminPhone;
-              sessionName = String(fromNumber).replace(/\D/g, '').slice(-10);
-            }
-          }
+        }
+        if (activeSocket) {
+          const admNum = activeSocket.user?.id ? String(activeSocket.user.id).split(':')[0].replace(/\D/g, '') : (activeSocket.authState?.creds?.me?.id ? String(activeSocket.authState.creds.me.id).split(':')[0].replace(/\D/g, '') : (process.env.ADMIN_PHONE || '8840457632'));
+          fromNumber = admNum;
+          sessionName = String(admNum).replace(/\D/g, '').slice(-10);
         }
       }
     } else {

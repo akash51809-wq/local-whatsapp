@@ -835,28 +835,42 @@ let isSending = false;
 ========================================================= */
 
 function getActiveAdminSocket() {
-    if (global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function' && Boolean(global.__waAdminSocket.user?.id)) {
-        return global.__waAdminSocket;
+    // 1. Direct check on global.__waAdminSocket
+    if (global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function') {
+        const hasId = Boolean(global.__waAdminSocket.user?.id || global.__waAdminSocket.authState?.creds?.me?.id);
+        const isOpen = global.__waAdminSocket.ws?.readyState === 1 || connectionStatus === 'connected';
+        if (hasId || isOpen) {
+            return global.__waAdminSocket;
+        }
     }
-    if (sock && connectionStatus === 'connected' && typeof sock.sendMessage === 'function' && Boolean(sock.user?.id)) {
-        return sock;
+    // 2. Direct check on primary index.js sock instance
+    if (sock && typeof sock.sendMessage === 'function') {
+        const hasId = Boolean(sock.user?.id || sock.authState?.creds?.me?.id);
+        const isOpen = sock.ws?.readyState === 1 || connectionStatus === 'connected';
+        if (hasId || isOpen) {
+            return sock;
+        }
     }
+    // 3. Check user sessions for admin phone or any active fallback
     try {
         const { getSessionByPhoneOrUserId, sessions } = require('./userSessions');
         const adminPhone = process.env.ADMIN_PHONE || '8840457632';
         const match = getSessionByPhoneOrUserId(adminPhone);
-        if (match?.session?.socket && match?.session?.status === 'connected' && Boolean(match.session.socket.user?.id)) {
+        if (match?.session?.socket && match?.session?.status === 'connected' && typeof match.session.socket.sendMessage === 'function') {
             global.__waAdminSocket = match.session.socket;
             return match.session.socket;
         }
-        const userS = sessions?.get('USR59396382');
-        if (userS?.socket && userS?.status === 'connected' && Boolean(userS.socket.user?.id)) {
-            global.__waAdminSocket = userS.socket;
-            return userS.socket;
+        if (sessions && sessions.size > 0) {
+            for (const [sUid, sData] of sessions.entries()) {
+                if (sData?.socket && typeof sData.socket.sendMessage === 'function' && sData.status === 'connected') {
+                    return sData.socket;
+                }
+            }
         }
     } catch (e) {}
     return null;
 }
+global.__getActiveAdminSocket = getActiveAdminSocket;
 
 app.get('/api/status', authRequired, adminRequired, async (req, res) => {
     let profilePicUrl = null;
@@ -2362,9 +2376,11 @@ async function handleSendText(req, res) {
     res.setHeader('Connection', 'keep-alive');
     try {
         const token = String(req.query.token || req.body?.token || req.headers['x-api-token'] || (req.headers['authorization'] ? req.headers['authorization'].replace(/^Bearer\s+/i, '') : '') || '').trim();
-        const to = String(req.query.to || req.body?.to || req.body?.number || req.body?.groupId || '').trim();
-        const rawMessage = req.query.message !== undefined ? req.query.message : (req.body?.message !== undefined ? req.body?.message : (req.query.text !== undefined ? req.query.text : req.body?.text));
-        const providedSession = String(req.query.session || req.body?.session || '').trim();
+        const rawTo = req.query.to ?? req.body?.to ?? req.body?.number ?? req.query.number ?? req.body?.groupId ?? req.query.groupId ?? req.body?.group ?? req.query.group ?? req.body?.group_id ?? req.query.group_id ?? req.body?.recipient ?? req.query.recipient ?? '';
+        const to = String(rawTo).replace(/['"]/g, '').trim();
+        const rawMessage = req.query.message !== undefined ? req.query.message : (req.body?.message !== undefined ? req.body?.message : (req.query.text !== undefined ? req.query.text : (req.body?.text !== undefined ? req.body?.text : req.body?.msg ?? req.query.msg)));
+        const rawSession = req.query.session ?? req.body?.session ?? req.query.sessionId ?? req.body?.sessionId ?? req.query.whatsappId ?? req.body?.whatsappId ?? '';
+        const providedSession = String(rawSession).replace(/['"]/g, '').trim();
         const isAsync = req.query.async === '1' || req.query.fast === '1' || req.body?.async === 1;
         const isVoice = req.query.voice === '1' || req.query.audio === '1' || req.query.tts === '1' || req.body?.voice === 1 || req.body?.sendAsVoice === true;
         const voiceLang = String(req.query.lang || req.body?.lang || 'hi').trim().toLowerCase();
@@ -2374,7 +2390,7 @@ async function handleSendText(req, res) {
         }
 
         if (!to) {
-            return res.status(400).json({ status: false, message: "Bad Request: Recipient phone number 'to' is required." });
+            return res.status(400).json({ status: false, message: "Bad Request: Recipient phone number 'to' or group ID 'groupId' is required." });
         }
 
         const messageText = String(rawMessage || '').trim();
@@ -2384,12 +2400,15 @@ async function handleSendText(req, res) {
 
         // Determine recipient type: WhatsApp Group (@g.us) vs User Mobile Number (@s.whatsapp.net)
         const toClean = String(to).trim();
-        const isGroup = toClean.endsWith('@g.us') || toClean.includes('@g.us') || (toClean.startsWith('120363') && toClean.replace(/\D/g, '').length >= 15);
+        const isExplicitGroupRoute = req.path.includes('/group') || req.originalUrl.includes('/group') || Boolean(req.body?.groupId || req.query.groupId || req.body?.group || req.query.group || req.body?.group_id || req.query.group_id);
+        const isGroup = isExplicitGroupRoute || toClean.endsWith('@g.us') || toClean.includes('@g.us') || (toClean.startsWith('120363') && toClean.replace(/\D/g, '').length >= 15) || (toClean.includes('-') && toClean.replace(/\D/g, '').length >= 15);
         let jid = '';
         let normalizedTo = '';
 
         if (isGroup) {
-            jid = toClean.includes('@g.us') ? toClean : `${toClean.replace(/\D/g, '')}@g.us`;
+            const cleanGroup = toClean.replace(/[^0-9\-@a-zA-Z._]/g, '');
+            const [grpId] = cleanGroup.split('@');
+            jid = `${grpId}@g.us`;
             normalizedTo = jid;
         } else {
             let norm = normalizeIndianNumber(toClean);
@@ -2460,8 +2479,16 @@ async function handleSendText(req, res) {
         const { findOrLoadSession } = require('./userSessions');
         const caller = isGlobalAdmin ? { role: 'admin', userId: 'admin' } : user;
 
-        // Session target resolution
-        const targetSessionParam = providedSession || (caller.role === 'admin' ? 'admin' : caller.userId);
+        // Session target resolution: normalize admin aliases case-insensitively
+        let targetSessionParam = providedSession;
+        if (!targetSessionParam) {
+            targetSessionParam = caller.role === 'admin' ? 'admin' : caller.userId;
+        } else if (caller.role === 'admin') {
+            const pLower = String(targetSessionParam).trim().toLowerCase();
+            if (pLower === 'admin' || pLower === 'main' || pLower === 'default' || pLower === 'primary' || pLower === 'master') {
+                targetSessionParam = 'admin';
+            }
+        }
 
         try {
             const sessionMatch = await findOrLoadSession(targetSessionParam, caller);
@@ -2474,7 +2501,7 @@ async function handleSendText(req, res) {
             return res.status(403).json({ status: false, message: authErr.message });
         }
 
-        // Admin WhatsApp fallback: ONLY if caller is verified admin!
+        // Admin WhatsApp fallback: if caller is verified admin
         const isAdminAuthorized = isGlobalAdmin || user?.role === 'admin';
         if (!activeSocket && isAdminAuthorized) {
             activeSocket = getActiveAdminSocket();
@@ -2485,6 +2512,19 @@ async function handleSendText(req, res) {
             if (activeSocket) {
                 fromNumber = adminPhone;
                 activeSession10 = adminPhone10;
+            }
+        }
+
+        // Defensive fallback: check global socket directly if admin authorized
+        if (!activeSocket && isAdminAuthorized) {
+            if (global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function') {
+                activeSocket = global.__waAdminSocket;
+                fromNumber = activeSocket?.user?.id ? String(activeSocket.user.id).split(':')[0].replace(/\D/g, '') : (connectedNumber || '8840457632');
+                activeSession10 = String(fromNumber).replace(/\D/g, '').slice(-10);
+            } else if (sock && typeof sock.sendMessage === 'function') {
+                activeSocket = sock;
+                fromNumber = activeSocket?.user?.id ? String(activeSocket.user.id).split(':')[0].replace(/\D/g, '') : (connectedNumber || '8840457632');
+                activeSession10 = String(fromNumber).replace(/\D/g, '').slice(-10);
             }
         }
 

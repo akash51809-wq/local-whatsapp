@@ -409,30 +409,55 @@ async function findOrLoadSession(sessionParam, caller = null) {
         : (process.env.ADMIN_PHONE || '8840457632');
     const adminPhone10 = String(adminPhone).replace(/\D/g, '').slice(-10);
 
-    // 1. SECURITY CHECK: Non-admin users cannot access the Admin session
-    const isTargetingAdmin = sessionParam === 'admin' || (clean10 && clean10 === adminPhone10);
-    if (isTargetingAdmin && !isAdmin) {
+    const paramStr = String(sessionParam || '').replace(/['"]/g, '').trim();
+    const paramLower = paramStr.toLowerCase();
+
+    // 1. Determine if this request targets the Admin session (case-insensitive & aliases supported)
+    const isTargetingAdmin = !paramStr || 
+        paramLower === 'admin' || 
+        paramLower === 'main' || 
+        paramLower === 'default' || 
+        paramLower === 'primary' || 
+        paramLower === 'master' || 
+        (callerUserId && String(callerUserId).toLowerCase() === 'admin') ||
+        (clean10.length === 10 && clean10 === adminPhone10);
+
+    // SECURITY CHECK: Non-admin users cannot access the Admin session
+    if (isTargetingAdmin && !isAdmin && paramStr) {
         const err = new Error('केवल एडमिन को एडमिन व्हाट्सऐप सेशन का उपयोग करने की अनुमति है।');
         err.statusCode = 403;
         throw err;
     }
 
     // 2. If Admin explicitly requests or defaults to Admin session
-    if (isAdmin && (isTargetingAdmin || !sessionParam)) {
-        if (global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function' && Boolean(global.__waAdminSocket.user?.id)) {
+    if (isAdmin && (isTargetingAdmin || !paramStr)) {
+        // First check getActiveAdminSocket if available
+        let admSock = null;
+        if (typeof global.__getActiveAdminSocket === 'function') {
+            admSock = global.__getActiveAdminSocket();
+        }
+        if (!admSock && global.__waAdminSocket && typeof global.__waAdminSocket.sendMessage === 'function') {
+            admSock = global.__waAdminSocket;
+        }
+
+        if (admSock) {
+            const connectedNum = admSock.user?.id 
+                ? String(admSock.user.id).split(':')[0].replace(/\D/g, '') 
+                : (admSock.authState?.creds?.me?.id ? String(admSock.authState.creds.me.id).split(':')[0].replace(/\D/g, '') : adminPhone);
             return {
                 userId: 'ADMIN',
                 isAdmin: true,
                 session: {
-                    socket: global.__waAdminSocket,
+                    socket: admSock,
                     status: 'connected',
-                    connectedNumber: adminPhone
+                    connectedNumber: connectedNum || adminPhone
                 }
             };
         }
+
         // Fallback: check if adminPhone is connected in user sessions
         const match = getSessionByPhoneOrUserId(adminPhone);
-        if (match?.session?.socket && match?.session?.status === 'connected' && Boolean(match.session.socket.user?.id)) {
+        if (match?.session?.socket && match?.session?.status === 'connected' && typeof match.session.socket.sendMessage === 'function') {
             global.__waAdminSocket = match.session.socket;
             return {
                 userId: 'ADMIN',
@@ -444,19 +469,24 @@ async function findOrLoadSession(sessionParam, caller = null) {
                 }
             };
         }
-        const userS = sessions.get('USR59396382');
-        if (userS?.socket && userS?.status === 'connected' && Boolean(userS.socket.user?.id)) {
-            global.__waAdminSocket = userS.socket;
-            return {
-                userId: 'ADMIN',
-                isAdmin: true,
-                session: {
-                    socket: userS.socket,
-                    status: 'connected',
-                    connectedNumber: userS.connectedNumber || adminPhone
+
+        // Check any active connected session in sessions Map
+        if (sessions && sessions.size > 0) {
+            for (const [uId, uS] of sessions.entries()) {
+                if (uS?.socket && uS?.status === 'connected' && typeof uS.socket.sendMessage === 'function') {
+                    return {
+                        userId: 'ADMIN',
+                        isAdmin: true,
+                        session: {
+                            socket: uS.socket,
+                            status: 'connected',
+                            connectedNumber: uS.connectedNumber || adminPhone
+                        }
+                    };
                 }
-            };
+            }
         }
+
         return {
             userId: 'ADMIN',
             isAdmin: true,
